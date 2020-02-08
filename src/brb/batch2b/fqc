@@ -1,0 +1,15 @@
+#PBS -l nodes=1:ppn=1,mem=30gb,walltime=10:00:00
+#PBS -m ae
+#PBS -M zhoux379@umn.edu
+#PBS -q small
+
+batch='batch2b'
+dirw="$rn/data/cache/rn20a/$batch"
+mkdir -p $dirw
+cd $dirw
+
+source activate work
+
+fastqc R2.raw.fq.gz
+
+

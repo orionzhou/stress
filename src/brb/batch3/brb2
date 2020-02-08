@@ -1,0 +1,20 @@
+#PBS -l nodes=1:ppn=12,mem=80gb,walltime=40:00:00
+#PBS -m ae
+#PBS -M zhoux379@umn.edu
+#PBS -q amdsmall
+
+batch='batch3'
+dirw="$rn/data/cache/rn20a/$batch"
+mkdir -p $dirw
+cd $dirw
+
+source activate hisat2
+
+p=12
+hisat2 --new-summary --threads $p \
+  -x $ref/21_dbs/hisat2/B73_vt01/db -U R2.fq.gz \
+  --summary-file hisat2.txt | \
+  samtools view -Sbh -q 0 -o hisat2.bam -
+
+sambamba sort --tmpdir=/scratch.global/zhoux379/temp -t $p -o hisat2.sorted.bam hisat2.bam
+

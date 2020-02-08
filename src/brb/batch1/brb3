@@ -1,0 +1,37 @@
+#PBS -l nodes=1:ppn=1,mem=30gb,walltime=30:00:00
+#PBS -m ae
+#PBS -M zhoux379@umn.edu
+#PBS -q amdsmall
+
+batch='batch1'
+dirw="$st/data/cache/$batch"
+mkdir -p $dirw
+cd $dirw
+
+source activate work
+
+bam.py stat hisat2.sorted.bam > hisat2.sorted.tsv
+samtools view -b -f 4 hisat2.sorted.bam > unmapped.bam
+
+mkdir tmp
+java -jar $src/git/BRB-seqTools/releases/BRBseqTools.1.3.jar \
+    CreateDGEMatrix -p BU -UMI 15 \
+    -f R1.fq.gz -b hisat2.sorted.bam \
+    -c $rn/misc/barcode1.tsv \
+    -gtf $ref/50_annotation/15.gtf \
+    -t tmp \
+    -o dge
+
+#java -jar $src/git/BRB-seqTools/releases/BRBseqTools.1.3.jar \
+    #AnnotateBAM -p BU -UMI 15 \
+    #-f R1.fq.gz -b hisat2.sorted.bam \
+    #-c $rn/misc/barcode1.tsv \
+    #-gtf $ref/50_annotation/15.gtf \
+    #-t tmp \
+    #-o ./
+
+#picard MarkDuplicates \
+  #BARCODE_TAG=BC READ_ONE_BARCODE_TAG=BX \
+  #I=hisat2.sorted.bam.annotated.bam O=hisat2.sorted.md.bam \
+  #M=hisat2.sorted.md.txt
+

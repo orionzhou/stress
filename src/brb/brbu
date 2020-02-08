@@ -1,0 +1,10 @@
+#PBS -l nodes=1:ppn=8,mem=30gb,walltime=5:00:00
+#PBS -m ae
+#PBS -M zhoux379@umn.edu
+#PBS -q small
+
+cd $ba/data/cache/rn20a
+
+source activate work
+parallel -j 8 "fastq.py UMIcount {} umi_cnt/{/.}.tsv" ::: demul/*.fastq.gz
+
