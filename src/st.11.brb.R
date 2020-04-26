@@ -1,3 +1,4 @@
+require(DESeq2); require(edgeR)
 source('functions.R')
 dirw = file.path(dird, '11_brb')
 
@@ -65,14 +66,27 @@ td1 = td %>% select(sid, td1) %>% unnest(td1) %>% rename(nr=cnt)
 td2 = td %>% select(sid, td2) %>% unnest(td2) %>% rename(nu=cnt)
 cnts = td1 %>% inner_join(td2, by=c('sid','coord','gid')) %>%
     select(sid, coord, gid, nr, nu)
+tc = cnts %>% unite("SampleID", sid:coord, remove=T, sep="_")
 
+fh = file.path(dird, '01_exp_design/05.brb.local.tsv')
+thb = read_tsv(fh) %>%
+    select(sid=Tissue,coord=file_prefix,SampleID=Treatment) %>%
+    left_join(th, by='SampleID') %>%
+    rename(ExpID = SampleID) %>%
+    mutate(SampleID = str_c(sid, coord, sep="_")) %>%
+    rename(batch = sid) %>%
+    select(SampleID,Tissue,Genotype,Treatment,Timepoint,Replicate,everything())
+thb %>% count(Experiment)
+
+res = list(th = thb, tc = tc)
 fo = file.path(dirw, '01.cnts.rds')
-saveRDS(cnts, fo)
+saveRDS(res, fo)
 
 #{{{ ngene umi
 l2n = 1:8; names(l2n) = LETTERS[l2n]
 min_nr = 2; min_nu = 2 #min_nr = 10; min_nu = 10
-tp = cnts %>% dplyr::rename(SampleID = coord) %>%
+tp = res$tc %>% separate(SampleID, c('sid','coord'), sep='_') %>%
+    dplyr::rename(SampleID = coord) %>%
     #filter(sid == !!sid) %>%
     rename(n_read = nr, n_umi = nu) %>%
     group_by(sid, SampleID) %>%
@@ -117,27 +131,22 @@ ggsave(fo, p, width=10, height=7)
 #}}}
 #}}}
 
-fh = file.path(dird, '01_exp_design/05.brb.local.tsv')
-th = read_tsv(fh) %>% select(sid=Tissue,coord=file_prefix,SampleID=Treatment)
-#{{{ normalize read counts
+#{{{ normalize and store
 fi = file.path(dirw, '01.cnts.rds')
-cnts = readRDS(fi)
+res = readRDS(fi)
+thb = res$th
 
-t_rc = cnts %>%
-    inner_join(th, by=c('sid','coord')) %>%
-    mutate(SampleID = str_c(sid,coord,sep='_')) %>%
-    select(SampleID, gid, ReadCount = nu)
-res = readcount_norm(t_rc)
-tm_u = res$tm
+t_rc = res$tc %>% dplyr::select(SampleID, gid, ReadCount = nu) %>%
+    filter(SampleID %in% thb$SampleID)
+r = readcount_norm(t_rc)
+tm_u = r$tm
 
-t_rc = cnts %>%
-    inner_join(th, by=c('sid','coord')) %>%
-    mutate(SampleID = str_c(sid,coord,sep='_')) %>%
-    select(SampleID, gid, ReadCount = nr)
-res = readcount_norm(t_rc)
-tm_r = res$tm
+t_rc = res$tc %>% dplyr::select(SampleID, gid, ReadCount = nr) %>%
+    filter(SampleID %in% thb$SampleID)
+r = readcount_norm(t_rc)
+tm_r = r$tm
 
-res = list(cnts=cnts, tm_u=tm_u, tm_r = tm_r)
+res = list(th=thb, tm_u=tm_u, tm_r = tm_r)
 fo = file.path(dirw, '03.cpm.rds')
 saveRDS(res, fo)
 #}}}
@@ -145,10 +154,43 @@ saveRDS(res, fo)
 fi = file.path(dirw, '03.cpm.rds')
 res = readRDS(fi)
 
-tid = 'set1'; sids = 'b01'
-th = res$th %>% filter(batch %in% sids) %>%
+bid = 'b1'; batches = 'batch1'; wd=6; ht=8
+bid = 'b2'; batches = c("batch2a","batch2b"); wd=6; ht=10
+bid = 'b3'; batches = 'batch3'; wd=6; ht=10
+th = res$th %>% filter(batch %in% batches) %>%
     mutate(lab = str_c(Genotype, Treatment, Timepoint, sep='_')) %>%
     mutate(grp = str_c(Genotype, Treatment, sep='_'))
-tm = res$tm_r %>% filter(SampleID %in% th$SampleID)
+tm = res$tm_r %>% filter(SampleID %in% th$SampleID) %>%
+    mutate(value=asinh(CPM))
+
+p1 = plot_hclust(tm,th,pct.exp=.4,cor.opt='pearson',var.col='Genotype',
+    expand.x=.2)
+fo = sprintf("%s/11.hclust.%s.pdf", dirw, bid)
+ggsave(p1, filename = fo, width=wd, height=ht)
+
+p2 = plot_tsne(tm,th,pct.exp=.4,perp=8,iter=1500,
+    var.shape='Genotype', var.col='Treatment', var.lab='Timepoint',
+    legend.pos='top.right', legend.dir='v', pal.col='aaas')
+fp = sprintf("%s/12.tsne.%s.pdf", dirw, bid)
+ggsave(p2, filename = fp, width=8, height=8)
+
+bid = 'b23'; batches = c("batch2a","batch2b", 'batch3')
+th = res$th %>% filter(batch %in% batches) %>%
+    mutate(batch = str_replace(batch, '[ab]$', '')) %>%
+    mutate(lab = str_c(batch, Genotype, Treatment, Timepoint, sep='_')) %>%
+    mutate(Treatment = str_c(batch, Treatment, sep='_'))
+tm = res$tm_r %>% filter(SampleID %in% th$SampleID) %>%
+    mutate(value=asinh(CPM))
+
+p1 = plot_hclust(tm,th,pct.exp=.4,cor.opt='pearson',var.col='Genotype',
+    expand.x=.2)
+fo = sprintf("%s/11.hclust.%s.pdf", dirw, bid)
+ggsave(p1, filename = fo, width=8, height=20)
+
+p2 = plot_tsne(tm,th,pct.exp=.4,perp=8,iter=1500,
+    var.shape='Genotype', var.col='Treatment', var.lab='Timepoint',
+    legend.pos='top.right', legend.dir='v', pal.col='aaas')
+fp = sprintf("%s/12.tsne.%s.pdf", dirw, bid)
+ggsave(p2, filename = fp, width=8, height=8)
 
 

@@ -3,7 +3,7 @@ dirw = file.path(dird, '01_exp_design')
 
 #{{{ create snk/nf sample list
 fo = file.path(dirw, '01.meta.tsv')
-write_tsv(th2, fo)
+write_tsv(th, fo)
 #}}}
 
 #{{{ BRB-seq design
@@ -13,8 +13,8 @@ ti2 = read_xlsx(fi, 'batch2')
 ti3 = read_xlsx(fi, 'batch3')
 
 to = rbind(ti1, ti2, ti3)
-to %>% count(batch)
-to %>% count(SampleID) %>% count(n)
+to %>% dplyr::count(batch)
+to %>% dplyr::count(SampleID) %>% dplyr::count(n)
 to2 = to %>% mutate(Genotype='',Treatment=SampleID, Replicate=1) %>%
     mutate(directory=file.path('/scratch.global/zhoux379/stress/data',batch,'demul')) %>%
     mutate(SampleID=str_c(batch,coord,sep='-')) %>%
@@ -25,7 +25,123 @@ fo = file.path(dirw, '05.brb.local.tsv')
 write_tsv(to2, fo)
 #}}}
 
+exps = c("TC", 'HY','NM')
+tx = tibble(ExpID=exps, ExpTxt=sprintf("Experiment %d (%s)", 1:3, exps))
+trs = c("Control",'Cold','Heat')
+
+#{{{ process temperature data
+load_fonts()
+require(fs)
+require(lubridate)
+diri = file.path(dird, '03_temp_button')
+ti = tibble(fp = dir_ls(file.path(diri, exps))) %>%
+    filter(str_detect(fp, "\\.csv$")) %>%
+    mutate(fn = basename(fp)) %>%
+    mutate(fn = str_replace(fn, '\\.csv','')) %>%
+    separate(fn, c("ExpID","stress","treatment",'rep'), sep="_", fill='right') %>%
+    mutate(x = map(fp, read_csv, skip=14)) %>%
+    select(ExpID,stress,treatment,rep, x) %>% unnest(x)
+
+tp0 = tibble(ExpID = exps, datetime0=c('06/10/19 11:00:00', '06/20/19 11:00:00', '07/02/19 11:00:00')) %>%
+    mutate(datetime0=mdy_hms(datetime0))
+
+tp = ti %>% mutate(datetime = mdy_hms(`Date/Time`)) %>%
+    select(ExpID, stress, treatment, rep, datetime, temp=Value) %>%
+    inner_join(tp0, by='ExpID') %>%
+    inner_join(tx, by='ExpID') %>%
+    mutate(has = time_length(datetime-datetime0,'hour')) %>%
+    mutate(stress = factor(stress, levels=stresses)) %>%
+    mutate(treatment=as.double(str_replace(treatment, 'has', ''))) %>%
+    mutate(treatment=ifelse(treatment==24, 25, treatment)) %>%
+    mutate(treatment=factor(treatment, levels=sort(unique(treatment)))) %>%
+    filter(is.na(rep) | rep %in% c("rep1",'rackA')) %>%
+    group_by(ExpTxt, stress, treatment, has) %>%
+    summarise(temp = mean(temp)) %>% ungroup() %>%
+    filter(treatment == 25, has >= 0, has <= 25) %>% select(-treatment)
+
+fo = file.path(diri, 'temperature.tsv')
+write_tsv(tp, fo)
+#}}}
+
+#{{{ read & plot temperature data
+fi = file.path(dird, '03_temp_button', 'temperature.tsv')
+tp = read_tsv(fi) %>% mutate(stress=factor(stress, levels=trs))
+tpa = tp %>% arrange(ExpTxt, stress, -has) %>%
+    group_by(ExpTxt, stress) %>% slice(1) %>% ungroup()
+tfa = tibble(stress=stresses,
+  faw = c('\uf6c4','\uf2dc','\uf185'),
+  fat = c('\uf2c9','\uf2cb','\uf2c7')) %>%
+    mutate(fawt = str_c(faw,sep='')) %>% inner_join(tpa, by='stress')
+cols3 = pal_npg()(5)[c(3,2,1)]
+p_temp = ggplot(tp, aes(has, temp)) +
+    geom_rect(aes(xmin=14,xmax=22,ymin=-Inf,ymax=Inf), fill='#D3D3D3') +
+    geom_line(aes(color=stress)) +
+    geom_point(aes(color=stress), size=.5) +
+    #geom_text(data=tfa, aes(x=25+.2, y=temp-.1, label=fawt),size=4,family='fas',vjust=1,hjust=0) +
+    geom_text(data=tpa, aes(x=25+.3, y=temp+1, label=stress), hjust=.5, vjust=0, size=2.5) +
+    facet_wrap(~ExpTxt, ncol=1) +
+    scale_x_continuous(name='Hours after Treatment', breaks=c(0,14,22,25), expand=expand_scale(mult=c(.02,.06))) +
+    scale_y_continuous(name='Temperature (C)', expand=expand_scale(mult=c(.02,.08))) +
+    scale_color_manual(values=cols3) +
+    otheme(legend.pos='none', margin=c(.1,.2,.1,.2),
+           xtitle=T, ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, xgrid=T) +
+    theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
+fo = file.path(dirw, 'tempature.pdf')
+#ggsave(fo, p_temp, width=6, height=6)
+#}}}
+
+#{{{ build design tibble
+tms = c(0,.5,1,1.5,2,3,4,8,25)
+ti1 = crossing(Genotype=gts3,Timepoint=tms) %>%
+    filter(!(Genotype=='W22' & Timepoint %in% c(1.5,3,8))) %>%
+    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    mutate(y = -as.integer(Genotype)) %>%
+    mutate(ExpID='TC')
+#
+tms = c(0,1,25)
+ti2 = crossing(Genotype=gts6,Timepoint=tms) %>%
+    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    mutate(y = -10-as.integer(Genotype)) %>%
+    mutate(ExpID='HY')
+#
+gts = c('B73','B97','CML322','...','PH207','Tx303','W22')
+tms = c(1,25)
+ti3 = crossing(Genotype=gts,Timepoint=tms) %>%
+    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    mutate(y = -20-as.integer(Genotype)) %>%
+    mutate(ExpID='NM')
+tp0 = rbind(ti1,ti2,ti3) %>% inner_join(tx, by='ExpID')
+#}}}
 #{{{ plot design
+tpx = tp0 %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
+    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
+    mutate(x=ifelse(Timepoint==25, 10, x))
+tpy = tp0 %>% distinct(y, Genotype)
+tp = tp0 %>% inner_join(tpx, by='Timepoint')
+tpa = tp %>% filter(Genotype!='...')
+tpb = tp %>% filter(Genotype=='...')
+tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
+cols11 = c(pal_aaas()(10), pal_simpsons()(5))
+p_dsn = ggplot(tpa, aes(x, y)) +
+    geom_point(aes(color=Genotype), size=5) +
+    geom_text(data=tpb, aes(x,y, label='...'), size=3) +
+    geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
+    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expand_scale(mult=c(.05,.05))) +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expand_scale(mult=c(.15,.15))) +
+    scale_color_manual(values=cols11) +
+    facet_wrap(~ExpTxt, ncol=1, scale='free_y') +
+    otheme(legend.pos='none', margin=c(.1,.1,.1,.1),
+           xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
+    theme(axis.text.y = element_text(color='black')) +
+    theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
+#}}}
+
+fo = file.path(dirw, 'design.pdf')
+ggarrange(p_dsn, p_temp, common.legend = F,
+    nrow=1, ncol=2, widths=c(1.3,1)) %>%
+    ggexport(filename = fo, width=8, height=6)
+
+#{{{ #plot design [old]
 load_fonts()
 dirw = dird
 fas = c('\uf4d8', '\uf00d')
