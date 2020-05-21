@@ -1,13 +1,25 @@
 source('functions.R')
-require(UpSetR)
-require(limma)
+#require(UpSetR)
 dirw = file.path(dird, '15_de')
 #{{{ functions
 stresses = c("Control","Cold","Heat")
 drcs = c('up', 'down')
-set_bound <- function(x, minV, maxV) min(max(x,minV),maxV)
+run_matplotlib_venn3 <- function(s1, s2, s3, labs=LETTERS[1:3]) {
+    #{{{
+    require(venneuler)
+    ti = tibble(a=c(str_c(s1,collapse=','), str_c(s2,collapse=','), str_c(s3,collapse=',')))
+    fi = file.path('tmpi.txt')
+    write_tsv(ti, fi, col_names=F)
+    system("venn3.py coord tmpi.txt tmpo1.tsv tmpo2.tsv")
+    tc = read_tsv('tmpo1.tsv', col_names=c('x','y','r')) %>% mutate(lab=labs)
+    tl = read_tsv('tmpo2.tsv', col_names=c('x','y','cnt'))
+    system("rm tmpi.txt tmpo1.tsv tmpo2.tsv")
+    list(tc = tc, tl = tl)
+    #}}}
+}
 get_venncounts <- function(v1, v2, v3) {
     #{{{
+    require(limma)
     x1 = tibble(id = v1, v1 = T)
     x2 = tibble(id = v2, v2 = T)
     x3 = tibble(id = v3, v3 = T)
@@ -22,13 +34,30 @@ get_venncounts <- function(v1, v2, v3) {
             y = c(1.2, -0.6, 0.5, -0.6, 0.5, -1, 0))
     #}}}
 }
+run_venn3 <- function(s1, s2, s3) {
+    #{{{
+    s1 = unique(s1); s2 = unique(s2); s3 = unique(s3)
+    n1 = length(s1); n2 = length(s2); n3 = length(s3)
+    n12 = sum(s1 %in% s2); n13=sum(s1 %in% s3); n23=sum(s2 %in% s3)
+    n123 = sum((s1 %in% s2) && (s1 %in% s3))
+    x = c(A=n1, B=n2, C=n3, "A&B"=n12, "A&C"=n13, "B&C"=n23 ,"A&B&C"=n123)
+    l <- venneuler(x)
+    tc = as_tibble(l$centers) %>%
+        mutate(r = as.double(l$diameters)/2) %>%
+        mutate(lab = l$labels)
+    x1=tc$x[1];y1=tc$y[1];x2=tc$x[2];y2=tc$y[2];x3=tc$x[3];y3=tc$y[3]
+    r1=tc$r[1];r2=tc$r[2];r3=tc$r[3]
+    x123 = (x1+x2+x3)/3; y123 = (y1+y2+y3)/3
+    tl = tibble()
+    #}}}
+}
 #}}}
 
 #{{{ read in
 yid = 'rn20a'
 res = rnaseq_cpm(yid)
 th = res$th; tm = res$tm; tl = res$tl; th_m = res$th_m; tm_m = res$tm_m
-
+#
 th = res$th
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
@@ -59,145 +88,114 @@ saveRDS(x, fo)
 #}}}
 
 #{{{ call DEGs w. interaction effect
-conds = crossing(stress=c("Control",'Cold','Heat'), tp=c(1,25)) %>%
-    mutate(stress = factor(stress, levels=stresses)) %>% arrange(stress) %>%
-    mutate(cond=str_c(stress,tp)) %>% pull(cond)
+#{{{ prepare data, filter gids
+conds = th %>% filter(Experiment=='HY') %>%
+    distinct(Treatment, Timepoint) %>%
+    mutate(Treatment = factor(Treatment, levels=stresses)) %>%
+    mutate(Timepoint = factor(Timepoint, levels=c(0,1,25))) %>%
+    mutate(cond = fct_cross(Treatment, Timepoint, sep='')) %>%
+    mutate(cond = fct_reorder2(cond, Timepoint, Treatment, .desc = F)) %>%
+    arrange(cond) %>% pull(cond)
 th0 = th %>% filter(Experiment=='HY') %>%
     distinct(SampleID, Genotype, Treatment, Timepoint) %>%
-    filter(Timepoint != 0) %>%
     mutate(cond = str_c(Treatment, Timepoint, sep="")) %>%
     mutate(cond = factor(cond, levels=conds)) %>%
     dplyr::rename(gt = Genotype)
-th0a = th0 %>% filter(Timepoint == 1)
-th0b = th0 %>% filter(Timepoint == 25)
+th0a = th0 %>% filter(Timepoint %in% c(0,1))
+th0b = th0 %>% filter(Timepoint %in% c(0,25))
 #
-#{{{ filter gids
 tm0 = tm %>% filter(SampleID %in% th0$SampleID)
 gids = tm0 %>%
     group_by(gid) %>% summarise(n.sam = sum(ReadCount >= 10)) %>%
-    filter(n.sam > .2 * nrow(vh)) %>% pull(gid)
+    filter(n.sam > .2 * nrow(th0)) %>% pull(gid)
 tm0 = tm0 %>% filter(gid %in% gids)
 #}}}
+run_deseq_gt_cond <- function(th1, tm1) {
+    #{{{ process data & run DESeq2
+    require(DESeq2)
+    vh = th1 %>% arrange(SampleID)
+    vh.d = column_to_rownames(as.data.frame(vh), var = 'SampleID')
+    vm = tm1 %>% filter(SampleID %in% th1$SampleID) %>%
+        select(SampleID, gid, ReadCount)
+    vm.w = vm %>% spread(SampleID, ReadCount)
+    vm.d = column_to_rownames(as.data.frame(vm.w), var = 'gid')
+    stopifnot(identical(rownames(vh.d), colnames(vm.d)))
+    # DESeq2
+    dds = DESeqDataSetFromMatrix(countData=vm.d, colData=vh.d,
+                                 design = ~ gt + cond + gt:cond)
+    dds = estimateSizeFactors(dds)
+    dds = estimateDispersions(dds, fitType = 'parametric')
+    disp = dispersions(dds)
+    #dds = nbinomLRT(dds, reduced = ~ 1)
+    dds = nbinomWaldTest(dds)
+    dds
+    #}}}
+}
+call_deg_gt3 <- function(dds, gts, stress, tp) {
+    #{{{
+    gt1 = gts[1]; gt2 = gts[2]; gt3 = gts[3]
+    c1 = sprintf("gt%s.cond%s%s", gt2, stress, tp)
+    c2 = sprintf("gt%s.cond%s%s", gt3, stress, tp)
+    res1 = results(dds, name=c1)
+    res2 = results(dds, name=c2)
+    res3 = results(dds, contrast = list(c2, c1))
+    stopifnot(rownames(res1)==gids && rownames(res2)==gids && rownames(res3)==gids)
+    #
+    r1 = tibble(gid = gids, padj = res1$padj, log2fc = res1$log2FoldChange) %>%
+        replace_na(list(padj = 1)) %>% mutate(qry=gt2, tgt=gt1)
+    r2 = tibble(gid = gids, padj = res2$padj, log2fc = res2$log2FoldChange) %>%
+        replace_na(list(padj = 1)) %>% mutate(qry=gt3, tgt=gt1)
+    r3 = tibble(gid = gids, padj = res3$padj, log2fc = res3$log2FoldChange) %>%
+        replace_na(list(padj = 1)) %>% mutate(qry=gt3, tgt=gt2)
+    rbind(r1,r2,r3) %>% mutate(stress=!!stress,Timepoint=tp) %>%
+        select(stress,Timepoint, qry, tgt, everything())
+    #}}}
+}
 
-#{{{ call cold/heat 1h DEGs
+#{{{ call cold/heat 1/25h gt-specific DEGs vs control_0
 th1 = th0a; tm1 = tm0
-#{{{ process data & run DESeq2
-vh = th1 %>% arrange(SampleID)
-vh.d = column_to_rownames(as.data.frame(vh), var = 'SampleID')
-vm = tm1 %>% filter(SampleID %in% th1$SampleID) %>%
-    select(SampleID, gid, ReadCount)
-vm.w = vm %>% spread(SampleID, ReadCount)
-vm.d = column_to_rownames(as.data.frame(vm.w), var = 'gid')
-stopifnot(identical(rownames(vh.d), colnames(vm.d)))
-# DESeq2
-dds = DESeqDataSetFromMatrix(countData=vm.d, colData=vh.d,
-                             design = ~ gt + cond + gt:cond)
-dds = estimateSizeFactors(dds)
-dds = estimateDispersions(dds, fitType = 'parametric')
-disp = dispersions(dds)
-#dds = nbinomLRT(dds, reduced = ~ 1)
-dds = nbinomWaldTest(dds)
-resultsNames(dds)
-#}}}
+dds = run_deseq_gt_cond(th1, tm1)
+res11 = call_deg_gt3(dds, gts3, 'Cold', 1)
+res21 = call_deg_gt3(dds, gts3, 'Heat', 1)
 #
-#{{{ cold 1
-res1 = results(dds, name="gtMo17.condCold1")
-res2 = results(dds, name="gtW22.condCold1")
-res3 = results(dds, contrast = list("gtW22.condCold1", "gtMo17.condCold1"))
-stopifnot(rownames(res1)==gids && rownames(res2)==gids && rownames(res3)==gids)
-#
-r1 = tibble(gid = gids, padj = res1$padj, log2fc = res1$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'M_B')
-r2 = tibble(gid = gids, padj = res2$padj, log2fc = res2$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_B')
-r3 = tibble(gid = gids, padj = res3$padj, log2fc = res3$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_M')
-res11 = rbind(r1,r2,r3) %>% mutate(stress='Cold',Timepoint=1) %>%
-    select(stress,Timepoint, comp, everything())
-#}}}
-#{{{ heat 1
-res1 = results(dds, name="gtMo17.condHeat1")
-res2 = results(dds, name="gtW22.condHeat1")
-res3 = results(dds, contrast = list("gtW22.condHeat1", "gtMo17.condHeat1"))
-stopifnot(rownames(res1)==gids && rownames(res2)==gids && rownames(res3)==gids)
-#
-r1 = tibble(gid = gids, padj = res1$padj, log2fc = res1$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'M_B')
-r2 = tibble(gid = gids, padj = res2$padj, log2fc = res2$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_B')
-r3 = tibble(gid = gids, padj = res3$padj, log2fc = res3$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_M')
-res21 = rbind(r1,r2,r3) %>% mutate(stress='Heat',Timepoint=1) %>%
-    select(stress,Timepoint, comp, everything())
-#}}}
-#}}}
-
-#{{{ call cold/heat 25h DEGs
 th1 = th0b; tm1 = tm0
-#{{{ process data & run DESeq2
-vh = th1 %>% arrange(SampleID)
-vh.d = column_to_rownames(as.data.frame(vh), var = 'SampleID')
-vm = tm1 %>% filter(SampleID %in% th1$SampleID) %>%
-    select(SampleID, gid, ReadCount)
-vm.w = vm %>% spread(SampleID, ReadCount)
-vm.d = column_to_rownames(as.data.frame(vm.w), var = 'gid')
-stopifnot(identical(rownames(vh.d), colnames(vm.d)))
-# DESeq2
-dds = DESeqDataSetFromMatrix(countData=vm.d, colData=vh.d,
-                             design = ~ gt + cond + gt:cond)
-dds = estimateSizeFactors(dds)
-dds = estimateDispersions(dds, fitType = 'parametric')
-disp = dispersions(dds)
-#dds = nbinomLRT(dds, reduced = ~ 1)
-dds = nbinomWaldTest(dds)
-resultsNames(dds)
+dds = run_deseq_gt_cond(th1, tm1)
+res12 = call_deg_gt3(dds, gts3, 'Cold', 25)
+res22 = call_deg_gt3(dds, gts3, 'Heat', 25)
+#
+res1 = rbind(res11,res12,res21,res22) %>% mutate(cond2 = 'control0')
+#}}}
+#{{{ call cold/heat 1/25h gt-specific DEGs vs control_1/25
+th1 = th0a %>% mutate(cond=fct_relevel(cond, 'Control1')); tm1 = tm0
+dds = run_deseq_gt_cond(th1, tm1)
+res11 = call_deg_gt3(dds, gts3, 'Cold', 1)
+res21 = call_deg_gt3(dds, gts3, 'Heat', 1)
+#
+th1 = th0b %>% mutate(cond=fct_relevel(cond, 'Control25')); tm1 = tm0
+dds = run_deseq_gt_cond(th1, tm1)
+res12 = call_deg_gt3(dds, gts3, 'Cold', 25)
+res22 = call_deg_gt3(dds, gts3, 'Heat', 25)
+#
+res2 = rbind(res11,res12,res21,res22) %>% mutate(cond2 = 'controlM')
 #}}}
 #
-#{{{ cold 25
-res1 = results(dds, name="gtMo17.condCold25")
-res2 = results(dds, name="gtW22.condCold25")
-res3 = results(dds, contrast = list("gtW22.condCold25", "gtMo17.condCold25"))
-stopifnot(rownames(res1)==gids && rownames(res2)==gids && rownames(res3)==gids)
-#
-r1 = tibble(gid = gids, padj = res1$padj, log2fc = res1$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'M_B')
-r2 = tibble(gid = gids, padj = res2$padj, log2fc = res2$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_B')
-r3 = tibble(gid = gids, padj = res3$padj, log2fc = res3$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_M')
-res12 = rbind(r1,r2,r3) %>% mutate(stress='Cold',Timepoint=25) %>%
-    select(stress,Timepoint, comp, everything())
-#}}}
-#{{{ heat 25
-res1 = results(dds, name="gtMo17.condHeat25")
-res2 = results(dds, name="gtW22.condHeat25")
-res3 = results(dds, contrast = list("gtW22.condHeat25", "gtMo17.condHeat25"))
-stopifnot(rownames(res1)==gids && rownames(res2)==gids && rownames(res3)==gids)
-#
-r1 = tibble(gid = gids, padj = res1$padj, log2fc = res1$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'M_B')
-r2 = tibble(gid = gids, padj = res2$padj, log2fc = res2$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_B')
-r3 = tibble(gid = gids, padj = res3$padj, log2fc = res3$log2FoldChange) %>%
-    replace_na(list(padj = 1)) %>% mutate(comp = 'W_M')
-res22 = rbind(r1,r2,r3) %>% mutate(stress='Heat',Timepoint=25) %>%
-    select(stress,Timepoint, comp, everything())
-#}}}
-#}}}
-
-res = rbind(res11,res12,res21,res22)
-res %>% dplyr::count(stress,Timepoint,comp)
-
-res %>% mutate(d = ifelse(padj < 0.05, ifelse(log2fc <= -1, "-",
-                   ifelse(log2fc >= 1, "+", "ND")), "ND")) %>%
-    dplyr::count(stress, Timepoint, comp, d) %>%
+res = rbind(res1, res2) %>%
+    mutate(cond2 = ifelse(cond2 == 'control0', 'c0', 'cm')) %>%
+    pivot_wider(names_from=cond2, values_from=c(padj,log2fc), names_sep=".") %>%
+    group_by(stress,Timepoint,qry,tgt) %>% nest() %>% ungroup()
+res %>% unnest(data) %>%
+    dplyr::rename(padj=padj.c0, log2fc=log2fc.c0) %>%
+    #dplyr::rename(padj=padj.cm, log2fc=log2fc.cm) %>%
+    mutate(d = ifelse(padj < 0.05, ifelse(log2fc <= -1, "-",
+               ifelse(log2fc >= 1, "+", "ND")), "ND")) %>%
+    dplyr::count(stress, Timepoint, qry,tgt, d) %>%
     spread(d, n)
 
 fo = file.path(dirw, '02.de.gt.rds')
 saveRDS(res, fo)
 #}}}
 
-#{{{ merge called DEGs to 10.rds and obtain gt-specific DEG sets
+#{{{ merge called DEGs
 #{{{ deg48
 fi = file.path(dirw, '01.de.rds')
 x = readRDS(fi)
@@ -221,24 +219,21 @@ deg48 = x %>%
 #}}}
 
 #{{{ deg12
-merge_ds <- function(ds1, ds2, ds) {
+merge_ds <- function(ds.q, ds.t, ds) {
     #{{{
-    ds1 %>% rename(padj.1=padj, log2fc.1=log2fc) %>%
-    inner_join(ds2, by='gid') %>% rename(padj.2=padj, log2fc.2=log2fc) %>%
+    ds.q %>% rename(padj.q=padj, log2fc.q=log2fc) %>%
+    inner_join(ds.t, by='gid') %>% rename(padj.t=padj, log2fc.t=log2fc) %>%
     inner_join(ds, by='gid')
     #}}}
 }
+x1 = deg48 %>% filter(cond2=='timeM') %>%
+    dplyr::rename(stress = Treatment, gt=Genotype) %>%
+    select(stress, gt, Timepoint, ds)
 fi = file.path(dirw, '02.de.gt.rds')
-gmap = c("B"="B73","M"="Mo17","W"="W22")
-x2 = readRDS(fi) %>% group_by(stress,Timepoint,comp) %>% nest() %>% ungroup() %>%
-    separate(comp, c("qry", "tgt"), sep="_") %>%
-    mutate(qry = gmap[qry], tgt= gmap[tgt]) %>%
+x2 = readRDS(fi) %>%
     mutate(qry = factor(qry, levels=gts3)) %>%
     mutate(tgt = factor(tgt, levels=gts3)) %>%
     mutate(stress = factor(stress, levels=stresses))
-x1 = deg48 %>% filter(cond2=='timeM') %>%
-    rename(stress = Treatment, gt=Genotype) %>%
-    select(stress, gt, Timepoint, ds)
 #
 deg12 = x2 %>%
     rename(gt=qry) %>% inner_join(x1, by=c("gt","stress","Timepoint")) %>%
@@ -246,7 +241,7 @@ deg12 = x2 %>%
     rename(gt=tgt) %>% inner_join(x1, by=c("gt",'stress','Timepoint')) %>%
     rename(ds.t = ds) %>% rename(tgt = gt) %>%
     mutate(ds = pmap(list(ds.q, ds.t, data), merge_ds)) %>%
-    select(qry, tgt, ,stress,Timepoint,ds) %>%
+    select(qry, tgt, stress,Timepoint,ds) %>%
     mutate(qry = factor(qry, levels=gts3)) %>%
     mutate(tgt = factor(tgt, levels=gts3))
 #}}}
@@ -256,7 +251,8 @@ fo = file.path(dirw, '05.rds')
 saveRDS(res, fo)
 #}}}
 
-#{{{ plot DEGs
+____plot DEGs___
+
 fi = file.path(dirw, '05.rds')
 x = readRDS(fi)
 deg48 = x$deg48; deg12 = x$deg12
@@ -292,8 +288,8 @@ tpt2 = tp %>% group_by(Genotype,cond,drc,x) %>%
 tpa = tibble(x=.35, y=c(20,-20), color=pal_d3()(2)[c(2,1)], lab=c('up','down')) %>%
     mutate(yt = ifelse(lab=='down', y-off, y+off)) %>%
     mutate(cond = 'Cold_1h') %>% crossing(Genotype=gts3)
+labs = c('time0_control', 'timeM_control')
 
-labs = c('ctrl_0', 'ctrl_M')
 pv = ggplot(tp) +
     geom_bar(aes(x=x, y=y, fill=opt2), stat='identity', position='stack', alpha=1, size=0, color='white', width=.8) +
     geom_hline(yintercept = 0, size=.1) +
@@ -307,20 +303,22 @@ pv = ggplot(tp) +
     facet_grid(Genotype ~ cond, switch='y', scales='free_x', space='free_x') +
     #otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4,
     otheme(legend.pos='none', xtext=T, xtick=T) +
+    theme(axis.text.x = element_text(angle = 20, hjust=.8, vjust=1.1)) +
     guides(color=F,fill=F)
 fo = file.path(dirw, '10.deg.pdf')
 ggsave(pv, filename=fo, width=5, height=8)
 #}}}
 
-#{{{ [messy] venn graph
+#{{{ ## time0 v timeM: venn graph
 tv = tibble(x=c(-1,1), y=c(0,0), lab=labs) %>% mutate(lab=factor(lab,levels=labs))
-tp = td1 %>% select(Genotype,cond1,n0,n1,n) %>% crossing(tv)
+tp = td1 %>% mutate(cond = sprintf("%s%d_%s", Treatment,Timepoint,drc)) %>%
+    select(Genotype,cond,n0,n1,n) %>% crossing(tv)
 pv = ggplot(tp) +
     geom_circle(aes(x0=x, y0=y, r=1.5, fill=lab), alpha=.3, size=0, color='grey') +
     geom_text(tp, mapping=aes(x=-1,y=0,label=n0-n), size=2.5) +
     geom_text(tp, mapping=aes(x=1,y=0,label=n1-n), size=2.5) +
     geom_text(tp, mapping=aes(x=0,y=0,label=n), size=2.5) +
-    facet_grid(Genotype ~ cond1, switch = 'y') +
+    facet_grid(Genotype ~ cond, switch = 'y') +
     scale_fill_manual(values=pal_npg()(2)) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
 fo = file.path(dirw, '10.deg.venn.pdf')
@@ -328,73 +326,239 @@ ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
 #{{{ genotypic difference in cold/heat response
+#{{{ characterize pairwise contrasts
 fmax=10
-tp = deg12 %>% unnest(ds) %>%
-    mutate(deg1 = padj.1 < .05 & abs(log2fc.1) >= 1) %>%
-    mutate(deg2 = padj.2 < .05 & abs(log2fc.2) >= 1) %>%
-    mutate(deg12 = padj < .05 & abs(log2fc) >= 1) %>%
-    mutate(deg = ifelse(deg1, ifelse(deg2, '1+2', '1'), ifelse(deg2, '2', '0')),
-        ddeg = ifelse(deg12, 'diff-deg', 'no-diff-deg')) %>%
-    mutate(log2fc.1 = map_dbl(log2fc.1, set_bound, minV=-fmax, maxV=fmax)) %>%
-    mutate(log2fc.2 = map_dbl(log2fc.2, set_bound, minV=-fmax, maxV=fmax)) %>%
+drcs = c("\u2191",'=',"\u2193")
+drcs = c("+",'=',"-")
+tx = tibble(deg = c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-', 'A+B-','A-B+','A=B='),
+             x = c(1:3, 5:7, 9:11))
+td = deg12 %>%
+    unnest(ds) %>%
+    mutate(deg.q = padj.q < .05 & abs(log2fc.q) >= 1) %>%
+    mutate(deg.t = padj.t < .05 & abs(log2fc.t) >= 1) %>%
+    mutate(ddeg = padj.c0<.05 & abs(log2fc.c0)>=1 & padj.cm<.05 & abs(log2fc.cm)>=1) %>%
+    mutate(drc.q = ifelse(log2fc.q < 0, "-", "+")) %>%
+    mutate(drc.t = ifelse(log2fc.t < 0, "-", "+")) %>%
+    mutate(deg.qt = ifelse(deg.q, ifelse(deg.t, 'q+t', 'q'),
+                    ifelse(deg.t, 't', 'none'))) %>%
+    mutate(ddrc = ifelse(ddeg, ifelse(log2fc.cm<0, -1, 1), 0)) %>%
+    mutate(deg.qt = factor(deg.qt, levels=c("q",'t','q+t','none'))) %>%
+    mutate(deg = NA) %>%
+    mutate(deg = ifelse(deg.qt=='none', 'A=B=', deg)) %>%
+    mutate(deg = ifelse(deg.qt=='q+t', ifelse(drc.q=='-',
+                        ifelse(drc.t=='-', 'A-B-', 'A-B+'),
+                        ifelse(drc.t=='-', 'A+B-', 'A+B+')), deg)) %>%
+    mutate(deg = ifelse(deg.qt=='q', ifelse(drc.q=='-','A-B=','A+B='), deg)) %>%
+    mutate(deg = ifelse(deg.qt=='t', ifelse(drc.t=='-','A=B-','A=B+'), deg)) %>%
+    inner_join(tx, by='deg') %>%
+    mutate(deg = factor(deg, levels=tx$deg)) %>%
+    mutate(log2fc.q = map_dbl(log2fc.q, set_bound, minV=-fmax, maxV=fmax)) %>%
+    mutate(log2fc.t = map_dbl(log2fc.t, set_bound, minV=-fmax, maxV=fmax)) %>%
     mutate(cond = str_c(stress,Timepoint,qry,tgt, sep="_")) #%>%
     #filter(! (deg=='0' & ddeg == 'no-diff-deg'))
-tp %>% count(qry,tgt,stress,Timepoint,deg,ddeg)
+td %>% count(qry,tgt,stress,Timepoint,ddrc,drc.q,drc.t) %>%
+    print(n=50)
+#}}}
+fo = file.path(dirw, '08.de.rds')
+#saveRDS(td, fo)
 
-p = ggplot(tp, aes(x=log2fc.1, y=log2fc.2)) +
-    geom_point(aes(color=ddeg, shape=deg), size=1.5) +
-    scale_x_continuous(limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
-    scale_color_manual(name='deg', values=pal_aaas()(10)[c(2,9)]) +
-    scale_shape_manual(name='ddeg', values=c(1:4)) +
+#{{{ multi-panel scatter plot
+tp = td %>% filter(ddrc != 0, deg != 'A=B=')
+linecol = 'azure3'; lty = 'solid'
+cols9 = brewer.pal(10, "Paired")[c(2,4,6,8,9,7,5,3,1)]
+cols9 = pal_npg()(10)[c(1:7,10)]
+#{{{ scatter plot
+p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
+    geom_vline(xintercept=0, linetype=lty, color=linecol) +
+    geom_hline(yintercept=0, linetype=lty, color=linecol) +
+    geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
+    geom_point(aes(color=deg, shape='k'), size=1.5) +
+    scale_x_continuous(name='Genotype (A) log2fc', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Genotype (B) log2fc', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_color_manual(name='DEG status:', values=cols9) +
+    scale_shape_manual(name='Genotype Effect:', labels=c("negative","positive"), values=c(1,4)) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           xtick=T, xtext=T, ytick=T, ytext=T)
-fp = sprintf('%s/15.pdf', dirw)
-ggsave(p, file = fp, width = 12, height = 12)
+           legend.vjust = -.4, legend.box='h',
+           xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
+    guides(color=guide_legend(nrow=1), shape=F)
+fp = sprintf('%s/15.ddeg.pdf', dirw)
+ggsave(p, file = fp, width = 8, height = 9.5)
+#}}}
+#{{{ bar plot showing counts
+tp1 = tp %>% count(cond, x, deg)
+tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
+    mutate(lab=sprintf("N=%d", n))
+p = ggplot(tp1) +
+    geom_bar(aes(x=x, y=n, fill=deg), width=.8, stat='identity') +
+    geom_text(data=tp1s,aes(x=11,y=500,label=lab), size=3, vjust=.5,hjust=1) +
+    geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
+    scale_x_continuous(breaks=tx$x, labels=tx$deg, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
+    scale_fill_manual(name='DEG status:', values=cols9) +
+    facet_wrap(~cond, ncol=3) +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           legend.vjust = -.4, legend.box='h',
+           xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
+fp = sprintf('%s/15.ddeg.cnt.pdf', dirw)
+ggsave(p, file = fp, width = 6, height = 6)
+#}}}
 
-y = tp %>% mutate(cond=str_c(stress,Timepoint)) %>%
+#{{{ plot mean CPM for each category of genes
+te = th %>% filter(Experiment=='HY', Genotype %in% gts3) %>%
+    select(SampleID, Genotype, Treatment, Timepoint) %>%
+    inner_join(tm[,c('gid','SampleID','CPM')], by='SampleID') %>%
+    mutate(cond = str_c(Treatment,Timepoint,sep='')) %>%
+    group_by(Genotype,cond, gid) %>%
+    summarise(CPM=mean(CPM)) %>% ungroup() %>% rename(gt=Genotype)
+
+tp1 = td %>% filter(ddrc != 0) %>%
+    mutate(cond=str_c(stress,Timepoint,sep='')) %>%
+    select(qry,tgt,cond,gid,deg) %>%
+    inner_join(te, by=c('cond'='cond','qry'='gt','gid'='gid')) %>%
+    rename(cpm.q1 = CPM) %>%
+    inner_join(te, by=c('cond'='cond','tgt'='gt','gid'='gid')) %>%
+    rename(cpm.t1 = CPM)
+tp2 = td %>% filter(ddrc != 0) %>%
+    mutate(cond=str_c('Control',Timepoint,sep='')) %>%
+    select(qry,tgt,cond,gid,deg) %>%
+    inner_join(te, by=c('cond'='cond','qry'='gt','gid'='gid')) %>%
+    rename(cpm.q0 = CPM) %>%
+    inner_join(te, by=c('cond'='cond','tgt'='gt','gid'='gid')) %>%
+    rename(cpm.t0 = CPM) %>% select(-cond)
+
+tp = tp1 %>% inner_join(tp2, by=c("qry",'tgt','gid','deg')) %>%
+    mutate(cpm = pmin(cpm.q1, cpm.t1, cpm.q0, cpm.t0)) %>%
+    mutate(cpm = asinh(cpm)) %>%
+    mutate(cond = str_c(cond, qry, tgt, sep="_"))
+p = ggplot(tp, aes(x=deg, y=cpm)) +
+    geom_violin(aes(fill=deg)) +
+    scale_x_discrete(expand=expansion(mult=c(.10,.10))) +
+    scale_y_continuous(name='asinh(CPM)', expand=expansion(mult=c(.05,.05))) +
+    scale_fill_manual(name='DEG status:', values=cols9) +
+    facet_wrap(~cond, ncol=3) +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           legend.vjust = -.4, legend.box='h',
+           xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
+fp = sprintf('%s/15.ddeg.cpm.pdf', dirw)
+ggsave(p, file = fp, width = 8, height = 8)
+#}}}
+#}}}
+
+#{{{ # infer 3-way gt comparison
+fc = file.path(dirw, '18.ddeg.cat.tsv')
+tc = read_tsv(fc)
+td2 = td %>% mutate(cond=str_c(stress,Timepoint)) %>%
     mutate(comp = str_c(qry,tgt,sep="_")) %>%
-    mutate(drc = ifelse(deg12, ifelse(log2fc<0, -1, 1), 0)) %>%
-    select(cond,comp,gid,drc) %>%
-    spread(comp, drc) %>%
-    select(cond, MB=Mo17_B73, WB=W22_B73, WM=W22_Mo17, gid)
-y %>% count(cond, MB, WB, WM) %>% arrange(cond, desc(MB), desc(WB), desc(WM)) %>% print(n=40) 
+    select(cond,comp,gid,ddrc) %>%
+    spread(comp, ddrc) %>%
+    rename(MB=Mo17_B73, WB=W22_B73, WM=W22_Mo17) %>%
+    inner_join(tc, by=c("MB","WB",'WM')) %>%
+    select(cond,gid,MB,WB,WM,BMW0,BMW)
+td2s = td2 %>% filter(!is.na(BMW0), BMW0 != '000') %>%
+    select(cond, gid, BMW0, BMW)
+td3 = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
+    mutate(cond = str_c(Treatment, Timepoint, sep='')) %>%
+    select(gt=Genotype,cond, ds) %>%
+    unnest(ds) %>%
+    mutate(deg = ifelse(padj < .05, ifelse(log2fc <= -1, -1,
+                 ifelse(log2fc >= 1, 1, 0)), 0)) %>%
+    inner_join(td2s, by=c("cond","gid"))
+
+ddrcs = c(1,0,-1)
+ac = crossing(cond=unique(td2$cond), MB=ddrcs, WB=ddrcs, WM=ddrcs)
+y = td2 %>% count(cond, MB, WB, WM) %>%
+    right_join(ac, by=c('cond','MB','WB','WM')) %>%
+    replace_na(list(n=0)) %>%
+    spread(cond,n) %>%
+    arrange(desc(MB), desc(WB), desc(WM)) %>%
+    print(n=40)
+fo = file.path(dirw, '18.ddeg.cat.fill.tsv')
+write_tsv(y, fo)
+
+bmws = c("001",'010','100','011','101','110')
+z = td2 %>% filter(!is.na(BMW)) %>%
+    count(cond, BMW) %>%
+    mutate(BMW = factor(BMW, levels=bmws)) %>%
+    complete(cond, nesting(BMW), fill=list(n=0)) %>%
+    spread(cond,n) %>% print(n=10)
+#}}}
+
+#{{{ gt venn graph
+drcs = c('up','down')
+td2 = td1 %>% mutate(cond=sprintf("%s%dh", Treatment, Timepoint)) %>%
+    select(Genotype, cond, drc,  gids) %>%
+    filter(Genotype %in% gts3) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
+    #inner_join(td0, by=c('Genotype','cond','gid')) %>%
+    group_by(Genotype, cond) %>%
+    summarise(gidsU=list(gid[drc=='up']), gidsD=list(gid[drc=='down'])) %>%
+    ungroup() %>%
+    dplyr::rename(up=gidsU, down=gidsD) %>%
+    gather(drc, gids, -Genotype, -cond) %>%
+    mutate(drc = factor(drc, levels=c(drcs)))
+td3 = td2 %>% select(Genotype,cond,drc, gids) %>%
+    spread(Genotype, gids) %>%
+    dplyr::rename(gidsB=B73, gidsM=Mo17, gidsW=W22) %>%
+    mutate(vdc = pmap(list(gidsB, gidsM, gidsW), run_matplotlib_venn3, labs=gts3)) %>%
+    mutate(tc = map(vdc, 'tc'), tl = map(vdc, 'tl'))
+
+cols3 = pal_tron()(5)[c(1,2,3)]
+#{{{
+tp = td3 %>% filter(drc=='up') %>%
+    mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
+    arrange(drc,cond)
+tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
+tpc = tp %>% select(pan, tc) %>% unnest(tc)
+tpl = tp %>% select(pan, tl) %>% unnest(tl)
+pv = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
+    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
+    facet_wrap(~ pan, scale='free', ncol=2) +
+    scale_color_manual(values=cols3) +
+    scale_fill_manual(values=cols3) +
+    #scale_fill_manual(values=pal_tron()(5)) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
+fo = sprintf('%s/11.gt.venn.pdf', dirw)
+ggsave(pv, filename=fo, width=4, height=4)
+#}}}
+#{{{
+tp = td3 %>% mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
+    arrange(drc,cond)
+tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
+tpc = tp %>% select(pan, tc) %>% unnest(tc)
+tpl = tp %>% select(pan, tl) %>% unnest(tl)
+pv = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
+    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
+    facet_wrap(~ pan, scale='free', ncol=4) +
+    scale_color_manual(values=cols3) +
+    scale_fill_manual(values=cols3) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
+fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
+ggsave(pv, filename=fo, width=8, height=4.5)
 #}}}
 #}}}
 
-#{{{ [not work] genotypic difference for cold/heat - up in B,M,W
-stress='Heat'; opt = 'ctrl0'
-stress='Heat'; opt = 'ctrl'
-stress='Heat'; opt = 'ctrlx'
-stress='Cold'; opt = 'ctrl'
-stress='Cold'; opt = 'ctrl0'
-stress='Cold'; opt = 'ctrlx'
-gids = td1 %>% filter(Genotype %in% gts3, Treatment==stress, drc=='up') %>%
-    select(Genotype,Treatment,Timepoint,drc, gids) %>%
-    unnest(gids) %>% rename(gid = gids) %>% distinct(gid) %>% pull(gid)
-#
-tp0 = x %>% filter(Genotype %in% gts3, Treatment==stress) %>%
-    mutate(cond=sprintf("%dh_%s", Timepoint, Genotype)) %>%
-    #mutate(cond=sprintf("%s_%dh", Genotype, Timepoint)) %>%
-    mutate(condB = ifelse(TimepointB==0, 'ctrl0', 'ctrlx')) %>%
-    select(cond, condB, ds) %>% unnest(ds) %>%
-    filter(gid %in% gids) %>% select(-padj) %>%
-    spread(condB, log2fc) %>%
-    mutate(ctrl = ifelse(abs(ctrl0) < abs(ctrlx), ctrlx, ctrl0))
-tp = tp0 %>% select(cond, gid, log2fc=!!opt) %>%
-    mutate(log2fc = map_dbl(log2fc, set_bound, minV=-3, maxV=3))
-tpl = tp %>% spread(cond, log2fc)
-tpw = tp %>% spread(gid, log2fc)
+#{{{ # heatmap cold/heat - up in B,M,W
+fmax=3
+tp0 = td3 %>% filter(!is.na(BMW))
+dmap = c('-1'='-', '0'='.', '1'='+')
+tpw = tp0 %>% select(cond,gid,gt,deg,log2fc, BMW0, BMW) %>%
+    mutate(deg = dmap[as.character(deg)]) %>%
+    pivot_wider(names_from=gt, values_from=c(deg, log2fc), names_sep='.') %>%
+    mutate(grp=str_c(deg.B73, deg.Mo17, deg.W22)) %>%
+    select(-deg.B73, -deg.Mo17, -deg.W22)
+tpw %>% count(cond, grp) %>%
+    complete(cond, nesting(grp), fill=list(n=0)) %>% spread(cond, n) %>%
+    arrange(desc(grp)) %>% print(n=30)
 
-e = tpl %>% select(-gid)
-mat = data.frame(e)
-rownames(mat) = tpl$gid
-colnames(mat) = colnames(e)
-fp = sprintf('%s/10.lfc.%s.%s.pdf', dirw, stress, opt)
-pdf(fp, 6,12)
-pheatmap(mat, cluster_cols=F, show_rownames=F)
-dev.off()
+tpw %>% count(cond, grp, BMW0) %>%
+    filter(cond == 'Heat25') %>% select(-cond) %>%
+    complete(grp, nesting(BMW0), fill=list(n=0)) %>%
+    spread(BMW0, n) %>%
+    arrange(desc(grp)) %>% print(n=30)
 
 e = tpw %>% select(-cond)
 mat = data.frame(e)
@@ -405,20 +569,23 @@ edist = idist(mat, method = opt.dist)
 ehc = hclust(edist, method = opt.hc)
 tree = as.phylo(ehc)
 lnames = ehc$labels[ehc$order]
-#
+
+lnames = tpw$gid
 cols100b=colorRampPalette(rev(brewer.pal(n=7, name="RdYlBu")))(100)
-tp = tp %>% mutate(gid = factor(gid, levels=rev(lnames)))
-p1 = ggplot(tp, aes(x=cond, y=gid, fill=log2fc)) +
+tp = tp0 %>% mutate(gid = str_c(cond, grp, gid, sep='_')) %>%
+    mutate(gid = factor(gid, levels=rev(lnames)))
+p1 = ggplot(tp, aes(x=gt, y=gid, fill=log2fc)) +
     geom_tile() +
     scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
     scale_y_discrete(expand=expansion(mult=c(0,0))) +
     #scale_fill_viridis(name = 'log2fc', direction=-1) +
     scale_fill_gradientn(name='log2fc', colors=cols100b) +
+    facet_wrap(~cond, scale='free') +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            xtick=T, xtext=T) +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
-fp = sprintf('%s/10.lfc.%s.%s.pdf', dirw, stress, opt)
-ggsave(p1, file = fp, width = 6, height = 12)
+fp = sprintf('%s/21.heatmap.pdf', dirw)
+ggsave(p1, file = fp, width = 8, height = 10)
 
 
     tp = th %>% mutate(taxa = SampleID) %>%
@@ -431,44 +598,8 @@ ggsave(p1, file = fp, width = 6, height = 12)
         get(str_c('scale_color', pal.col, sep="_"))() +
         guides(color=F)
 
-#{{{ [obsolete] venn graph
-td0 = x %>% unnest(ds) %>% filter(TimepointB != 0, padj < 0.01, abs(log2fc)>=1) %>%
-    mutate(drc = ifelse(log2fc < 0, 'down', 'up')) %>%
-    mutate(Genotype = factor(Genotype, levels=gts6)) %>%
-    mutate(Treatment = factor(Treatment, levels=stresses)) %>%
-    mutate(cond1=str_c(Treatment,Timepoint, sep="_")) %>%
-    select(Genotype, cond1, gid, drc)
-#
-td2 = td1 %>% mutate(cond1=str_c(Treatment,Timepoint,sep="_")) %>%
-    select(Genotype,cond1, gids) %>%
-    filter(Genotype %in% gts3) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
-    inner_join(td0, by=c('Genotype','cond1','gid')) %>%
-    group_by(Genotype, cond1) %>%
-    summarise(gids=list(gid), gidsU=list(gid[drc=='up']), gidsD=list(gid[drc=='down'])) %>%
-    ungroup() %>%
-    dplyr::rename(all=gids, up=gidsU, down=gidsD) %>%
-    gather(drc, gids, -Genotype, -cond1) %>%
-    mutate(drc = factor(drc, levels=c('all', drcs)))
-
-tp = td2 %>% select(Genotype,cond1,drc, gids) %>%
-    spread(Genotype, gids) %>%
-    dplyr::rename(gidsB=B73, gidsM=Mo17, gidsW=W22) %>%
-    mutate(vdc = pmap(list(gidsB, gidsM, gidsW), get_venncounts)) %>%
-    select(cond1, drc, vdc) %>% unnest(vdc)
-tv = tibble(x = c(0, 0.866, -0.866), y = c(1, -0.5, -0.5), lab=rev(gts3)) %>%
-    mutate(lab=factor(lab, levels=gts3))
-tp1 = tp %>% distinct(cond1) %>% crossing(tv)
-pv = ggplot(tp1) +
-    geom_circle(aes(x0=x, y0=y, r=1.5, fill=lab), alpha=.3, size=0, color='grey') +
-    geom_text(tp, mapping=aes(x=x,y=y,label=Counts), size=2.5) +
-    facet_grid(drc ~ cond1, switch='y') +
-    scale_fill_manual(values=pal_tron()(5)) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
-fo = sprintf('%s/05.gt.venn.pdf', dirw)
-ggsave(pv, filename=fo, width=9, height=7)
 #}}}
 #}}}
-
 
 ________BELOW ARE DEPRECATED_________
 #{{{ alluvial

@@ -248,26 +248,78 @@ x = readRDS(fi)
 xc = x %>% select(bat, clu) %>% unnest(clu)
 xm = x %>% select(bat, me) %>% unnest(me)
 
-picked = c(.3, .25, .25, .3)
-ti = tibble(bat=bats,MEDissThres=picked,ctag='merged') %>%
-    inner_join(xc, by=c('bat','ctag','MEDissThres')) %>%
-    inner_join(xm, by=c('bat','mid')) %>%
-    arrange(bat,desc(mid)) %>%
-    group_by(bat) %>% mutate( y = 1:n() ) %>% ungroup()
+ff = file.path(dirw, 'config.xlsx')
+tf = read_xlsx(ff, sheet='picked')
+ti = tf %>% inner_join(xm, by=c('bat','mid'))
 #
-tp = ti %>% select(bat,y,mid,n,me) %>%
-    unnest(me) %>% gather(cond, val, -bat,-y,-mid,-n) %>%
-    group_by(bat,y,mid,n) %>%
+tp0 = ti %>% select(y,bat,i,mid,n,me,note) %>%
+    unnest(me) %>% gather(cond, val, -bat,-i,-y,-mid,-n, -note) %>%
+    group_by(bat,i,y,mid,n) %>%
     mutate(val = scale_by_first(val)) %>%
     ungroup() %>%
-    mutate(val = ifelse(val > 1, 1, val)) %>%
-    mutate(val = ifelse(val < -1, -1, val)) %>%
-    mutate(lab=sprintf("%s (%d)", mid, n)) %>%
+    #mutate(val = ifelse(val > 1, 1, val)) %>%
+    #mutate(val = ifelse(val < -1, -1, val)) %>%
+    mutate(lab=sprintf("%s (%d): %s", mid, n, note)) %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    mutate(i = factor(i))
+tpx = tp0 %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n())
+tp0 = tp0 %>% inner_join(tpx, by='cond')
+
+#{{{ heatmap of all modules
+tp = xm %>% select(bat, mid, n, me) %>%
+    unnest(me) %>% gather(cond, val, -bat,-mid,-n) %>%
+    group_by(bat,mid,n) %>%
+    mutate(val = scale_by_first(val)) %>%
+    ungroup() %>%
     mutate(bat = factor(bat, levels=bats))
 tpx = tp %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n())
-tp = tp %>% inner_join(tpx, by='cond')
+tpy = tp %>% distinct(bat, mid, n) %>%
+    mutate(lab=sprintf("%s (%d)", mid, n)) %>%
+    mutate(y=str_c(bat, mid, sep=' ')) %>% arrange(bat, desc(mid)) %>% select(-n)
+tp = tp %>% inner_join(tpx, by='cond') %>%
+    inner_join(tpy, by=c('bat','mid')) %>%
+    mutate(y = factor(y, levels=tpy$y))
+p = ggplot(tp, aes(x=x,y=y)) +
+    geom_tile(aes(fill=val),color='white',size=.2) +
+    scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.01,.01))) +
+    scale_y_discrete(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01))) +
+    scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
+    facet_wrap(~bat, ncol=4, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = T, margin = c(.3,.3,.3,.3),
+           ygrid=F, xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
+    theme(strip.text.y = element_blank()) +
+    theme(strip.text.x = element_text(size=10))
+fo = file.path(dirw, '27.all.pdf')
+ggsave(p, file=fo, width=10, height=8)
+#}}}
 
-#{{{ lineplot pl
+#{{{ heatmap for picked modules
+tp = tp0
+tpy = tp %>% distinct(y, bat, lab) %>% arrange(y)
+tpys = tpy %>% group_by(bat) %>%
+    summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2) %>% ungroup()
+p = ggplot(tp, aes(x=x,y=y)) +
+    geom_tile(aes(fill=val),color='white',size=.3) +
+    geom_segment(data=tpys, aes(x=.3,xend=.3,y=ymin,yend=ymax),color='dodgerblue',size=1) +
+    geom_text(data=tpys, aes(x=.1,y=ymid,label=bat),size=3,angle=0,hjust=1,vjust=.5) +
+    scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.2,.01))) +
+    scale_y_reverse(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01)), position='right') +
+    scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = F, margin = c(.3,.3,.3,.3),
+           ygrid=F, xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T)
+    #theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
+    #theme(strip.text.y = element_blank()) +
+    #theme(strip.text.x = element_text(size=10))
+fo = file.path(dirw, '27.picked.pdf')
+ggsave(p, file=fo, width=6, height=5)
+#}}}
+
+#{{{ lineplot
+tp = tp0
+tpx = tp %>% distinct(cond, x) %>% arrange(cond, x)
 p = ggplot(tp, aes(x=x,y=val)) +
     geom_line(size=.5) +
     geom_point(color='black', size=.5) +
@@ -282,7 +334,15 @@ p = ggplot(tp, aes(x=x,y=val)) +
     theme(strip.text.y = element_blank()) +
     theme(strip.text.x = element_text(size=10))
 fo = file.path(dirw, '28.picked.pdf')
-ggsave(p, file=fo, width=8, height=10)
+ggsave(p, file=fo, width=8, height=6)
+#}}}
+
+#{{{ write xm for sharing
+to = xm %>% mutate(bat=factor(bat, levels=bats)) %>% arrange(bat,mid) %>%
+    mutate(gids = map_chr(gids, str_c, collapse=',')) %>%
+    mutate(me = map_chr(me, str_c, collapse=','))
+fo = file.path(dirw, '25.modules.tsv')
+write_tsv(to, fo)
 #}}}
 #}}}
 

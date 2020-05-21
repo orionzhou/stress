@@ -35,6 +35,7 @@ cols36 = c(pal_ucscgb()(18)[8], pal_igv()(18), pal_ucscgb()(18)[c(1:7,9:18)])
 brights36 = tibble(col=cols36) %>% mutate(bright=map_int(col,colbright)) %>%
     mutate(b = ifelse(bright<128, 'white','black')) %>% pull(b)
 
+set_bound <- function(x, minV, maxV) min(max(x,minV),maxV)
 get_ds <- function(cond, condB, dds, gids) {
     #{{{
     res1 = results(dds, contrast = c("cond",cond,condB), pAdjustMethod='fdr')
