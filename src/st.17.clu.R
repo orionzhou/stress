@@ -1,22 +1,80 @@
 source('functions.R')
-require(WGCNA)
 dirw = file.path(dird, '17_cluster')
-enableWGCNAThreads()
 
-#{{{ read
-fi = file.path(dirw, '../15_de/10.rds')
-deg = readRDS(fi)
+#{{{ prepare TC matrix
+yid = 'rn20a'
+res = rnaseq_cpm(yid)
+th = res$th; tm = res$tm; tl = res$tl; th_m = res$th_m; tm_m = res$tm_m
+
+th1 = th %>% filter(Experiment=='TC') %>% select(SampleID, Genotype, Treatment, Timepoint)
+th1b = th1 %>% filter(Timepoint==0) %>% mutate(Treatment='Cold')
+th1c = th1 %>% filter(Timepoint==0) %>% mutate(Treatment='Heat')
+th2 = rbind(th1, th1b, th1c) %>% filter(Timepoint != 8)
+
+rc = tm %>% select(gid, SampleID, CPM) %>%
+    inner_join(th2, by ='SampleID') %>%
+    mutate(has = sprintf("h%03d", Timepoint*10)) %>%
+    select(-SampleID, -Timepoint) %>% spread(has, CPM) %>%
+    mutate(h015 = if_else(is.na(h015), (h010+h020)/2, h015)) %>%
+    mutate(h030 = if_else(is.na(h030), (h020+h040)/2, h015))
+#    mutate(h080 = if_else(is.na(h080), h040*.8+h250*.2, h080))
+sum(is.na(rc))
+rc %>% dplyr::count(Genotype, Treatment)
+
+ra = rc %>% gather(has, rc, -gid, -Genotype, -Treatment) %>%
+    spread(Treatment, rc) %>%
+    mutate(rac = log2(Cold/Control), rah = log2(Heat/Control)) %>%
+    select(gid,Genotype,has,Cold=rac, Heat=rah) %>%
+    gather(Treatment, ra, -gid,-Genotype,-has) %>%
+    spread(has, ra) %>% arrange(gid, Genotype,Treatment)
+
+rd = rc %>% gather(has, rc, -gid, -Genotype, -Treatment) %>%
+    spread(Treatment, rc) %>%
+    mutate(rdc = Cold-Control, rdh = Heat-Control) %>%
+    select(gid,Genotype,has,Cold=rdc, Heat=rdh) %>%
+    gather(Treatment, rd, -gid,-Genotype,-has) %>%
+    spread(has, rd) %>% arrange(gid, Genotype,Treatment)
+
+res = list(raw=rc, ratio=ra, diff=rd)
+fo = file.path(dirw, '01.tc.rds')
+saveRDS(res, fo)
+#}}}
+#run st.17.clu.1.R
+
+#{{{ read DE, TC, config
+fi = file.path(dirw, '../15_de/05.rds')
+deg = readRDS(fi)$deg48 %>%
+    select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
+    gather(drc, gids, -Treatment,-Genotype,-Timepoint,-cond2) %>%
+    spread(cond2, gids) %>%
+    dplyr::rename(gids0 = time0, gids1 = timeM) %>%
+    mutate(gids = map2(gids0, gids1, intersect)) %>%
+    select(Genotype,Treatment,Timepoint,drc, gids)
 #
 fi = file.path(dirw, '01.tc.rds')
 tc = readRDS(fi)
-#
-f_cfg = file.path(dirw, 'clu_options.xlsx')
+f_cfg = file.path(dirw, 'config.xlsx')
 cfg = read_xlsx(f_cfg)
 #}}}
 
-#{{{ ad hoc pipe run
+#{{{ test run wgcna
+require(WGCNA)
+enableWGCNAThreads()
+
 cfg = read_xlsx(f_cfg)
-res = cfg %>% filter(cid == 'c21') %>%
+i=9
+cid=cfg$cid[i];cond=cfg$cond[i];drc=cfg$drc[i];
+opt_deg=cfg$opt_deg[i];opt_clu=cfg$opt_clu[i];optQ=cfg$optQ[i];
+softPower=cfg$softPower[i];deepSplit=cfg$deepSplit[i];
+MEDissThres=cfg$MEDissThres[i]; minGap=cfg$minGap[i]
+r = run_wgcna_pipe(cid,cond,drc,opt_deg,opt_clu,optQ,
+    softPower,deepSplit,MEDissThres,minGap, tc, deg, dirw)
+
+r$clu %>% filter(str_detect(gid,gid0))
+r$me %>% filter(ctag=='raw',clu==14) %>% pull(me)
+
+cfg = read_xlsx(f_cfg)
+res = cfg %>% dplyr::filter(cid == 'c09') %>%
     mutate(x=pmap(list(cid,cond,drc,opt_deg,opt_clu,optQ,
                        softPower,deepSplit,MEDissThres,minGap),
                   run_wgcna_pipe, tc=!!tc, deg=!!deg, dirw=!!dirw))
@@ -97,7 +155,7 @@ bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
 bat = bats[1]
 #{{{ different module merging parameters
 #{{{ read, filter & preprocess
-res0 = res %>% filter(batch==bat)
+res0 = res %>% filter(batch==bat, opt_deg=='B', opt_clu=='B')
 me = res0 %>% select(-clu) %>% unnest(me) %>%
     filter(ctag != 'raw' | (ctag=='raw' & cid %in% c('c21','c26','c31','c36'))) %>%
     select(cid,stress,drc,opt_deg,opt_clu,optQ,deepSplit,MEDissThres,minGap,
@@ -314,7 +372,7 @@ p = ggplot(tp, aes(x=x,y=y)) +
     #theme(strip.text.y = element_blank()) +
     #theme(strip.text.x = element_text(size=10))
 fo = file.path(dirw, '27.picked.pdf')
-ggsave(p, file=fo, width=6, height=5)
+ggsave(p, file=fo, width=6, height=6)
 #}}}
 
 #{{{ lineplot
@@ -326,7 +384,7 @@ p = ggplot(tp, aes(x=x,y=val)) +
     geom_text(aes(x=1,y=1,label=lab), color='royalblue', hjust=0, vjust=1, size=3) +
     scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.02,.02))) +
     scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.05,.05))) +
-    facet_grid(y ~ bat) +
+    facet_grid(i ~ bat) +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
            panel.border = T, margin = c(.3,.3,.3,.3),
            ygrid=T, xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
@@ -346,9 +404,20 @@ write_tsv(to, fo)
 #}}}
 #}}}
 
+#{{{ test plot members within individual module
+deg1 = deg$deg48 %>% filter(Genotype=='B73',Treatment=='Cold',cond2=='timeM') %>%
+    select(Treatment,Timepoint,ds) %>% unnest(ds)
+xm1 = xm %>% select(-me) %>% unnest(gids) %>% rename(gid=gids) %>%
+    mutate(gid = str_replace(gid, "_.*$", ''))
+gid0 = 'Zm00001d002065'
+xm1 %>% filter(gid==gid0)
+deg1 %>% filter(gid==gid0)
 
-i=7
-cid=cfg$cid[i];cond=cfg$cond[i];drc=cfg$drc[i];
-opt_deg=cfg$opt_deg[i];opt_clu=cfg$opt_clu[i];optQ=cfg$optQ[i];
-softPower=cfg$softPower[i];deepSplit=cfg$deepSplit[i];
-MEDissThres=cfg$MEDissThres[i]; minGap=cfg$minGap[i]
+bat = 'cold_up'; mid = 'm16'
+gids = xm %>% filter(bat == !!bat, mid == !!mid) %>% unnest(gids) %>%
+    mutate(gid = str_replace(gids, "_.*$", '')) %>% pull(gid)
+tp = tc$diff %>% filter(Genotype=='B73', gid %in% gids, Treatment=='Cold') %>%
+    select(-Genotype,-Treatment) %>% print(n=15, width=Inf)
+#}}}
+
+

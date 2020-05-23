@@ -2,17 +2,8 @@ source('functions.R')
 dirw = file.path(dird, '22_mmm')
 
 #{{{ get known cold/heat TF motifs
-#{{{ read cbf/hsf list
-tac = read_gspread(book='stress_TF_list', sheet='cold')
-tah = read_gspread(book='stress_TF_list', sheet='heat')
-tac1 = tac %>% select(At_gid, At_alias, Zm_gid, Zm_alias) %>% mutate(stress='cold')
-tah1 = tah %>% select(At_gid, At_alias, Zm_gid, Zm_alias) %>% mutate(stress='heat')
-ta = tac1 %>% bind_rows(tah1) %>%
-    filter(!is.na(At_gid)) %>%
-    mutate(name = map_chr(At_alias, get_first <- function(x) str_split(x,',')[[1]][1])) %>%
-    mutate(name2 = map_chr(Zm_alias, get_first <- function(x) str_split(x,',')[[1]][1])) %>%
-    distinct(stress,At_gid)
-#}}}
+fi = file.path(dirw, '../06_tf_list/10.stress.tf.tsv')
+ti = read_tsv(fi)
 
 fm = '/home/springer/zhoux379/projects/cre/data/01_tfbs/01.motifs.tsv'
 tm0 = read_tsv(fm)

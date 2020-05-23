@@ -158,19 +158,19 @@ run_wgcna <- function(ti, optQ='raw',
     sd2 <- function(x) sd(x[!(is.na(x) | is.infinite(x) | is.nan(x))])
     gids_f = ti %>% gather(cond, val, -gid) %>%
         group_by(gid) %>% summarise(sdv = sd2(val)) %>% ungroup() %>%
-        filter(sdv == 0) %>% pull(gid)
+        dplyr::filter(sdv == 0) %>% pull(gid)
     cat(sprintf("%d rows removed due to zero variance\n", length(gids_f)))
-    ti = ti %>% filter(!gid %in% gids_f)
+    ti = ti %>% dplyr::filter(!gid %in% gids_f)
     #
     datExpr = t(as.matrix(ti[,-1]))
     colnames(datExpr) = ti$gid
     datExpr[is.na(datExpr)] = 0
     if(optQ %in% c("raw","diff")) datExpr = asinh(datExpr)
     #
-    adj = adjacency(datExpr, power=softPower, type="unsigned", corFnc="cor")
+    adj = adjacency(datExpr, power=softPower, type="signed hybrid", corFnc="cor")
     dim(adj)
     #
-    TOM = TOMsimilarity(adj, TOMType = "unsigned")
+    TOM = TOMsimilarity(adj, TOMType = "signed")
     dissTOM = 1-TOM
     geneTree = hclust(as.dist(dissTOM), method = hclust.opt)
     #
@@ -285,13 +285,14 @@ run_wgcna_pipe <- function(cid, cond, drc, opt_deg, opt_clu, optQ,
     gts_deg = if(opt_deg == 'BMW') gts3 else gts1
     gts_clu = if(opt_clu == 'BMW') gts3 else gts1
     #
-    gids = deg %>% filter(Genotype %in% gts_deg) %>%
-        filter(str_detect(cond1, !!cond)) %>%
-        filter(drc == !!drc) %>%
+    gids = deg %>%
+        filter(Genotype %in% gts_deg, Treatment==cond, drc == !!drc) %>%
         select(gids) %>% unnest(gids) %>% distinct(gids) %>% pull(gids)
     #
-    ti = tc[[optQ]] %>% filter(Genotype %in% gts_clu, Treatment == cond, gid %in% gids) %>%
-        mutate(gid=str_c(gid, Genotype,sep="_")) %>% select(-Genotype, -Treatment)
+    ti = tc[[optQ]] %>%
+        filter(Genotype %in% gts_clu, Treatment == cond, gid %in% gids) %>%
+        mutate(gid=str_c(gid, Genotype,sep="_")) %>%
+        select(-Genotype, -Treatment)
     #
     ng = length(gids); np = nrow(ti)
     tit = sprintf("Using %s [%s] %s %s DEGs to cluster %s [%s] patterns",
