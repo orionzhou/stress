@@ -1,5 +1,6 @@
 source('functions.R')
 dirw = file.path(dird, '17_cluster')
+bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
 
 #{{{ prepare TC matrix
 yid = 'rn20a'
@@ -68,7 +69,7 @@ opt_deg=cfg$opt_deg[i];opt_clu=cfg$opt_clu[i];optQ=cfg$optQ[i];
 softPower=cfg$softPower[i];deepSplit=cfg$deepSplit[i];
 MEDissThres=cfg$MEDissThres[i]; minGap=cfg$minGap[i]
 r = run_wgcna_pipe(cid,cond,drc,opt_deg,opt_clu,optQ,
-    softPower,deepSplit,MEDissThres,minGap, tc, deg, dirw)
+    softPower,deepSplit,MEDissThres,minGap, gt_map, tc, deg, dirw)
 
 r$clu %>% filter(str_detect(gid,gid0))
 r$me %>% filter(ctag=='raw',clu==14) %>% pull(me)
@@ -80,6 +81,7 @@ res = cfg %>% dplyr::filter(cid == 'c09') %>%
                   run_wgcna_pipe, tc=!!tc, deg=!!deg, dirw=!!dirw))
 #}}}
 
+#{{{ process wgcna results and save as module
 fi = sprintf("%s/12.wgcna.rds", dirw)
 res = readRDS(fi) %>% rename(stress=cond) %>%
     mutate(ng=map_int(x, 'ng'), np=map_int(x, 'np')) %>%
@@ -151,14 +153,26 @@ tx %>% mutate(r=pmap_lgl(list(stress,drc,opt_deg,opt_clu,
     plot_me, dirw=!!dirw))
 #}}}
 
-bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
-bat = bats[1]
+process_wgcna <- function(opt_deg, opt_clu, ti, gt_map, tc, dirw) {
+    #{{{
+    gts_deg = gt_map[[opt_deg]]; gts_clu = gt_map[[opt_clu]]
+    diro = sprintf("%s/20_%s_%s", dirw, opt_deg, opt_clu)
+    if(!dir.exists(diro)) dir.create(diro)
+    ti1 = ti %>% group_by(bat, stress, drc) %>%
+        nest() %>%
+        mutate(r = pmap(list(bat, stress, drc, data), process_wgcna_bat,
+                        diro, opt_deg, opt_clu)) %>%
+        mutate(toc=map(r, 'toc'), tom=map(r, 'tom')) %>%
+        select(bat,stress,drc,toc,tom)
+    ti1
+    #}}}
+}
+process_wgcna_bat <- function(bat, stress, drc, ti, diro, opt_deg, opt_clu) {
 #{{{ different module merging parameters
 #{{{ read, filter & preprocess
-res0 = res %>% filter(batch==bat, opt_deg=='B', opt_clu=='B')
-me = res0 %>% select(-clu) %>% unnest(me) %>%
-    filter(ctag != 'raw' | (ctag=='raw' & cid %in% c('c21','c26','c31','c36'))) %>%
-    select(cid,stress,drc,opt_deg,opt_clu,optQ,deepSplit,MEDissThres,minGap,
+me = ti %>% select(-clu) %>% unnest(me) %>%
+    filter(ctag != 'raw' | (ctag=='raw' & MEDissThres==.1)) %>%
+    select(cid,optQ,deepSplit,MEDissThres,minGap,
            np,ng,ctag,n,gids,clu,me)
 mex = me %>% distinct(ctag, MEDissThres, clu) %>%
     count(ctag, MEDissThres) %>%
@@ -167,7 +181,7 @@ mex = me %>% distinct(ctag, MEDissThres, clu) %>%
 #}}}
 #
 #{{{ process tc
-clu = res0 %>% select(MEDissThres, clu) %>% mutate(ctag = 'merged') %>%
+clu = ti %>% select(MEDissThres, clu) %>% mutate(ctag = 'merged') %>%
     unnest(clu)
 clu0 = clu %>% filter(MEDissThres==0.1) %>%
     mutate(col2=col1,clu2=clu1,ctag='raw')
@@ -184,7 +198,8 @@ tc = clu %>% bind_rows(clu0) %>% rename(clu = clu2, raw_clu = clu1) %>%
     mutate(clu = map_dbl(data, mf<-function(df) df$clu[[1]])) %>%
     arrange(n_clu, raw_clu)  %>%
     mutate(mid = sprintf("m%02d", 1:n())) %>%
-    select(mid, raw_clus, n_clu, n, ctag1, MEDissThres1, raw_clu, clu, data) %>% print(n=40)
+    select(mid, raw_clus, n_clu, n, ctag1, MEDissThres1, raw_clu, clu, data)
+    #%>% print(n=40)
 #}}}
 #
 #{{{ plot cluster merging
@@ -218,20 +233,16 @@ pc = ggplot(tp, aes(x, y)) +
 #}}}
 #
 #{{{ save module IDs,  gene IDs and MEs
-toc1 = tp %>% distinct(ctag, MEDissThres, mid)
-tom1 = tc %>% select(-n) %>% rename(ctag=ctag1,MEDissThres=MEDissThres1) %>%
+toc = tp %>% distinct(ctag, MEDissThres, mid)
+tom = tc %>% select(-n) %>% rename(ctag=ctag1,MEDissThres=MEDissThres1) %>%
     inner_join(me, by=c('ctag','MEDissThres','clu')) %>%
     select(mid, n, gids, me)
-if (!exists('toc')) toc = list()
-if (!exists('tom')) tom = list()
-toc[[bat]] = toc1
-tom[[bat]] = tom1
 #}}}
 #
 #{{{ plot title and label
 y = me[1,]
 tit = sprintf("Using %s [%s] %s %s DEGs to cluster %s [%s] patterns",
-    number(y$ng), y$opt_deg, y$stress, y$drc, number(y$np), y$opt_clu)
+    number(y$ng), opt_deg, stress, drc, number(y$np), opt_clu)
 labx = ifelse(y$minGap==0, 'auto', y$minGap)
 lab = sprintf("deepSplit=%g minGap=%s", y$deepSplit, labx)
 #
@@ -288,29 +299,86 @@ pl = annotate_figure(p, top=text_grob(tit, size=9, hjust=.5, color='maroon'),
 #}}}
 #}}}
 #
-fo = sprintf("%s/20.%s.pdf", dirw, bat)
+fo = sprintf("%s/%s.pdf", diro, bat)
 ggarrange(pc, pl,
     widths=c(1,1.7), heights=c(1), labels=LETTERS[1:6], nrow=1, ncol=2) %>%
 ggexport(filename = fo, width = 10,  height = 8)
+list(toc=toc, tom=tom)
+#}}}
+}
+tr = res %>% rename(bat=batch) %>% filter(bat %in% bats) %>%
+    group_by(opt_deg, opt_clu) %>% nest() %>%
+    mutate(r = pmap(list(opt_deg, opt_clu, data), process_wgcna,
+                    gt_map=!!gt_map, tc=!!tc, dirw=!!dirw))
 
-to1 = tibble(bat=names(toc)) %>% mutate(clu=map(bat, myf <- function(x) toc[[x]]))
-to2 = tibble(bat=names(tom)) %>% mutate(me=map(bat, myf <- function(x) tom[[x]]))
-to = to1 %>% inner_join(to2, by='bat')
+to = tr %>% select(-data) %>% unnest(r)
 fo = file.path(dirw, "25.modules.rds")
 saveRDS(to, fo)
 #}}}
 
 #{{{ plot MEs for selected merging parameters
+#{{{ read modules and config
 fi = file.path(dirw, "25.modules.rds")
 x = readRDS(fi)
-xc = x %>% select(bat, clu) %>% unnest(clu)
-xm = x %>% select(bat, me) %>% unnest(me)
-
-ff = file.path(dirw, 'config.xlsx')
-tf = read_xlsx(ff, sheet='picked')
-ti = tf %>% inner_join(xm, by=c('bat','mid'))
 #
-tp0 = ti %>% select(y,bat,i,mid,n,me,note) %>%
+ff = file.path(dirw, 'config.xlsx')
+tf = read_xlsx(ff, sheet='picked') %>%
+    fill(opt_deg, .direction='down') %>%
+    fill(opt_clu, .direction='down') %>%
+    fill(bat, .direction='down') %>%
+    group_by(opt_deg, opt_clu, bat) %>%
+    mutate(i = 1:n()) %>% ungroup() %>% mutate(bat=factor(bat,levels=bats))
+tfs = tf %>% count(opt_deg, opt_clu, bat) %>%
+    mutate(y0 = c(0,cumsum(n)[1:(n()-1)]+(1:(n()-1))))
+tf = tf %>% inner_join(tfs, by=c('opt_deg','opt_clu','bat')) %>%
+    mutate(y=y0+i) %>% select(-n,-y0)
+#
+ti1 = tf %>% group_by(opt_deg, opt_clu,bat) %>% nest() %>% rename(picked=data)
+ti = x %>% mutate(bat=factor(bat,levels=bats)) %>%
+    inner_join(ti1, by=c("opt_deg",'opt_clu','bat')) %>%
+    group_by(opt_deg,opt_clu) %>% nest()
+#}}}
+plot_me <- function(opt_deg, opt_clu, x, tc, dirw) {
+    #{{{
+    diro = sprintf("%s/20_%s_%s", dirw, opt_deg, opt_clu)
+    if(!dir.exists(diro)) dir.create(diro)
+    xc = x %>% select(bat, toc) %>% unnest(toc)
+    xm = x %>% select(bat, tom) %>% unnest(tom)
+    xp = x %>% select(bat, picked) %>% unnest(picked)
+#
+#{{{ heatmap of all modules
+tp = xm %>% select(bat, mid, n, me) %>%
+    unnest(me) %>% gather(cond, val, -bat,-mid,-n) %>%
+    group_by(bat,mid,n) %>%
+    mutate(val = scale_by_first(val)) %>%
+    ungroup() %>%
+    mutate(bat = factor(bat, levels=bats))
+tpx = tp %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n()) %>%
+    mutate(xlab=as.double(str_sub(cond,2))/10)
+tpy = tp %>% distinct(bat, mid, n) %>%
+    mutate(lab=sprintf("%s (%d)", mid, n)) %>%
+    mutate(y=str_c(bat, mid, sep=' ')) %>% arrange(bat, desc(mid)) %>% select(-n)
+tp = tp %>% inner_join(tpx, by='cond') %>%
+    inner_join(tpy, by=c('bat','mid')) %>%
+    mutate(y = factor(y, levels=tpy$y))
+p = ggplot(tp, aes(x=x,y=y)) +
+    geom_tile(aes(fill=val),color='white',size=.2) +
+    scale_x_continuous(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.01,.01))) +
+    scale_y_discrete(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01))) +
+    scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
+    facet_wrap(~bat, ncol=4, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = T, margin = c(.3,.3,.3,.3),
+           ygrid=F, xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T) +
+    #theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
+    theme(strip.text.x = element_text(size=10))
+fo = file.path(diro, '01.heatmap.all.pdf')
+ggsave(p, file=fo, width=10, height=8)
+#}}}
+#
+#{{{ heatmap for picked modules
+tp0 = xp %>% inner_join(xm, by=c('bat','mid')) %>%
+    select(y,bat,i,mid,n,me,note) %>%
     unnest(me) %>% gather(cond, val, -bat,-i,-y,-mid,-n, -note) %>%
     group_by(bat,i,y,mid,n) %>%
     mutate(val = scale_by_first(val)) %>%
@@ -320,40 +388,9 @@ tp0 = ti %>% select(y,bat,i,mid,n,me,note) %>%
     mutate(lab=sprintf("%s (%d): %s", mid, n, note)) %>%
     mutate(bat = factor(bat, levels=bats)) %>%
     mutate(i = factor(i))
-tpx = tp0 %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n())
+tpx = tp0 %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n()) %>%
+    mutate(xlab=as.double(str_sub(cond,2))/10)
 tp0 = tp0 %>% inner_join(tpx, by='cond')
-
-#{{{ heatmap of all modules
-tp = xm %>% select(bat, mid, n, me) %>%
-    unnest(me) %>% gather(cond, val, -bat,-mid,-n) %>%
-    group_by(bat,mid,n) %>%
-    mutate(val = scale_by_first(val)) %>%
-    ungroup() %>%
-    mutate(bat = factor(bat, levels=bats))
-tpx = tp %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n())
-tpy = tp %>% distinct(bat, mid, n) %>%
-    mutate(lab=sprintf("%s (%d)", mid, n)) %>%
-    mutate(y=str_c(bat, mid, sep=' ')) %>% arrange(bat, desc(mid)) %>% select(-n)
-tp = tp %>% inner_join(tpx, by='cond') %>%
-    inner_join(tpy, by=c('bat','mid')) %>%
-    mutate(y = factor(y, levels=tpy$y))
-p = ggplot(tp, aes(x=x,y=y)) +
-    geom_tile(aes(fill=val),color='white',size=.2) +
-    scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.01,.01))) +
-    scale_y_discrete(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01))) +
-    scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
-    facet_wrap(~bat, ncol=4, scale='free') +
-    otheme(legend.pos='none', legend.dir='h', legend.title=T,
-           panel.border = T, margin = c(.3,.3,.3,.3),
-           ygrid=F, xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
-    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
-    theme(strip.text.y = element_blank()) +
-    theme(strip.text.x = element_text(size=10))
-fo = file.path(dirw, '27.all.pdf')
-ggsave(p, file=fo, width=10, height=8)
-#}}}
-
-#{{{ heatmap for picked modules
 tp = tp0
 tpy = tp %>% distinct(y, bat, lab) %>% arrange(y)
 tpys = tpy %>% group_by(bat) %>%
@@ -362,49 +399,81 @@ p = ggplot(tp, aes(x=x,y=y)) +
     geom_tile(aes(fill=val),color='white',size=.3) +
     geom_segment(data=tpys, aes(x=.3,xend=.3,y=ymin,yend=ymax),color='dodgerblue',size=1) +
     geom_text(data=tpys, aes(x=.1,y=ymid,label=bat),size=3,angle=0,hjust=1,vjust=.5) +
-    scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.2,.01))) +
+    scale_x_continuous(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.2,.01))) +
     scale_y_reverse(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01)), position='right') +
     scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
            panel.border = F, margin = c(.3,.3,.3,.3),
-           ygrid=F, xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T)
+           ygrid=F, xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T)
     #theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
     #theme(strip.text.y = element_blank()) +
     #theme(strip.text.x = element_text(size=10))
-fo = file.path(dirw, '27.picked.pdf')
+fo = file.path(diro, '03.heatmap.picked.pdf')
 ggsave(p, file=fo, width=6, height=6)
 #}}}
-
-#{{{ lineplot
-tp = tp0
-tpx = tp %>% distinct(cond, x) %>% arrange(cond, x)
-p = ggplot(tp, aes(x=x,y=val)) +
-    geom_line(size=.5) +
-    geom_point(color='black', size=.5) +
-    geom_text(aes(x=1,y=1,label=lab), color='royalblue', hjust=0, vjust=1, size=3) +
-    scale_x_continuous(breaks=tpx$x, labels=tpx$cond, expand=expansion(mult=c(.02,.02))) +
-    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.05,.05))) +
-    facet_grid(i ~ bat) +
+#
+#{{{ violin & line plot
+# scale asinh expression
+scale2 <- function(ti) {r=max(ti$val)-min(ti$val); ti %>% mutate(val=val/r)}
+te = tc$diff %>% filter(Genotype %in% gt_map[[opt_clu]]) %>%
+    mutate(gid = str_c(gid, Genotype, sep="_")) %>%
+    mutate(stress=str_to_lower(Treatment)) %>%
+    select(-Genotype, -Treatment) %>%
+    gather(has, val, -stress, -gid) %>% mutate(val=asinh(val)) %>%
+    group_by(stress, gid) %>% nest() %>% ungroup() %>%
+    mutate(ndata = map(data, scale2)) %>%
+    select(stress, gid, r=ndata) %>% unnest(r)
+#
+tp = tp0 %>% mutate(x=factor(x))
+tpx = tp %>% distinct(cond, x) %>% arrange(cond, x) %>%
+    mutate(xlab=as.double(str_sub(cond,2))/10)
+tpl = tp %>% distinct(bat,i,mid,lab)
+te1 = tp0 %>% distinct(bat,mid) %>% inner_join(xm, by=c('bat','mid')) %>%
+    select(bat, mid, gids) %>% unnest(gids) %>%
+    rename(gid=gids) %>%
+    #mutate(gid = str_replace(gid, "_.*$", '')) %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    separate(bat, c('stress','drc'), remove=F) %>% select(-drc) %>%
+    inner_join(te, by=c('stress','gid')) %>%
+    rename(cond=has) %>%
+    inner_join(tpx, by='cond') %>%
+    inner_join(tpl, by=c('bat','mid'))
+#
+p = ggviolin(te1, x='x', y='val', color='grey', fill='gray') +
+    #geom_boxplot(te1, mapping=aes(x=x,y=val,group=x), width=.6, color='grey') +
+    geom_line(tp, mapping=aes(x=x,y=val,group=y,color=bat), size=.5) +
+    geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
+    geom_text(tpl, mapping=aes(x=1,y=1.25,label=lab), color='royalblue', hjust=0, vjust=0, size=2.5) +
+    scale_x_discrete(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
+    scale_color_aaas() +
+    facet_grid(i ~ bat, scale='free_y') +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
-           panel.border = T, margin = c(.3,.3,.3,.3),
-           ygrid=T, xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
-    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
+           panel.border = F, margin = c(.3,.3,.3,.3),
+           ygrid=T, xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F) +
+    #theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
     theme(strip.text.y = element_blank()) +
     theme(strip.text.x = element_text(size=10))
-fo = file.path(dirw, '28.picked.pdf')
+fo = file.path(diro, '05.violin.picked.pdf')
 ggsave(p, file=fo, width=8, height=6)
 #}}}
-
+#
 #{{{ write xm for sharing
 to = xm %>% mutate(bat=factor(bat, levels=bats)) %>% arrange(bat,mid) %>%
     mutate(gids = map_chr(gids, str_c, collapse=',')) %>%
     mutate(me = map_chr(me, str_c, collapse=','))
-fo = file.path(dirw, '25.modules.tsv')
+fo = file.path(diro, '09.modules.tsv')
 write_tsv(to, fo)
 #}}}
+    #}}}
+}
+
+ti %>% mutate(r = pmap(list(opt_deg, opt_clu, data), plot_me,
+                       tc=!!tc, dirw=!!dirw))
 #}}}
 
-#{{{ test plot members within individual module
+
+#{{{ [obsolete] test plot members within individual module
 deg1 = deg$deg48 %>% filter(Genotype=='B73',Treatment=='Cold',cond2=='timeM') %>%
     select(Treatment,Timepoint,ds) %>% unnest(ds)
 xm1 = xm %>% select(-me) %>% unnest(gids) %>% rename(gid=gids) %>%
@@ -413,11 +482,24 @@ gid0 = 'Zm00001d002065'
 xm1 %>% filter(gid==gid0)
 deg1 %>% filter(gid==gid0)
 
-bat = 'cold_up'; mid = 'm16'
+bat = 'cold_up'; mid = 'm20'
 gids = xm %>% filter(bat == !!bat, mid == !!mid) %>% unnest(gids) %>%
     mutate(gid = str_replace(gids, "_.*$", '')) %>% pull(gid)
-tp = tc$diff %>% filter(Genotype=='B73', gid %in% gids, Treatment=='Cold') %>%
-    select(-Genotype,-Treatment) %>% print(n=15, width=Inf)
+
+p = ggplot(tp, aes(x=x,y=val)) +
+    #geom_line(aes(group=gid),size=.3, color='grey') +
+    geom_boxplot(aes(group=x)) +
+    scale_x_continuous(breaks=tpx$x, labels=tpx$has, expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name='normalized expression value',expand=expansion(mult=c(.05,.05))) +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = T, margin = c(.3,.3,.3,.3),
+           ygrid=T, xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
+    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
+    theme(strip.text.y = element_blank()) +
+    theme(strip.text.x = element_text(size=10))
+fo = file.path(dirw, 't.pdf')
+ggsave(p, file=fo, width=8, height=6)
+#
 #}}}
 
 

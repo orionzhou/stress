@@ -101,7 +101,7 @@ fi = file.path(dirw, '02.cre.tsv')
 ti = read_tsv(fi)
 
 fi = file.path(dird, "17_cluster/25.modules.rds")
-x = readRDS(fi) %>% select(bat,me) %>% unnest(me) %>%
+x = readRDS(fi) #%>% select(bat,me) %>% unnest(me) %>%
     select(bat,mid, ng_clu=n, gids) %>% unnest(gids) %>%
     separate(gids, c('gid','gt'), sep='_')
 

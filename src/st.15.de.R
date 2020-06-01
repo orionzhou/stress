@@ -325,6 +325,172 @@ fo = file.path(dirw, '10.deg.venn.pdf')
 ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
+#{{{ simple gt venn graph
+drcs = c('up','down')
+td2 = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
+    select(Genotype, cond, drc,  gids) %>%
+    filter(Genotype %in% gts3) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
+    #inner_join(td0, by=c('Genotype','cond','gid')) %>%
+    group_by(Genotype, cond) %>%
+    summarise(gidsU=list(gid[drc=='up']), gidsD=list(gid[drc=='down'])) %>%
+    ungroup() %>%
+    dplyr::rename(up=gidsU, down=gidsD) %>%
+    gather(drc, gids, -Genotype, -cond) %>%
+    mutate(drc = factor(drc, levels=c(drcs)))
+td3 = td2 %>% select(Genotype,cond,drc, gids) %>%
+    spread(Genotype, gids) %>%
+    dplyr::rename(gidsB=B73, gidsM=Mo17, gidsW=W22) %>%
+    mutate(vdc = pmap(list(gidsB, gidsM, gidsW), run_matplotlib_venn3, labs=gts3)) %>%
+    mutate(tc = map(vdc, 'tc'), tl = map(vdc, 'tl'))
+
+cols3 = pal_tron()(5)[c(1,2,3)]
+#{{{
+tp = td3 %>% filter(drc=='up') %>%
+    mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
+    arrange(drc,cond)
+tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
+tpc = tp %>% select(pan, tc) %>% unnest(tc)
+tpl = tp %>% select(pan, tl) %>% unnest(tl)
+p3a = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
+    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
+    facet_wrap(~ pan, scale='free', ncol=2) +
+    scale_color_manual(values=cols3) +
+    scale_fill_manual(values=cols3) +
+    #scale_fill_manual(values=pal_tron()(5)) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
+fo = sprintf('%s/11.gt.venn.pdf', dirw)
+ggsave(p3a, filename=fo, width=4, height=4)
+#}}}
+#{{{
+tp = td3 %>% mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
+    arrange(drc,cond)
+tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
+tpc = tp %>% select(pan, tc) %>% unnest(tc)
+tpl = tp %>% select(pan, tl) %>% unnest(tl)
+pv = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
+    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
+    facet_wrap(~ pan, scale='free', ncol=4) +
+    scale_color_manual(values=cols3) +
+    scale_fill_manual(values=cols3) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
+fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
+ggsave(pv, filename=fo, width=8, height=4.5)
+#}}}
+#}}}
+
+#{{{ log2fc heatmap of DEGs in 1/2 genotypes
+drcs = c('up','down')
+ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
+    select(Genotype, cond, drc,  gids) %>%
+    filter(Genotype %in% gts3) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
+    group_by(Genotype, cond) %>%
+    summarise(gidsU=list(gid[drc=='up']), gidsD=list(gid[drc=='down'])) %>%
+    ungroup() %>%
+    dplyr::rename(up=gidsU, down=gidsD) %>%
+    gather(drc, gids, -Genotype, -cond) %>%
+    mutate(drc = factor(drc, levels=c(drcs))) %>%
+    unnest(gids) %>% rename(gid=gids) %>%
+    mutate(DE=T) %>%
+    spread(Genotype, DE) %>% replace_na(list(B73=F,Mo17=F,W22=F)) %>%
+    mutate(nDE = B73+Mo17+W22) %>%
+    mutate(tag = str_c(as.integer(B73),as.integer(Mo17),as.integer(W22))) %>%
+    select(-B73,-Mo17,-W22) %>%
+    arrange(cond, drc, desc(tag)) %>%
+    group_by(cond,drc) %>% mutate(y = 1:n()) %>% ungroup()
+ty %>% count(cond, drc, nDE) %>% print(n=4)
+
+tf = deg48 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
+    filter(cond2 == 'time0', Genotype %in% gts3) %>%
+    select(Genotype, cond, ds) %>% unnest(ds) %>%
+    select(-padj)
+
+fmax=5
+drc = 'up'
+tp = ty %>% filter(drc==!!drc) %>%
+    inner_join(tf, by=c("cond",'gid')) %>%
+    mutate(log2fc = ifelse(log2fc < -fmax, -fmax, log2fc)) %>%
+    mutate(log2fc = ifelse(log2fc > fmax, fmax, log2fc))
+tpy = ty %>% group_by(cond, drc, tag) %>%
+    summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2, n=n()) %>%
+    ungroup() %>%
+    mutate(tag = sprintf("%s (%d)", tag, n)) %>% filter(drc == !!drc)
+
+p1 = ggplot() +
+    geom_tile(tp, mapping=aes(x=Genotype, y=y, fill=log2fc)) +
+    geom_segment(tpy, mapping=aes(x=.4,xend=.4,y=ymin,yend=ymax), lineend='round',size=.4, color='royalblue') +
+    geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymin,yend=ymin), lineend='round', size=.3, color='royalblue') +
+    geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymax,yend=ymax), lineend='round', size=.3, color='royalblue') +
+    geom_text(tpy, mapping=aes(x=.3,y=ymid,label=tag), size=2.5, hjust=1, color='gray30') +
+    scale_x_discrete(expand=expansion(mult=c(.8,.05))) +
+    scale_y_reverse(expand=expansion(mult=c(.005,.005))) +
+    #scale_fill_viridis(name = 'log2fc', direction=-1) +
+    scale_fill_gradientn(name='log2(FoldChange)', colors=cols100) +
+    facet_wrap(~cond, scale='free',nrow=1) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
+           panel.border=F, xtick=T, xtext=T) +
+    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
+fp = sprintf('%s/12.heatmap.pdf', dirw)
+ggsave(p1, file = fp, width = 8, height = 8)
+
+#{{{ old
+tp0 = td3 %>% filter(!is.na(BMW))
+dmap = c('-1'='-', '0'='.', '1'='+')
+tpw = tp0 %>% select(cond,gid,gt,deg,log2fc, BMW0, BMW) %>%
+    mutate(deg = dmap[as.character(deg)]) %>%
+    pivot_wider(names_from=gt, values_from=c(deg, log2fc), names_sep='.') %>%
+    mutate(grp=str_c(deg.B73, deg.Mo17, deg.W22)) %>%
+    select(-deg.B73, -deg.Mo17, -deg.W22)
+tpw %>% count(cond, grp) %>%
+    complete(cond, nesting(grp), fill=list(n=0)) %>% spread(cond, n) %>%
+    arrange(desc(grp)) %>% print(n=30)
+
+tpw %>% count(cond, grp, BMW0) %>%
+    filter(cond == 'Heat25') %>% select(-cond) %>%
+    complete(grp, nesting(BMW0), fill=list(n=0)) %>%
+    spread(BMW0, n) %>%
+    arrange(desc(grp)) %>% print(n=30)
+
+e = tpw %>% select(-cond)
+mat = data.frame(e)
+rownames(mat) = tpw$cond
+colnames(mat) = colnames(e)
+opt.dist = 'euclidean'; opt.hc = 'complete'#ward.D'
+edist = idist(mat, method = opt.dist)
+ehc = hclust(edist, method = opt.hc)
+tree = as.phylo(ehc)
+lnames = ehc$labels[ehc$order]
+
+lnames = tpw$gid
+cols100b=colorRampPalette(rev(brewer.pal(n=7, name="RdYlBu")))(100)
+tp = tp0 %>% mutate(gid = str_c(cond, grp, gid, sep='_')) %>%
+    mutate(gid = factor(gid, levels=rev(lnames)))
+p1 = ggplot(tp, aes(x=gt, y=gid, fill=log2fc)) +
+    geom_tile() +
+    scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
+    scale_y_discrete(expand=expansion(mult=c(0,0))) +
+    #scale_fill_viridis(name = 'log2fc', direction=-1) +
+    scale_fill_gradientn(name='log2fc', colors=cols100b) +
+    facet_wrap(~cond, scale='free') +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
+           xtick=T, xtext=T) +
+    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
+fp = sprintf('%s/21.heatmap.pdf', dirw)
+ggsave(p1, file = fp, width = 8, height = 10)
+
+    tp = th %>% mutate(taxa = SampleID) %>%
+        select(taxa, everything())
+    p1 = ggtree(tree, layout = 'rectangular') +
+        scale_x_continuous(expand = expansion(mult=c(1e-2,expand.x))) +
+        scale_y_discrete(expand = expansion(mult=c(.01,.01)))
+    p1 = p1 %<+%
+        tp + geom_tiplab(aes(label=get(var.lab), color=get(var.col)), size=lab.size) +
+        get(str_c('scale_color', pal.col, sep="_"))() +
+        guides(color=F)
+#}}}
+#}}}
+
 #{{{ genotypic difference in cold/heat response
 #{{{ characterize pairwise contrasts
 fmax=10
@@ -389,7 +555,7 @@ ggsave(p, file = fp, width = 8, height = 9.5)
 tp1 = tp %>% count(cond, x, deg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
-p = ggplot(tp1) +
+p3b = ggplot(tp1) +
     geom_bar(aes(x=x, y=n, fill=deg), width=.8, stat='identity') +
     geom_text(data=tp1s,aes(x=11,y=500,label=lab), size=3, vjust=.5,hjust=1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
@@ -402,7 +568,7 @@ p = ggplot(tp1) +
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
 fp = sprintf('%s/15.ddeg.cnt.pdf', dirw)
-ggsave(p, file = fp, width = 6, height = 6)
+ggsave(p3b, file = fp, width = 6, height = 6)
 #}}}
 
 #{{{ plot mean CPM for each category of genes
@@ -484,120 +650,6 @@ z = td2 %>% filter(!is.na(BMW)) %>%
     mutate(BMW = factor(BMW, levels=bmws)) %>%
     complete(cond, nesting(BMW), fill=list(n=0)) %>%
     spread(cond,n) %>% print(n=10)
-#}}}
-
-#{{{ gt venn graph
-drcs = c('up','down')
-td2 = td1 %>% mutate(cond=sprintf("%s%dh", Treatment, Timepoint)) %>%
-    select(Genotype, cond, drc,  gids) %>%
-    filter(Genotype %in% gts3) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
-    #inner_join(td0, by=c('Genotype','cond','gid')) %>%
-    group_by(Genotype, cond) %>%
-    summarise(gidsU=list(gid[drc=='up']), gidsD=list(gid[drc=='down'])) %>%
-    ungroup() %>%
-    dplyr::rename(up=gidsU, down=gidsD) %>%
-    gather(drc, gids, -Genotype, -cond) %>%
-    mutate(drc = factor(drc, levels=c(drcs)))
-td3 = td2 %>% select(Genotype,cond,drc, gids) %>%
-    spread(Genotype, gids) %>%
-    dplyr::rename(gidsB=B73, gidsM=Mo17, gidsW=W22) %>%
-    mutate(vdc = pmap(list(gidsB, gidsM, gidsW), run_matplotlib_venn3, labs=gts3)) %>%
-    mutate(tc = map(vdc, 'tc'), tl = map(vdc, 'tl'))
-
-cols3 = pal_tron()(5)[c(1,2,3)]
-#{{{
-tp = td3 %>% filter(drc=='up') %>%
-    mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
-    arrange(drc,cond)
-tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
-tpc = tp %>% select(pan, tc) %>% unnest(tc)
-tpl = tp %>% select(pan, tl) %>% unnest(tl)
-pv = ggplot(tpc) +
-    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
-    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
-    facet_wrap(~ pan, scale='free', ncol=2) +
-    scale_color_manual(values=cols3) +
-    scale_fill_manual(values=cols3) +
-    #scale_fill_manual(values=pal_tron()(5)) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
-fo = sprintf('%s/11.gt.venn.pdf', dirw)
-ggsave(pv, filename=fo, width=4, height=4)
-#}}}
-#{{{
-tp = td3 %>% mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
-    arrange(drc,cond)
-tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
-tpc = tp %>% select(pan, tc) %>% unnest(tc)
-tpl = tp %>% select(pan, tl) %>% unnest(tl)
-pv = ggplot(tpc) +
-    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
-    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
-    facet_wrap(~ pan, scale='free', ncol=4) +
-    scale_color_manual(values=cols3) +
-    scale_fill_manual(values=cols3) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
-fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
-ggsave(pv, filename=fo, width=8, height=4.5)
-#}}}
-#}}}
-
-#{{{ # heatmap cold/heat - up in B,M,W
-fmax=3
-tp0 = td3 %>% filter(!is.na(BMW))
-dmap = c('-1'='-', '0'='.', '1'='+')
-tpw = tp0 %>% select(cond,gid,gt,deg,log2fc, BMW0, BMW) %>%
-    mutate(deg = dmap[as.character(deg)]) %>%
-    pivot_wider(names_from=gt, values_from=c(deg, log2fc), names_sep='.') %>%
-    mutate(grp=str_c(deg.B73, deg.Mo17, deg.W22)) %>%
-    select(-deg.B73, -deg.Mo17, -deg.W22)
-tpw %>% count(cond, grp) %>%
-    complete(cond, nesting(grp), fill=list(n=0)) %>% spread(cond, n) %>%
-    arrange(desc(grp)) %>% print(n=30)
-
-tpw %>% count(cond, grp, BMW0) %>%
-    filter(cond == 'Heat25') %>% select(-cond) %>%
-    complete(grp, nesting(BMW0), fill=list(n=0)) %>%
-    spread(BMW0, n) %>%
-    arrange(desc(grp)) %>% print(n=30)
-
-e = tpw %>% select(-cond)
-mat = data.frame(e)
-rownames(mat) = tpw$cond
-colnames(mat) = colnames(e)
-opt.dist = 'euclidean'; opt.hc = 'complete'#ward.D'
-edist = idist(mat, method = opt.dist)
-ehc = hclust(edist, method = opt.hc)
-tree = as.phylo(ehc)
-lnames = ehc$labels[ehc$order]
-
-lnames = tpw$gid
-cols100b=colorRampPalette(rev(brewer.pal(n=7, name="RdYlBu")))(100)
-tp = tp0 %>% mutate(gid = str_c(cond, grp, gid, sep='_')) %>%
-    mutate(gid = factor(gid, levels=rev(lnames)))
-p1 = ggplot(tp, aes(x=gt, y=gid, fill=log2fc)) +
-    geom_tile() +
-    scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
-    scale_y_discrete(expand=expansion(mult=c(0,0))) +
-    #scale_fill_viridis(name = 'log2fc', direction=-1) +
-    scale_fill_gradientn(name='log2fc', colors=cols100b) +
-    facet_wrap(~cond, scale='free') +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           xtick=T, xtext=T) +
-    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
-fp = sprintf('%s/21.heatmap.pdf', dirw)
-ggsave(p1, file = fp, width = 8, height = 10)
-
-
-    tp = th %>% mutate(taxa = SampleID) %>%
-        select(taxa, everything())
-    p1 = ggtree(tree, layout = 'rectangular') +
-        scale_x_continuous(expand = expansion(mult=c(1e-2,expand.x))) +
-        scale_y_discrete(expand = expansion(mult=c(.01,.01)))
-    p1 = p1 %<+%
-        tp + geom_tiplab(aes(label=get(var.lab), color=get(var.col)), size=lab.size) +
-        get(str_c('scale_color', pal.col, sep="_"))() +
-        guides(color=F)
-
 #}}}
 #}}}
 

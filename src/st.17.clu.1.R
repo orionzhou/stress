@@ -24,7 +24,7 @@ cfg = read_xlsx(f_cfg)
 res = cfg %>%# filter(cid >= 'c21') %>%
     mutate(x=pmap(list(cid,cond,drc,opt_deg,opt_clu,optQ,
                        softPower,deepSplit,MEDissThres,minGap),
-                  run_wgcna_pipe, tc=!!tc, deg=!!deg, dirw=!!dirw))
+                  run_wgcna_pipe, gt_map=!!gt_map, tc=!!tc, deg=!!deg, dirw=!!dirw))
 
 fo = sprintf("%s/12.wgcna.rds", dirw)
 saveRDS(res, fo)

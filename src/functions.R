@@ -27,6 +27,7 @@ gts25 = c("B73", "B97", "CML322", "CML333", "CML52", "CML69", "DK105",
     "EP1", "F7", "Il14H", "Ki11", "Ki3", "M162W", "M37W",
     "Mo17", "Mo18W", "MS71", "NC350", "NC358", "Oh43", "Oh7B",
     "P39", "PH207", "Tx303", "W22")
+gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)
 cols100v = viridis_pal(direction=-1,option='magma')(100)
 #}}}
@@ -278,13 +279,10 @@ run_softPower <- function(cid, cond, opt_deg, opt_clu, deg, dirw) {
 }
 run_wgcna_pipe <- function(cid, cond, drc, opt_deg, opt_clu, optQ,
                            softPower, deepSplit, MEDissThres, minGap,
-                           tc, deg, dirw) {
+                           gt_map, tc, deg, dirw) {
     #{{{
     cat(cid, "\n")
-    gts1 = 'B73'; gts3 = c("B73",'Mo17','W22')
-    gts_deg = if(opt_deg == 'BMW') gts3 else gts1
-    gts_clu = if(opt_clu == 'BMW') gts3 else gts1
-    #
+    gts_deg = gt_map[[opt_deg]]; gts_clu = gt_map[[opt_clu]]
     gids = deg %>%
         filter(Genotype %in% gts_deg, Treatment==cond, drc == !!drc) %>%
         select(gids) %>% unnest(gids) %>% distinct(gids) %>% pull(gids)
