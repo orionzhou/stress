@@ -307,7 +307,7 @@ list(toc=toc, tom=tom)
 #}}}
 }
 tr = res %>% rename(bat=batch) %>% filter(bat %in% bats) %>%
-    group_by(opt_deg, opt_clu) %>% nest() %>%
+    group_by(opt_deg, opt_clu) %>% nest() %>% ungroup() %>%
     mutate(r = pmap(list(opt_deg, opt_clu, data), process_wgcna,
                     gt_map=!!gt_map, tc=!!tc, dirw=!!dirw))
 
@@ -346,6 +346,16 @@ plot_me <- function(opt_deg, opt_clu, x, tc, dirw) {
     xm = x %>% select(bat, tom) %>% unnest(tom)
     xp = x %>% select(bat, picked) %>% unnest(picked)
 #
+    #{{{ prop. of genes picked
+    xm1 = xm %>% select(bat,gids) %>% unnest(gids) %>%
+        distinct(bat, gids) %>% count(bat) %>% rename(ng_tot = n)
+    xp1 = xp %>% select(bat, mid) %>% inner_join(xm, by=c('bat','mid')) %>%
+        select(bat, gids) %>% unnest(gids) %>%
+        distinct(bat, gids) %>% count(bat) %>% rename(ng_pick = n)
+    bat_lab = xm1 %>% inner_join(xp1, by=c('bat')) %>% mutate(pg_pick=ng_pick/ng_tot) %>%
+        mutate(lab = glue("{bat}\n{ng_pick}/{ng_tot}: {percent(pg_pick, accuracy=.1)}")) %>%
+        select(bat, lab)
+    #}}}
 #{{{ heatmap of all modules
 tp = xm %>% select(bat, mid, n, me) %>%
     unnest(me) %>% gather(cond, val, -bat,-mid,-n) %>%
@@ -394,12 +404,13 @@ tp0 = tp0 %>% inner_join(tpx, by='cond')
 tp = tp0
 tpy = tp %>% distinct(y, bat, lab) %>% arrange(y)
 tpys = tpy %>% group_by(bat) %>%
-    summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2) %>% ungroup()
+    summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2) %>% ungroup() %>%
+    inner_join(bat_lab, by='bat')
 p = ggplot(tp, aes(x=x,y=y)) +
     geom_tile(aes(fill=val),color='white',size=.3) +
     geom_segment(data=tpys, aes(x=.3,xend=.3,y=ymin,yend=ymax),color='dodgerblue',size=1) +
-    geom_text(data=tpys, aes(x=.1,y=ymid,label=bat),size=3,angle=0,hjust=1,vjust=.5) +
-    scale_x_continuous(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.2,.01))) +
+    geom_text(data=tpys, aes(x=-1,y=ymid,label=lab),size=3,angle=0,hjust=.5,vjust=.5) +
+    scale_x_continuous(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.15,.01))) +
     scale_y_reverse(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01)), position='right') +
     scale_fill_gradientn(name='module eigengene', colors=rev(cols100v)) +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
@@ -456,6 +467,30 @@ p = ggviolin(te1, x='x', y='val', color='grey', fill='gray') +
     theme(strip.text.x = element_text(size=10))
 fo = file.path(diro, '05.violin.picked.pdf')
 ggsave(p, file=fo, width=8, height=6)
+#}}}
+#
+#{{{ multi-line plot
+# scale asinh expression
+scale2 <- function(ti) {r=max(ti$val)-min(ti$val); ti %>% mutate(val=val/r)}
+tp = tp0 %>% mutate(x=factor(x))
+tpx = tp %>% distinct(cond, x) %>% arrange(cond, x) %>%
+    mutate(xlab=as.double(str_sub(cond,2))/10)
+tpl = tp %>% filter(cond=='h250') %>% select(bat, mid,i, lab,val)
+#
+p = ggplot(tp) +
+    geom_line(aes(x=x,y=val,group=y,color=as.character(i)), size=.5) +
+    geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
+    geom_text_repel(tpl, mapping=aes(x=8.1,y=val,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5, direction='y',nudge_x=.5, nudge_y=0, segment.size=.2) +
+    scale_x_discrete(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.5))) +
+    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
+    scale_color_aaas() +
+    facet_wrap(~bat, ncol=1, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = F, margin = c(.3,.3,.3,.3), strip.style='white',
+           ygrid=T, xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F) +
+    theme(strip.text = element_text(hjust=0, size=11))
+fo = file.path(diro, '05.violin.picked.combine.pdf')
+ggsave(p, file=fo, width=5, height=7)
 #}}}
 #
 #{{{ write xm for sharing

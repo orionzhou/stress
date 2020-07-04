@@ -170,8 +170,17 @@ ggsave(p, file = fp, width = 8, height = 6)
 
 #{{{ complex cis/trans
 get_reg <- function(ti) ti$reg[1]
+fmax = .5
 fi = file.path(dirw, '05.modes.x.rds')
-tr = readRDS(fi)
+tr = readRDS(fi) %>%
+    mutate(prop.p.s = mrc.p1/(mrc.p1+mrc.p2)) %>%
+    mutate(prop.p.c = mrc0.p1/(mrc0.p1+mrc0.p2)) %>%
+    mutate(prop.h.s = mrc.h1/(mrc.h1+mrc.h2)) %>%
+    mutate(prop.h.c = mrc0.h1/(mrc0.h1+mrc0.h2)) %>%
+    mutate(prop.p = prop.p.s - prop.p.c) %>%
+    mutate(prop.h = prop.h.s - prop.h.c) %>%
+    mutate(prop.p = map_dbl(prop.p, set_bound, minV=-fmax, maxV=fmax)) %>%
+    mutate(prop.h = map_dbl(prop.h, set_bound, minV=-fmax, maxV=fmax))
 tr2 = tr %>% mutate(reg = map_chr(reg, get_reg))
 tr2 %>% count(cond,condB,cross,reg) %>% spread(reg,n) %>% print(n=40)
 ct_stress = tr2
@@ -188,12 +197,14 @@ tp = tr2 %>% filter(condB!='Control0') %>%
 t_ase = tp
 linecol = 'azure3'; lty = 'solid'
 cols9 = pal_npg()(10)
+
 #{{{ scatter plot
+limits = c(-fmax, fmax)
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
-    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=c(0,1),expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=c(0,1),expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=limits, ,expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=limits, expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='Mode:', values=cols9) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=3) +
@@ -202,8 +213,9 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
 fp = sprintf('%s/11.modex.pdf', dirw)
-ggsave(p, file = fp, width = 5, height = 7)
+ggsave(p, file = fp, width = 10, height = 14)
 #}}}
+
 #{{{ bar plot showing counts
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
@@ -233,7 +245,15 @@ tp1 = td %>% filter(ddrc != 0, deg != 'A=B=') %>%
 #
 get_reg <- function(ti) ti$reg[1]
 fr = file.path(dirw, '05.modes.x.rds')
-tr = readRDS(fr) %>% mutate(reg = map_chr(reg, get_reg))
+tr = readRDS(fr) %>% mutate(reg = map_chr(reg, get_reg)) #%>%
+    #mutate(prop.p.s = mrc.p1/(mrc.p1+mrc.p2)) %>%
+    #mutate(prop.p.c = mrc0.p1/(mrc0.p1+mrc0.p2)) %>%
+    #mutate(prop.h.s = mrc.h1/(mrc.h1+mrc.h2)) %>%
+    #mutate(prop.h.c = mrc0.h1/(mrc0.h1+mrc0.h2)) %>%
+    #mutate(prop.p = prop.p.s - prop.p.c) %>%
+    #mutate(prop.h = prop.h.s - prop.h.c) %>%
+    #mutate(prop.p = map_dbl(prop.p, set_bound, minV=-fmax, maxV=fmax)) %>%
+    #mutate(prop.h = map_dbl(prop.h, set_bound, minV=-fmax, maxV=fmax))
 tr %>% count(cond,condB,cross,reg) %>% spread(reg,n) %>% print(n=40)
 tp2 = tr %>%
     mutate(cross = ifelse(cross=='B73xMo17', 'Mo17xB73', cross)) %>%
@@ -243,12 +263,16 @@ ddeg = tp1 %>% inner_join(tp2, by=c("cond","qry",'tgt','gid'))
 ddeg %>% count(cond,qry,tgt,deg, reg) %>%
     spread(reg,n) %>% print(n=40)
 
-nconds = crossing(x=conds, y=crosses) %>% mutate(cond=str_c(x,y,sep='_')) %>%
+limits = c(0,1)
+nconds = crossing(x=conds, y=crosses) %>%
+    mutate(cond=str_c(x,y,sep='_')) %>%
     mutate(x=factor(x,levels=conds), y=factor(y,levels=crosses)) %>%
     arrange(x,y) %>% pull(cond)
 tpx = tibble(reg=regs) %>% mutate(x=1:n())
-tp = ddeg %>% filter(condB!='Control0') %>% select(-x) %>%
-    mutate(cond = str_c(cond, qry, tgt, sep='_')) %>%
+tp = ddeg %>% filter(condB!='Control0', deg %in% c("A+B=",'A=B+')) %>% select(-x) %>%
+    mutate(cross = str_c(qry, tgt, sep='x')) %>%
+    mutate(cross = ifelse(cross=='Mo17xB73', 'B73xMo17', cross)) %>%
+    mutate(cond = str_c(cond, cross, sep='_')) %>%
     inner_join(tpx, by='reg') %>%
     mutate(cond = factor(cond, levels=nconds)) %>%
     mutate(reg=factor(reg, levels=regs))
@@ -258,8 +282,8 @@ cols9 = pal_npg()(10)
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
-    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=c(0,1),expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=c(0,1),expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=limits,expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='Mode:', values=cols9) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=3) +
@@ -270,6 +294,7 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
 fp = sprintf('%s/13.modex.pdf', dirw)
 ggsave(p, file = fp, width = 5, height = 7)
 #}}}
+
 #{{{ bar plot showing counts
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%

@@ -396,40 +396,52 @@ ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     spread(Genotype, DE) %>% replace_na(list(B73=F,Mo17=F,W22=F)) %>%
     mutate(nDE = B73+Mo17+W22) %>%
     mutate(tag = str_c(as.integer(B73),as.integer(Mo17),as.integer(W22))) %>%
-    select(-B73,-Mo17,-W22) %>%
-    arrange(cond, drc, desc(tag)) %>%
-    group_by(cond,drc) %>% mutate(y = 1:n()) %>% ungroup()
-ty %>% count(cond, drc, nDE) %>% print(n=4)
+    select(-B73,-Mo17,-W22)
 
 tf = deg48 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     filter(cond2 == 'time0', Genotype %in% gts3) %>%
     select(Genotype, cond, ds) %>% unnest(ds) %>%
     select(-padj)
+#{{{ order by hc
+tyw = ty %>% inner_join(tf, by=c("cond",'gid')) %>%
+    select(-nDE) %>% spread(Genotype, log2fc) %>%
+    group_by(cond,drc,tag) %>%
+    nest() %>% ungroup() %>%
+    mutate(gid = map(data, hc_order_row, cor.opt='euclidean')) %>%
+    select(cond, drc, tag, gid) %>% unnest(gid) %>%
+    mutate(y = n():1)
+ty2 = ty %>%
+    inner_join(tyw, by=c('cond','drc','tag','gid')) %>%
+    arrange(cond, drc, desc(nDE), desc(tag), y) %>%
+    group_by(cond,drc) %>% mutate(y = 1:n()) %>% ungroup()
+ty2 %>% count(cond, drc, nDE) %>% print(n=4)
+#}}}
 
 fmax=5
 drc = 'up'
-tp = ty %>% filter(drc==!!drc) %>%
+tp = ty2 %>% filter(drc==!!drc) %>%
     inner_join(tf, by=c("cond",'gid')) %>%
     mutate(log2fc = ifelse(log2fc < -fmax, -fmax, log2fc)) %>%
     mutate(log2fc = ifelse(log2fc > fmax, fmax, log2fc))
-tpy = ty %>% group_by(cond, drc, tag) %>%
+tpy = ty2 %>% group_by(cond, drc, tag) %>%
     summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2, n=n()) %>%
     ungroup() %>%
     mutate(tag = sprintf("%s (%d)", tag, n)) %>% filter(drc == !!drc)
-
+#
 p1 = ggplot() +
     geom_tile(tp, mapping=aes(x=Genotype, y=y, fill=log2fc)) +
     geom_segment(tpy, mapping=aes(x=.4,xend=.4,y=ymin,yend=ymax), lineend='round',size=.4, color='royalblue') +
     geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymin,yend=ymin), lineend='round', size=.3, color='royalblue') +
     geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymax,yend=ymax), lineend='round', size=.3, color='royalblue') +
     geom_text(tpy, mapping=aes(x=.3,y=ymid,label=tag), size=2.5, hjust=1, color='gray30') +
-    scale_x_discrete(expand=expansion(mult=c(.8,.05))) +
+    scale_x_discrete(expand=expansion(mult=c(.9,.05))) +
     scale_y_reverse(expand=expansion(mult=c(.005,.005))) +
     #scale_fill_viridis(name = 'log2fc', direction=-1) +
     scale_fill_gradientn(name='log2(FoldChange)', colors=cols100) +
     facet_wrap(~cond, scale='free',nrow=1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           panel.border=F, xtick=T, xtext=T) +
+           panel.border=F, xtick=T, xtext=T, legend.vjust=-.4,
+           margin=c(1,.1,.1,0), strip.style = 'dark') +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
 fp = sprintf('%s/12.heatmap.pdf', dirw)
 ggsave(p1, file = fp, width = 8, height = 8)

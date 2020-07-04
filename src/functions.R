@@ -30,13 +30,15 @@ gts25 = c("B73", "B97", "CML322", "CML333", "CML52", "CML69", "DK105",
 gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)
 cols100v = viridis_pal(direction=-1,option='magma')(100)
+bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
+bins = c("-500",'+/-500','-1k','+/-1k', '-2k','+/-2k')
+epis = c('raw','umr','acrL','acrE')
 #}}}
 colbright <- function(col) {x = col2rgb(col); as.integer(.2126*x[1] + .7152*x[2] + .0722*x[3])}
 cols36 = c(pal_ucscgb()(18)[8], pal_igv()(18), pal_ucscgb()(18)[c(1:7,9:18)])
 brights36 = tibble(col=cols36) %>% mutate(bright=map_int(col,colbright)) %>%
     mutate(b = ifelse(bright<128, 'white','black')) %>% pull(b)
 
-set_bound <- function(x, minV, maxV) min(max(x,minV),maxV)
 get_ds <- function(cond, condB, dds, gids) {
     #{{{
     res1 = results(dds, contrast = c("cond",cond,condB), pAdjustMethod='fdr')

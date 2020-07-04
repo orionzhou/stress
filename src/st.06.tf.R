@@ -5,23 +5,26 @@ dirw = file.path(dird, '06_tf_list')
 tac = read_gspread(book='stress_TF_list', sheet='cold')
 tah = read_gspread(book='stress_TF_list', sheet='heat')
 
-tac1 = tac %>% select(gid=Zm_gid, fam=family, name=Zm_alias, name2=At_alias) %>%
+tac1 = tac %>% select(gid=Zm_gid, fam=family, name=Zm_alias, name2=At_alias, At_gid) %>%
     mutate(stress='cold')
-tah1 = tah %>% select(gid=Zm_gid, fam=family, name=Zm_alias, name2=At_alias) %>%
+tah1 = tah %>% select(gid=Zm_gid, fam=family, name=Zm_alias, name2=At_alias, At_gid) %>%
     mutate(stress='heat')
 ta = tac1 %>% bind_rows(tah1) %>%
     filter(!is.na(gid), gid != 'N/A') %>%
     mutate(gid = map(gid, str_split, pattern='[,/]')) %>%
     mutate(gid = map(gid, 1)) %>%
     unnest(gid) %>%
+    mutate(At_gid = str_to_upper(str_replace(At_gid, "\\.[1-9]+$", ''))) %>%
     #mutate(name = map_chr(name, get_first <- function(x) str_split(x,',')[[1]][1])) %>%
-    select(stress, gid, fam, name, name2)
+    select(stress, gid, fam, name, name2, At_gid)
 ta %>% distinct(stress,gid,fam) %>% count(stress, gid) %>% filter(n>1)
 
-ta2 = ta %>% group_by(stress, gid, fam) %>%
+ta2 = ta %>% arrange(stress, gid, fam, At_gid) %>%
+    group_by(stress, gid, fam) %>%
     summarise(name=str_c(name, collapse=','),
-              name_At=str_c(name2, collapse=',')) %>% ungroup()
-to = ta2
+              name_At=str_c(name2, collapse=','),
+              At_gid=At_gid[1]) %>% ungroup()
+to = ta2 %>% separate(gid, c('gid','tid'), sep='_', fill='right') %>% select(-tid)
 to %>% count(stress, gid)
 to %>% count(stress, fam) %>% arrange(desc(n)) %>%
     print(n=30)

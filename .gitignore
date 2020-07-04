@@ -1,10 +1,10 @@
 # Project directories
 cache
-data
+#data
 logs
 
 # data folder
-data/*
+#data/*
 
 # app temp files
 .snakemake/*

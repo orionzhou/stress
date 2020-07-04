@@ -30,9 +30,6 @@ get_coords <- function(tss, srd, opt) {
     list(start=start, end=end)
     #}}}
 }
-bats = c('cold_up','heat_up','cold_down','heat_down')
-bins = c("-500",'+/-500','-1k','+/-1k', '-2k','+/-2k')
-epis = c('raw','umr','acrL','acrE')
 #{{{ create CRE regions
 diri = file.path(dirg, 'Zmays_B73', '50_annotation')
 fi = file.path(diri, "10.tsv")
@@ -100,18 +97,33 @@ write_tsv(to, fo, col_names = F)
 fi = file.path(dirw, '02.cre.tsv')
 ti = read_tsv(fi)
 
+#{{{ read picked modules and gids
 fi = file.path(dird, "17_cluster/25.modules.rds")
-x = readRDS(fi) #%>% select(bat,me) %>% unnest(me) %>%
-    select(bat,mid, ng_clu=n, gids) %>% unnest(gids) %>%
-    separate(gids, c('gid','gt'), sep='_')
+x = readRDS(fi)
+#
+ff = file.path(dird, '17_cluster/config.xlsx')
+tf = read_xlsx(ff, sheet='picked') %>%
+    fill(opt_deg, .direction='down') %>%
+    fill(opt_clu, .direction='down') %>%
+    fill(bat, .direction='down') %>% mutate(pick = T)
+#
+tp = x %>% select(-toc) %>% unnest(tom) %>%
+    select(-me) %>%
+    left_join(tf, by=c("opt_deg","opt_clu","bat","mid")) %>%
+    replace_na(list(pick=F)) %>%
+    filter(opt_deg == 'B', opt_clu == 'B') %>% select(-opt_deg, -opt_clu) %>%
+    select(-stress,-drc) %>% rename(ng0 = n, gid = gids) %>% unnest(gid) %>%
+    separate(gid, c("gid",'gt'), sep='_') %>% select(-gt)
+#}}}
 
+#{{{ prepare sids for each module
 min_ng = 50
 tl = ti %>% select(gid, bin, epi, size, sid) %>%
-    inner_join(x, by='gid') %>%
-    group_by(bat, mid, ng_clu, bin, epi) %>%
+    inner_join(tp, by='gid') %>%
+    group_by(bat, mid, ng0, note, bin, epi, pick) %>%
     nest() %>% ungroup() %>%
     mutate(ng = map_int(data, xf <- function(x) length(unique(x$gid)))) %>%
-    select(bat,mid, bin,epi, ng, tg = data) %>%
+    select(bat,mid,ng0,note, bin,epi, ng, pick, tg = data) %>%
     mutate(bat = factor(bat, levels=bats)) %>%
     mutate(bin = factor(bin, levels=bins)) %>%
     mutate(epi = factor(epi, levels=epis)) %>%
@@ -124,14 +136,16 @@ tl = tl %>% mutate(bat_mid = factor(bat_mid, levels=y1$bat_mid)) %>%
     mutate(bin_epi = factor(bin_epi, levels=y2$bin_epi)) %>%
     mutate(lid = sprintf("l%04d", 1:n())) %>%
     filter(ng >= min_ng) %>%
-    select(lid, bat,mid,bin,epi,bat_mid,bin_epi,ng,tg)
+    select(lid, bat,mid,ng0,note,bin,epi,bat_mid,bin_epi,ng,pick,tg)
+#}}}
 
 #{{{ plot #genes per cluster-CRE
-tp = tl %>% filter(bat %in% c("cold_up", "heat_up")) %>%
+tp = tl %>% filter(pick) %>%
     select(bat_mid, bin_epi, ng) %>%
     mutate(bat_mid = factor(bat_mid, levels=rev(y1$bat_mid)))
 #
 swit = (min(tl$ng) + max(tl$ng)) / 2
+swit = 0
 p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
     geom_tile(aes(fill=ng)) +
     geom_text(aes(label=ng, color=ng>swit), hjust=.5, size=2) +
@@ -149,7 +163,7 @@ p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
     guides(color = F, fill=F)
 #
 fo = sprintf("%s/07.ngene.pdf", dirw)
-p %>% ggexport(filename = fo, width = 8, height = 8)
+p %>% ggexport(filename = fo, width = 8, height = 6)
 #}}}
 
 tl1 = tl %>% mutate(fo = sprintf("%s/10_lists/%s.txt", dirw, lid)) %>%
