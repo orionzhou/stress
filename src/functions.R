@@ -10,7 +10,7 @@ require(lubridate)
 dirg = '~/data/genome'
 dirp = "~/projects/stress"
 dird = file.path(dirp, 'data')
-dirr = file.path(dird, 'raw')
+dirr = '~/projects/stress/nf/raw'
 dirf = file.path(dird, '95_figures')
 gcfg = read_genome_conf()
 fh = file.path(dird, 'samples.xlsx')
@@ -31,7 +31,7 @@ gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)
 cols100v = viridis_pal(direction=-1,option='magma')(100)
 bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
-bins = c("-500",'+/-500','-1k','+/-1k', '-2k','+/-2k')
+bins = c("-500",'+/-500','-1k','+/-1k', '-2k','+/-2k','-10k')
 epis = c('raw','umr','acrL','acrE')
 #}}}
 colbright <- function(col) {x = col2rgb(col); as.integer(.2126*x[1] + .7152*x[2] + .0722*x[3])}
@@ -311,4 +311,5 @@ run_wgcna_pipe <- function(cid, cond, drc, opt_deg, opt_clu, optQ,
     c(x, stats)
     #}}}
 }
+
 
