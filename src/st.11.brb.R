@@ -1,4 +1,3 @@
-require(DESeq2); require(edgeR)
 source('functions.R')
 dirw = file.path(dird, '11_brb')
 
@@ -133,15 +132,16 @@ ggsave(fo, p, width=10, height=7)
 
 #{{{ normalize and store
 fi = file.path(dirw, '01.cnts.rds')
-res = readRDS(fi)
-thb = res$th
+cnt = readRDS(fi)
+thb = cnt$th
 
-t_rc = res$tc %>% dplyr::select(SampleID, gid, ReadCount = nu) %>%
+require(DESeq2); require(edgeR)
+t_rc = cnt$tc %>% dplyr::select(SampleID, gid, ReadCount = nu) %>%
     filter(SampleID %in% thb$SampleID)
 r = readcount_norm(t_rc)
 tm_u = r$tm
 
-t_rc = res$tc %>% dplyr::select(SampleID, gid, ReadCount = nr) %>%
+t_rc = cnt$tc %>% dplyr::select(SampleID, gid, ReadCount = nr) %>%
     filter(SampleID %in% thb$SampleID)
 r = readcount_norm(t_rc)
 tm_r = r$tm
@@ -152,17 +152,18 @@ saveRDS(res, fo)
 #}}}
 
 fi = file.path(dirw, '03.cpm.rds')
-res = readRDS(fi)
+cpm = readRDS(fi)
 
 bid = 'b1'; batches = 'batch1'; wd=6; ht=8
 bid = 'b2'; batches = c("batch2a","batch2b"); wd=6; ht=10
 bid = 'b3'; batches = 'batch3'; wd=6; ht=10
-th = res$th %>% filter(batch %in% batches) %>%
+th = cnt$th %>% filter(batch %in% batches) %>%
     mutate(lab = str_c(Genotype, Treatment, Timepoint, sep='_')) %>%
     mutate(grp = str_c(Genotype, Treatment, sep='_'))
-tm = res$tm_r %>% filter(SampleID %in% th$SampleID) %>%
+tm = cnt$tm_r %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
+#{{{ QC
 p1 = plot_hclust(tm,th,pct.exp=.4,cor.opt='pearson',var.col='Genotype',
     expand.x=.2)
 fo = sprintf("%s/11.hclust.%s.pdf", dirw, bid)
@@ -192,5 +193,93 @@ p2 = plot_tsne(tm,th,pct.exp=.4,perp=8,iter=1500,
     legend.pos='top.right', legend.dir='v', pal.col='aaas')
 fp = sprintf("%s/12.tsne.%s.pdf", dirw, bid)
 ggsave(p2, filename = fp, width=8, height=8)
+#}}}
 
+#{{{ share raw read count table w. Zach
+fi = file.path(dirw, '01.cnts.rds')
+cnt = readRDS(fi)
 
+to1 = cnt$tc %>% select(-nu) %>% spread(SampleID, nr)
+to2 = cnt$tc %>% select(-nr) %>% spread(SampleID, nu)
+
+fo = file.path(dirw, '01.meta.tsv')
+write_tsv(cnt$th, fo)
+fo1 = file.path(dirw, '91.read.count.tsv.gz')
+write_tsv(to1, fo1)
+fo2 = file.path(dirw, '91.barcode.count.tsv.gz')
+write_tsv(to2, fo2)
+#}}}
+
+#{{{ compare w. traditional RNA-Seq
+fi = file.path(dirw, '03.cpm.rds')
+cpm = readRDS(fi)
+#
+rn = rnaseq_cpm('rn20a')
+
+th1 = cpm$th %>% select(sid1=SampleID, sid2=ExpID, batch)
+th2 = rn$th %>% select(sid2 = SampleID) %>% distinct(sid2)
+th = th1 %>% inner_join(th2, by='sid2')
+
+tm1 = cpm$tm_r %>% select(sid1=SampleID, gid, cpm1=CPM)
+tm2 = rn$tm %>% select(sid2=SampleID, gid, cpm2=CPM)
+tm = th %>% inner_join(tm1, by='sid1') %>%
+    inner_join(tm2, by=c('sid2','gid'))
+
+get_cor <- function(ti, min_cpm=1) {
+    #{{{
+    ng1 = sum(ti$cpm1 >= min_cpm)
+    ng2 = sum(ti$cpm2 >= min_cpm)
+    tif = ti %>% filter(cpm1 >= min_cpm, cpm2 >= min_cpm)
+    ng = nrow(tif)
+    pcc = cor(tif$cpm1, tif$cpm2, method='pearson')
+    spc = cor(tif$cpm1, tif$cpm2, method='spearman')
+    #kdc = cor(tif$cpm1, tif$cpm2, method='kendall')
+    tibble(ng1=ng1,ng2=ng2,ng=ng,pcc=pcc,spc=spc)
+    #}}}
+}
+
+to = tm %>% group_by(sid1,sid2,batch) %>%
+    nest() %>% rename(cpm = data) %>%
+    mutate(x = map(cpm, get_cor)) %>%
+    select(batch, sid1, sid2, x) %>% unnest(x)
+
+to %>% group_by(batch) %>% skim(ng1,ng2,ng,pcc,spc)
+
+fo = file.path(dirw, '61.cor.tsv')
+write_tsv(to, fo)
+
+p = ggboxplot(to, x = "batch", y = "ng1",
+    color = "batch", palette = pal_npg()(5),
+    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
+fo = file.path(dirw, '62.ng1.pdf')
+ggsave(p, file=fo, width=5, height=5)
+
+p = ggboxplot(to, x = "batch", y = "ng2",
+    color = "batch", palette = pal_npg()(5),
+    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
+fo = file.path(dirw, '62.ng2.pdf')
+ggsave(p, file=fo, width=5, height=5)
+
+p = ggboxplot(to, x = "batch", y = "ng",
+    color = "batch", palette = pal_npg()(5),
+    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
+fo = file.path(dirw, '62.ng.pdf')
+ggsave(p, file=fo, width=5, height=5)
+
+p = ggboxplot(to, x = "batch", y = "pcc",
+    color = "batch", palette = pal_npg()(5),
+    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
+fo = file.path(dirw, '62.pcc.pdf')
+ggsave(p, file=fo, width=5, height=5)
+
+p = ggboxplot(to, x = "batch", y = "spc",
+    color = "batch", palette = pal_npg()(5),
+    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
+fo = file.path(dirw, '62.spc.pdf')
+ggsave(p, file=fo, width=5, height=5)
+#}}}
