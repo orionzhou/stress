@@ -40,7 +40,7 @@ res = list(raw=rc, ratio=ra, diff=rd)
 fo = file.path(dirw, '01.tc.rds')
 saveRDS(res, fo)
 #}}}
-#run st.17.clu.1.R
+#run st.job.17.R
 
 #{{{ read DE, TC, config
 fi = file.path(dirw, '../15_de/05.rds')
@@ -312,7 +312,7 @@ tr = res %>% rename(bat=batch) %>% filter(bat %in% bats) %>%
                     gt_map=!!gt_map, tc=!!tc, dirw=!!dirw))
 
 to = tr %>% select(-data) %>% unnest(r)
-fo = file.path(dirw, "25.modules.rds")
+fo = file.path(dirw, "25.wgcna.modules.rds")
 saveRDS(to, fo)
 #}}}
 
@@ -320,6 +320,8 @@ saveRDS(to, fo)
 #{{{ read modules and config
 fi = file.path(dirw, "25.modules.rds")
 x = readRDS(fi)
+fi = file.path(dirw, '01.tc.rds')
+tc = readRDS(fi)
 #
 ff = file.path(dirw, 'config.xlsx')
 tf = read_xlsx(ff, sheet='picked') %>%
@@ -336,8 +338,9 @@ tf = tf %>% inner_join(tfs, by=c('opt_deg','opt_clu','bat')) %>%
 ti1 = tf %>% group_by(opt_deg, opt_clu,bat) %>% nest() %>% rename(picked=data)
 ti = x %>% mutate(bat=factor(bat,levels=bats)) %>%
     inner_join(ti1, by=c("opt_deg",'opt_clu','bat')) %>%
-    group_by(opt_deg,opt_clu) %>% nest()
+    group_by(opt_deg,opt_clu) %>% nest() %>% ungroup()
 #}}}
+
 plot_me <- function(opt_deg, opt_clu, x, tc, dirw) {
     #{{{
     diro = sprintf("%s/20_%s_%s", dirw, opt_deg, opt_clu)
@@ -371,7 +374,7 @@ tpy = tp %>% distinct(bat, mid, n) %>%
 tp = tp %>% inner_join(tpx, by='cond') %>%
     inner_join(tpy, by=c('bat','mid')) %>%
     mutate(y = factor(y, levels=tpy$y))
-p = ggplot(tp, aes(x=x,y=y)) +
+p01 = ggplot(tp, aes(x=x,y=y)) +
     geom_tile(aes(fill=val),color='white',size=.2) +
     scale_x_continuous(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.01,.01))) +
     scale_y_discrete(breaks=tpy$y, labels=tpy$lab, expand=expansion(mult=c(.01,.01))) +
@@ -383,7 +386,7 @@ p = ggplot(tp, aes(x=x,y=y)) +
     #theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7)) +
     theme(strip.text.x = element_text(size=10))
 fo = file.path(diro, '01.heatmap.all.pdf')
-ggsave(p, file=fo, width=10, height=8)
+ggsave(p01, file=fo, width=10, height=8)
 #}}}
 #
 #{{{ heatmap for picked modules
@@ -406,7 +409,7 @@ tpy = tp %>% distinct(y, bat, lab) %>% arrange(y)
 tpys = tpy %>% group_by(bat) %>%
     summarise(ymin=min(y), ymax=max(y), ymid=(ymin+ymax)/2) %>% ungroup() %>%
     inner_join(bat_lab, by='bat')
-p = ggplot(tp, aes(x=x,y=y)) +
+p03 = ggplot(tp, aes(x=x,y=y)) +
     geom_tile(aes(fill=val),color='white',size=.3) +
     geom_segment(data=tpys, aes(x=.3,xend=.3,y=ymin,yend=ymax),color='dodgerblue',size=1) +
     geom_text(data=tpys, aes(x=-1,y=ymid,label=lab),size=3,angle=0,hjust=.5,vjust=.5) +
@@ -420,9 +423,60 @@ p = ggplot(tp, aes(x=x,y=y)) +
     #theme(strip.text.y = element_blank()) +
     #theme(strip.text.x = element_text(size=10))
 fo = file.path(diro, '03.heatmap.picked.pdf')
-ggsave(p, file=fo, width=6, height=6)
+ggsave(p03, file=fo, width=6, height=6)
 #}}}
 #
+#{{{ multi-line plot
+# scale asinh expression
+scale2 <- function(ti) {r=max(ti$val)-min(ti$val); ti %>% mutate(val=val/r)}
+bat_lab2 = bat_lab %>% rename(blab = lab) %>%
+    mutate(blab=str_replace(blab, "\n", " [")) %>%
+    mutate(blab=str_c(blab, "]"))
+bat_lab2 = bat_lab2 %>% mutate(blab=factor(blab, levels=bat_lab2$blab))
+tp = tp0 %>% mutate(x=factor(x)) %>%
+    inner_join(bat_lab2, by='bat')
+tpx = tp %>% distinct(cond, x) %>% arrange(cond, x) %>%
+    mutate(xlab=as.double(str_sub(cond,2))/10)
+get_itvs <- function(ymin, ymax, nl) tibble(yi=1:nl, y=seq(ymin+.05*(ymax-ymin), ymax-.05*(ymax-ymin), length=nl))
+tply2 = tp %>% filter(cond=='h250') %>% arrange(blab, val) %>%
+    group_by(blab) %>% mutate(yi = 1:n()) %>% ungroup() %>%
+    select(blab, mid, yi)
+tply = tp %>% select(blab, mid, lab, val) %>%
+    group_by(blab) %>%
+    summarise(ymin=min(val), ymax=max(val), nl = length(unique(mid))) %>% ungroup() %>%
+    mutate(data = pmap(list(ymin,ymax,nl), get_itvs)) %>% unnest(data) %>%
+    inner_join(tply2, by=c('blab','yi'))
+tpl = tp %>% distinct(blab, mid,i, lab) %>%
+    inner_join(tply, by=c('blab','mid'))
+#
+p06 = ggplot(tp) +
+    geom_line(aes(x=x,y=val,group=y,color=as.character(i)), size=.5) +
+    geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
+    geom_text(tpl, mapping=aes(x=8.2,y=y,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5) +
+    #geom_text_repel(tpl, mapping=aes(x=8.1,y=i*.2,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5, direction='y',nudge_x=.5, nudge_y=0, segment.size=.2) +
+    scale_x_discrete(name='Hours after Treatment', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.5))) +
+    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
+    scale_color_aaas() +
+    facet_wrap(~blab, ncol=1, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           panel.border = F, margin = c(.3,.3,.3,.3), strip.style='white',
+           ygrid=T, xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F) +
+    theme(strip.text = element_text(hjust=.5, size=9))
+fo = file.path(diro, '06.multi.line.pdf')
+ggsave(p06, file=fo, width=5, height=6)
+#}}}
+#
+#{{{ write xm for sharing
+to = xm %>% mutate(bat=factor(bat, levels=bats)) %>% arrange(bat,mid) %>%
+    mutate(gids = map_chr(gids, str_c, collapse=',')) %>%
+    mutate(me = map_chr(me, str_c, collapse=','))
+fo = file.path(diro, '09.modules.tsv')
+write_tsv(to, fo)
+#}}}
+    list(p01=p01,p03=p03,p06=p06,to=to)
+    #}}}
+}
+
 #{{{ violin & line plot
 # scale asinh expression
 scale2 <- function(ti) {r=max(ti$val)-min(ti$val); ti %>% mutate(val=val/r)}
@@ -450,7 +504,7 @@ te1 = tp0 %>% distinct(bat,mid) %>% inner_join(xm, by=c('bat','mid')) %>%
     inner_join(tpx, by='cond') %>%
     inner_join(tpl, by=c('bat','mid'))
 #
-p = ggviolin(te1, x='x', y='val', color='grey', fill='gray') +
+p05 = ggviolin(te1, x='x', y='val', color='grey', fill='gray') +
     #geom_boxplot(te1, mapping=aes(x=x,y=val,group=x), width=.6, color='grey') +
     geom_line(tp, mapping=aes(x=x,y=val,group=y,color=bat), size=.5) +
     geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
@@ -466,46 +520,59 @@ p = ggviolin(te1, x='x', y='val', color='grey', fill='gray') +
     theme(strip.text.y = element_blank()) +
     theme(strip.text.x = element_text(size=10))
 fo = file.path(diro, '05.violin.picked.pdf')
-ggsave(p, file=fo, width=8, height=6)
+ggsave(p05, file=fo, width=8, height=6)
 #}}}
-#
-#{{{ multi-line plot
-# scale asinh expression
-scale2 <- function(ti) {r=max(ti$val)-min(ti$val); ti %>% mutate(val=val/r)}
-tp = tp0 %>% mutate(x=factor(x))
-tpx = tp %>% distinct(cond, x) %>% arrange(cond, x) %>%
-    mutate(xlab=as.double(str_sub(cond,2))/10)
-tpl = tp %>% filter(cond=='h250') %>% select(bat, mid,i, lab,val)
-#
-p = ggplot(tp) +
-    geom_line(aes(x=x,y=val,group=y,color=as.character(i)), size=.5) +
-    geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
-    geom_text_repel(tpl, mapping=aes(x=8.1,y=val,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5, direction='y',nudge_x=.5, nudge_y=0, segment.size=.2) +
-    scale_x_discrete(name='hour after stress', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.5))) +
-    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
-    scale_color_aaas() +
-    facet_wrap(~bat, ncol=1, scale='free') +
-    otheme(legend.pos='none', legend.dir='h', legend.title=T,
-           panel.border = F, margin = c(.3,.3,.3,.3), strip.style='white',
-           ygrid=T, xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F) +
-    theme(strip.text = element_text(hjust=0, size=11))
-fo = file.path(diro, '05.violin.picked.combine.pdf')
-ggsave(p, file=fo, width=5, height=7)
+
+to = ti %>% slice(1:4) %>%
+    mutate(r = pmap(list(opt_deg, opt_clu, data), plot_me, tc=!!tc, dirw=!!dirw)) %>%
+    mutate(p01=map(r,'p01'), p03=map(r,'p03'), p06=map(r,'p06'), to=map(r,'to'))
+
+
+fo = file.path(dirw, "21.multi.lines.pdf")
+ggarrange(to$p06[[1]], to$p06[[2]], to$p06[[3]],
+    labels = c("B73", "Mo17", "W22"),
+    nrow = 1, ncol = 3, widths=c(1,1,1,1), heights = c(1,1)) %>%
+    ggexport(filename = fo, width = 14, height = 8)
 #}}}
+
+#{{{ prepare picked module lists
+fi = file.path(dird, "17_cluster/25.modules.rds")
+md0 = readRDS(fi)
 #
-#{{{ write xm for sharing
-to = xm %>% mutate(bat=factor(bat, levels=bats)) %>% arrange(bat,mid) %>%
+ff = file.path(dird, '17_cluster/config.xlsx')
+tf = read_xlsx(ff, sheet='picked') %>%
+    fill(opt_deg, .direction='down') %>%
+    fill(opt_clu, .direction='down') %>%
+    fill(bat, .direction='down') %>% mutate(pick = T)
+#
+gdic = c(B="Zmays_B73",M='Zmays_Mo17',W='Zmays_W22')
+tp = md0 %>% select(-toc) %>% unnest(tom) %>%
+    select(-me) %>%
+    left_join(tf, by=c("opt_deg","opt_clu","bat","mid")) %>%
+    replace_na(list(pick=F)) %>%
+    mutate(gt = gdic[opt_deg]) %>% select(-opt_deg,-opt_clu) %>%
+    select(-stress,-drc) %>% rename(ng0 = n, gid = gids) %>% unnest(gid) %>%
+    separate(gid, c("gid",'gt2'), sep='_') %>% select(-gt2) %>%
+    select(gt, everything())
+tp0 = tp %>% distinct(gt, bat, gid) %>%
+    mutate(mid='m00', note='all', pick=T) %>%
+    group_by(gt, bat) %>% mutate(ng0 = n()) %>% ungroup()
+md = tp %>% bind_rows(tp0) %>%
+    group_by(gt, bat, mid, ng0, pick, note) %>%
+    summarise(gids = list(gid)) %>% ungroup() %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    arrange(gt, bat, desc(pick))
+
+fo = file.path(dirw, '27.modules.rds')
+saveRDS(md, fo)
+
+to = md %>% filter(gt=='Zmays_B73', pick) %>%
     mutate(gids = map_chr(gids, str_c, collapse=',')) %>%
-    mutate(me = map_chr(me, str_c, collapse=','))
-fo = file.path(diro, '09.modules.tsv')
+    select(bat, mid, ng0, note, gids)
+fo = file.path(dirw, '27.modules.B73.tsv')
 write_tsv(to, fo)
 #}}}
-    #}}}
-}
 
-ti %>% mutate(r = pmap(list(opt_deg, opt_clu, data), plot_me,
-                       tc=!!tc, dirw=!!dirw))
-#}}}
 
 
 #{{{ [obsolete] test plot members within individual module

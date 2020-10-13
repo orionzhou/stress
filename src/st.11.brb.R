@@ -231,8 +231,10 @@ get_cor <- function(ti, min_cpm=1) {
     ng2 = sum(ti$cpm2 >= min_cpm)
     tif = ti %>% filter(cpm1 >= min_cpm, cpm2 >= min_cpm)
     ng = nrow(tif)
-    pcc = cor(tif$cpm1, tif$cpm2, method='pearson')
-    spc = cor(tif$cpm1, tif$cpm2, method='spearman')
+    cpm1 = log(tif$cpm1)
+    cpm2 = log(tif$cpm2)
+    pcc = cor(cpm1, cpm2, method='pearson')
+    spc = cor(cpm1, cpm2, method='spearman')
     #kdc = cor(tif$cpm1, tif$cpm2, method='kendall')
     tibble(ng1=ng1,ng2=ng2,ng=ng,pcc=pcc,spc=spc)
     #}}}
@@ -242,43 +244,44 @@ to = tm %>% group_by(sid1,sid2,batch) %>%
     nest() %>% rename(cpm = data) %>%
     mutate(x = map(cpm, get_cor)) %>%
     select(batch, sid1, sid2, x) %>% unnest(x)
-
-to %>% group_by(batch) %>% skim(ng1,ng2,ng,pcc,spc)
+#to %>% group_by(batch) %>% skim(ng1,ng2,ng,pcc,spc)
 
 fo = file.path(dirw, '61.cor.tsv')
 write_tsv(to, fo)
 
+#{{{ ngenes
 p = ggboxplot(to, x = "batch", y = "ng1",
     color = "batch", palette = pal_npg()(5),
     add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
     otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
 fo = file.path(dirw, '62.ng1.pdf')
 ggsave(p, file=fo, width=5, height=5)
-
+#
 p = ggboxplot(to, x = "batch", y = "ng2",
     color = "batch", palette = pal_npg()(5),
     add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
     otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
 fo = file.path(dirw, '62.ng2.pdf')
 ggsave(p, file=fo, width=5, height=5)
-
+#
 p = ggboxplot(to, x = "batch", y = "ng",
     color = "batch", palette = pal_npg()(5),
     add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
     otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
 fo = file.path(dirw, '62.ng.pdf')
 ggsave(p, file=fo, width=5, height=5)
+#}}}
 
 p = ggboxplot(to, x = "batch", y = "pcc",
     color = "batch", palette = pal_npg()(5),
-    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    add = "jitter", shape = "batch", ylab='PCC') +
     otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
 fo = file.path(dirw, '62.pcc.pdf')
 ggsave(p, file=fo, width=5, height=5)
 
 p = ggboxplot(to, x = "batch", y = "spc",
     color = "batch", palette = pal_npg()(5),
-    add = "jitter", shape = "batch", ylab='number genes CPM > 1') +
+    add = "jitter", shape = "batch", ylab='SPC') +
     otheme(legend.pos='none',ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, ygrid=T)
 fo = file.path(dirw, '62.spc.pdf')
 ggsave(p, file=fo, width=5, height=5)
