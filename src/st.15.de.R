@@ -665,6 +665,14 @@ z = td2 %>% filter(!is.na(BMW)) %>%
 #}}}
 #}}}
 
+#{{{ share DEG list
+to = td2 %>% mutate(n_deg = map_int(gids, length)) %>%
+    mutate(gid = map_chr(gids, str_c, collapse=',')) %>%
+    select(-gids)
+fo = file.path(dirw, '05.deg.tsv')
+write_tsv(to, fo)
+#}}}
+
 ________BELOW ARE DEPRECATED_________
 #{{{ alluvial
 require(ggalluvial)

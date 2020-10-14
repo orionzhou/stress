@@ -114,29 +114,11 @@ write_tsv(to2, fo, col_names = F)
 #{{{ create cluster-CRE lists
 fi = file.path(dirw, '05.cre.loc.tsv')
 ti = read_tsv(fi, col_types='ccccii')
-
-#{{{ read picked modules and gids
-fi = file.path(dird, "17_cluster/25.modules.rds")
-x = readRDS(fi)
 #
-ff = file.path(dird, '17_cluster/config.xlsx')
-tf = read_xlsx(ff, sheet='picked') %>%
-    fill(opt_deg, .direction='down') %>%
-    fill(opt_clu, .direction='down') %>%
-    fill(bat, .direction='down') %>% mutate(pick = T)
-#
-tp = x %>% select(-toc) %>% unnest(tom) %>%
-    select(-me) %>%
-    left_join(tf, by=c("opt_deg","opt_clu","bat","mid")) %>%
-    replace_na(list(pick=F)) %>%
-    filter(opt_deg == 'B', opt_clu == 'B') %>% select(-opt_deg, -opt_clu) %>%
-    select(-stress,-drc) %>% rename(ng0 = n, gid = gids) %>% unnest(gid) %>%
-    separate(gid, c("gid",'gt'), sep='_') %>% select(-gt)
-tp0 = tp %>% distinct(bat, gid) %>%
-    mutate(mid='m00', note=NA, pick=T) %>%
-    group_by(bat) %>% mutate(ng0 = n()) %>% ungroup()
-tp = tp %>% bind_rows(tp0)
-#}}}
+fi = file.path(dird, "17_cluster/27.modules.rds")
+md = readRDS(fi)
+tp = md %>% filter(gt=='Zmays_B73') %>% select(-gt) %>%
+    unnest(gids) %>% rename(gid=gids)
 
 #{{{ prepare sids for each module
 min_ng = 50
@@ -235,26 +217,26 @@ saveRDS(tc, fo)
 
 #{{{ create test-control CRE list pairs
 fi = file.path(dirw, '10.rds')
-tl0 = readRDS(fi)
+tl = readRDS(fi)
 fc = file.path(dirw, '11.bg.rds')
 tc = readRDS(fc)
 
 tc1 = tc %>% select(clid = lid, cond, bin_epi, ng_c=ng,tg_c=tg)
-tl = tl0 %>% separate(bat, c("cond",'drc'), sep='_', remove=F) %>%
+tlp = tl %>% separate(bat, c("cond",'drc'), sep='_', remove=F) %>%
     select(-drc) %>% inner_join(tc1, by=c('cond','bin_epi'))
 
-tl %>% filter(pick) %>%
+tlp %>% filter(pick) %>%
     mutate(fo = sprintf("%s/15_lists/%s.txt", dirw, lid)) %>%
     mutate(sids = map(tg, 'sid')) %>%
     mutate(j = map2(sids, fo, write))
 
-to = tl %>% select(-tg,-tg_c)
+to = tlp %>% select(-tg,-tg_c)
 fo = file.path(dirw, '15.tsv')
 write_tsv(to, fo, na='')
 fo = file.path(dirw, '15.rds')
-saveRDS(tl, fo)
-to = tl %>% filter(pick) %>% select(-tg, -pick, -tg_c)
-fo = file.path(dirw, '15.picked.tsv')
+saveRDS(tlp, fo)
+to = tlp %>% filter(pick) %>% select(-tg, -pick, -tg_c)
+fo = file.path(dirw, '15.picked.tsv2')
 write_tsv(to, fo, na='')
 #}}}
 

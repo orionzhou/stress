@@ -3,28 +3,21 @@ require(universalmotif)
 #require(dynamicTreeCut)
 dirw = file.path(dird, '23_mmd')
 #
-fl = file.path(dirw, '../21_seq/15.0.rds')
-tl0 = readRDS(fl)
-#tl = tl0 %>% filter(pick) %>% select(lid,ng0,ng,tg,clid,ng_c,tg_c)
+fl = file.path(dird, '21_seq/15.rds')
+tl = readRDS(fl)
 
 #{{{ read DREME kmers
-rename_mid <- function(lid, mid) sprintf("%s_%03d", lid, as.numeric(str_replace(mid,'DREME-','')))
-fi = sprintf("%s/dreme_kmer.tsv", dirr)
-tk = read_tsv(fi) %>%
-    mutate(mid = map2_chr(lid, mid, rename_mid))
-tk1 = tk %>% filter(!is.na(re))# %>% inner_join(r0, by=c('lid','mid'))
-tk2 = tk %>% filter(is.na(re))
+fk = sprintf("%s/23.kmer.tsv", dirr)
+fm = sprintf("%s/23.kmer.motif.tsv", dirr)
+tkk = read_tsv(fk) %>% select(-seq_rc) %>% rename(kmer=seq)
+tkm = read_tsv(fm) %>% select(-seq_rc) %>% rename(kmer=seq)
 make_kmer_motif <- function(kmer) create_motif(kmer, name=kmer, type='PPM', alphabet='DNA')
-kmers = tk2 %>% rename(kmer=seq) %>% distinct(kmer) %>%
-    mutate(mtf = map(kmer, make_kmer_motif))
+kmers = tkk %>% distinct(kmer) %>% mutate(mtf = map(kmer, make_kmer_motif))
+tk0 = tkk %>% group_by(mid) %>% summarise(kmers = list(kmer)) %>% ungroup()
+tk = tkm %>% inner_join(tk0, by='mid')
 
-tk0 = tk %>% filter(is.na(re)) %>% select(-re,-seq_rc) %>%
-    group_by(mid) %>% summarise(kmers = list(seq)) %>% ungroup()
-tk2 = tk %>% filter(is.na(re)) %>% select(mid, kmer=seq)
-tk3 = tk %>% filter(!is.na(re)) %>% select(lid, mid) %>%
-    inner_join(tk0, by='mid')
-kn = tl0 %>% filter(pick) %>% select(lid, bat, note) %>%
-    inner_join(tk3, by='lid') %>%
+kn = tl %>% filter(pick) %>% select(lid, bat, note) %>%
+    inner_join(tk, by='lid') %>%
     select(bat, note, kmers)
 
 fo = file.path(dirw, "04.kmer.note.rds")
@@ -33,7 +26,7 @@ saveRDS(kn, fo)
 
 #{{{ collapse DREME motifs w. known cisbp motifs
 #{{{ read in & merge
-fi = sprintf("%s/dreme.rds", dirr)
+fi = sprintf("%s/23.dreme.rds", dirr)
 rd = readRDS(fi)
 diri = '~/projects/cre/data/01_tfbs'
 fi = file.path(diri, '10.fam.rds')
@@ -181,6 +174,9 @@ p1 %>% ggexport(filename = fo, width = 8, height = 20)
 rename_mtf <- function(mtf, id) { mtf['name'] = id; mtf }
 mtf = tr %>% mutate(grp = sprintf("g%04d", grp)) %>% rename(fid=grp)
 grp = trs %>% mutate(grp = sprintf("g%04d", grp)) %>% rename(fid = grp) %>%
+    mutate(fname=str_replace_all(fname, ".*\\|", "")) %>%
+    mutate(fname=str_replace_all(fname, "\\[.*", "")) %>%
+    mutate(fname=str_replace_all(fname, "-", "")) %>%
     mutate(pwm = map2(pwm, fid, rename_mtf))
 #}}}
 
@@ -192,35 +188,35 @@ saveRDS(res, fo)
 #{{{ summerize kmers found in each module/searching parameter
 fi = file.path(dirw, '01.motif.grp.rds')
 r = readRDS(fi)
-r$grp = r$grp %>%
-  mutate(fname=str_replace_all(fname, ".*\\|", "")) %>%
-  mutate(fname=str_replace_all(fname, "\\[.*", "")) %>%
-  mutate(fname=str_replace_all(fname, "-", ""))
 
 #{{{ num. motifs found in each module
-tp = tl0 %>% select(lid,bat_mid,bin_epi, ng0, note) %>%
+tk1 = tk %>% select(lid,kmer,pval)
+tp = tl %>% select(lid,bat,mid,bat_mid, bin_epi, ng0, note) %>%
     inner_join(tk1, by='lid') %>%
-    count(lid,bat_mid,bin_epi,ng0,note) %>% rename(score=n) %>%
+    count(lid,bat,mid,bat_mid, bin_epi,ng0,note) %>% rename(score=n) %>%
     mutate(lab = score) %>%
-    mutate(bin_epi = factor(bin_epi, levels=rev(levels(tl0$bin_epi))))
-tpx = tp %>% distinct(bat_mid, ng0) %>%
-    mutate(xlab = sprintf("%s (%d)", bat_mid, ng0))
-tpy = tibble(x=cumsum(c(5,4,3))+.5)
+    mutate(bat_mid = factor(bat_mid, levels=rev(levels(tl$bat_mid)))) %>%
+    mutate(bin_epi = factor(bin_epi, levels=levels(tl$bin_epi)))
+tpy = tp %>% distinct(bat_mid, bat, mid, ng0, note) %>%
+    mutate(ylab = sprintf("%s: %s (%d)", bat, note, ng0))
+tp1 = tibble(o=cumsum(c(5,4,5))+.5)
+tp2 = tibble(o=seq(4,to=20,by=4)+.5)
 
 swit = (min(tp$score) + max(tp$score)) / 2
-p = ggplot(tp, aes(x=bat_mid,y=bin_epi)) +
+p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
-    geom_vline(xintercept=tpy$x, color='blue') +
-    scale_x_discrete(breaks=tpx$bat_mid, labels=tpx$xlab, expand=c(0,0), position='top') +
-    scale_y_discrete(expand=expansion(mult=c(0,0))) +
+    geom_hline(yintercept=tp1$o, color='purple') +
+    geom_vline(xintercept=tp2$o, color='blue') +
+    scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
+    scale_y_discrete(breaks=tpy$bat_mid, labels=tpy$ylab, expand=c(0,0)) +
     scale_fill_gradientn(name='# hits',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
     otheme(legend.pos='none', legend.dir='v', legend.title=F,
-           margin = c(.3,3.3,.3,.3),
+           margin = c(.3,2,.3,.3),
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=T) +
-    theme(axis.text.x = element_text(angle=45, hjust=0, vjust=.5, size=7.5)) +
+    theme(axis.text.x = element_text(angle=30, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
 p %>% ggexport(filename =sprintf("%s/10.n.mtf.pdf", dirw), width = 8, height = 6)
@@ -230,36 +226,36 @@ p %>% ggexport(filename =sprintf("%s/10.n.mtf.pdf", dirw), width = 8, height = 6
 r1 = r$mtf %>% filter(ctag=='dreme') %>% select(mid,fid) %>%
     inner_join(r$grp[c('fid','fname','n_cisbp')], by='fid') %>%
     select(mid, fid, fname, n_cisbp) %>%
-    inner_join(tk1, by='mid') %>%
+    inner_join(tk, by='mid') %>%
     select(mid,fid,fname,n_cisbp, lid,pval) %>%
-    inner_join(tl0[,c('lid','bat_mid','bin_epi','ng0')], by='lid')
+    inner_join(tl[,c('lid','bat_mid','bat','note','bin_epi','ng0')], by='lid')
 tp = r1 %>% arrange(bat_mid, pval) %>%
-    group_by(bat_mid, ng0, fid, fname, n_cisbp) %>%
+    group_by(bat_mid, bat, note, ng0, fid, fname, n_cisbp) %>%
     summarise(pval = min(pval)) %>% ungroup() %>%
     arrange(bat_mid, pval) %>%
-    group_by(bat_mid) %>% slice(1:50) %>%
+    group_by(bat_mid, bat, note) %>% slice(1:50) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     mutate(score = -log10(pval)) %>%
     mutate(lab = ifelse(n_cisbp>0, fname, '')) %>%
     mutate(i = factor(i, levels=50:1))
-tpx = tp %>% distinct(bat_mid, ng0) %>%
-    mutate(xlab = sprintf("%s (%d)", bat_mid, ng0))
-tpy = tibble(x=cumsum(c(5,4,3))+.5)
+tpx = tp %>% distinct(bat_mid, bat, ng0, note) %>%
+    mutate(xlab = sprintf("%s: %s (%d)", bat, note, ng0))
+tp1 = tibble(o=cumsum(c(6,5,4))+.5)
 
 swit = (min(tp$score) + max(tp$score)) / 2
 p = ggplot(tp, aes(x=bat_mid,y=i)) +
     geom_tile(aes(fill=score), na.rm = F, size=.5, color='white') +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
-    geom_vline(xintercept=tpy$x, color='blue') +
+    geom_vline(xintercept=tp1$o, color='blue') +
     scale_x_discrete(breaks=tpx$bat_mid, labels=tpx$xlab, expand=c(0,0), position='top') +
     scale_y_discrete(expand=expansion(mult=c(0,0))) +
     scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           margin = c(.5,2.3,.3,.3), legend.vjust=-1.5,
+           margin = c(.5,4.3,.3,.3), legend.vjust=-1.7,
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
-    theme(axis.text.x = element_text(angle=45, hjust=0, vjust=.5, size=7.5)) +
+    theme(axis.text.x = element_text(angle=25, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
 p %>% ggexport(filename =sprintf("%s/10.top50.mtf.pdf", dirw), width = 10, height = 10)
