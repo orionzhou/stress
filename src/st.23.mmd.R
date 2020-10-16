@@ -6,7 +6,7 @@ dirw = file.path(dird, '23_mmd')
 fl = file.path(dird, '21_seq/15.rds')
 tl = readRDS(fl)
 
-#{{{ read DREME kmers
+#{{{ read DREME motifs/kmers
 fk = sprintf("%s/23.kmer.tsv", dirr)
 fm = sprintf("%s/23.kmer.motif.tsv", dirr)
 tkk = read_tsv(fk) %>% select(-seq_rc) %>% rename(kmer=seq)
@@ -15,26 +15,30 @@ make_kmer_motif <- function(kmer) create_motif(kmer, name=kmer, type='PPM', alph
 kmers = tkk %>% distinct(kmer) %>% mutate(mtf = map(kmer, make_kmer_motif))
 tk0 = tkk %>% group_by(mid) %>% summarise(kmers = list(kmer)) %>% ungroup()
 tk = tkm %>% inner_join(tk0, by='mid')
-
-kn = tl %>% filter(pick) %>% select(lid, bat, note) %>%
+#
+fi = sprintf("%s/23.dreme.rds", dirr)
+rd = readRDS(fi)
+#
+km = tl %>% filter(pick) %>% select(lid, bat, note) %>%
     inner_join(tk, by='lid') %>%
-    select(bat, note, kmers)
+    inner_join(rd, by=c('lid','mid')) %>%
+    select(bat, note, lid, mid, kmer, kmers, pval, mtf)
 
-fo = file.path(dirw, "04.kmer.note.rds")
-saveRDS(kn, fo)
+fo = file.path(dirw, "00.kmers.rds")
+saveRDS(km, fo)
 #}}}
 
 #{{{ collapse DREME motifs w. known cisbp motifs
 #{{{ read in & merge
-fi = sprintf("%s/23.dreme.rds", dirr)
-rd = readRDS(fi)
+fi = file.path(dirw, "00.kmers.rds")
+km = readRDS(fi)
 diri = '~/projects/cre/data/01_tfbs'
 fi = file.path(diri, '10.fam.rds')
 rk = readRDS(fi)
 mtfs_known = rk$fam$pwm
 mtfs_known = rk$mtf$pwm
 
-mtfs_dreme = rd$mtf
+mtfs_dreme = km$mtf
 mtfs = c(mtfs_known, mtfs_dreme)
 tm1 = rd %>% mutate(ctag='dreme') %>% rename(pwm=mtf) %>%
     mutate(conseq=map_chr(pwm, 'consensus'), name=conseq) %>%
@@ -180,36 +184,48 @@ grp = trs %>% mutate(grp = sprintf("g%04d", grp)) %>% rename(fid = grp) %>%
     mutate(pwm = map2(pwm, fid, rename_mtf))
 #}}}
 
-fo = file.path(dirw, '01.motif.grp.rds')
-res = list(mtf = mtf, grp = grp)
-saveRDS(res, fo)
+mtf1 = mtf %>% select(mid, fid)
+grp1 = grp %>% mutate(cisbp=n_cisbp>0) %>% select(fid,fname,cisbp)
+km2 = km %>% inner_join(mtf1, by='mid') %>%
+    inner_join(grp1, by='fid')
+fo = file.path(dirw, '01.kmer.grp.rds')
+r = list(kmer=km2, mtf = mtf, grp = grp)
+saveRDS(r, fo)
 #}}}
 
 #{{{ summerize kmers found in each module/searching parameter
-fi = file.path(dirw, '01.motif.grp.rds')
-r = readRDS(fi)
+fr = file.path(dirw, '01.kmer.grp.rds')
+r = readRDS(fr)
 
 #{{{ num. motifs found in each module
-tk1 = tk %>% select(lid,kmer,pval)
+tps = r$kmer %>% group_by(bat,note) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
+    inner_join(tl %>% distinct(bat,note,bat_mid), by=c('bat','note'))
+tp1 = r$kmer %>% group_by(lid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup()
 tp = tl %>% select(lid,bat,mid,bat_mid, bin_epi, ng0, note) %>%
-    inner_join(tk1, by='lid') %>%
-    count(lid,bat,mid,bat_mid, bin_epi,ng0,note) %>% rename(score=n) %>%
-    mutate(lab = score) %>%
-    mutate(bat_mid = factor(bat_mid, levels=rev(levels(tl$bat_mid)))) %>%
-    mutate(bin_epi = factor(bin_epi, levels=levels(tl$bin_epi)))
-tpy = tp %>% distinct(bat_mid, bat, mid, ng0, note) %>%
+    inner_join(tp1, by='lid') %>% rename(score = n_grp) %>%
+    mutate(lab = score)
+tps2 = tp %>% distinct(bat_mid) %>% arrange(desc(bat_mid)) %>% mutate(i=1:n())
+tps = tps %>% inner_join(tps2, by='bat_mid')
+tp = tp %>%
+    inner_join(tps2, by='bat_mid') %>%
+    mutate(bin_epi = factor(bin_epi, levels=unique(tp$bin_epi)))
+tpy = tp %>% distinct(i, bat, mid, ng0, note) %>%
     mutate(ylab = sprintf("%s: %s (%d)", bat, note, ng0))
 tp1 = tibble(o=cumsum(c(5,4,5))+.5)
 tp2 = tibble(o=seq(4,to=20,by=4)+.5)
 
+#{{{ supp (p3b.2)
 swit = (min(tp$score) + max(tp$score)) / 2
-p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
+p3b.2 = ggplot(tp, aes(x=bin_epi,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     geom_hline(yintercept=tp1$o, color='purple') +
     geom_vline(xintercept=tp2$o, color='blue') +
     scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
-    scale_y_discrete(breaks=tpy$bat_mid, labels=tpy$ylab, expand=c(0,0)) +
+    scale_y_continuous(breaks=tpy$i, labels=tpy$ylab, expand=c(0,0),
+                     sec.axis=sec_axis(~., breaks=as.numeric(tps$i), labels=tps$n_grp)) +
     scale_fill_gradientn(name='# hits',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
@@ -219,31 +235,51 @@ p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
     theme(axis.text.x = element_text(angle=30, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
-p %>% ggexport(filename =sprintf("%s/10.n.mtf.pdf", dirw), width = 8, height = 6)
+p3b.2 %>% ggexport(filename =sprintf("%s/10.n.mtf.pdf", dirw), width=8, height=5)
+#}}}
+#{{{ fig 3b (p3b)
+tpf = tp %>% filter(str_detect(bin_epi, "\\+/\\-2k"))
+swit = (min(tpf$score) + max(tpf$score)) / 2
+p3b = ggplot(tpf, aes(x=bin_epi,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    geom_hline(yintercept=tp1$o, color='purple') +
+    geom_vline(xintercept=tp2$o, color='blue') +
+    scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
+    scale_y_continuous(breaks=tpy$i, labels=tpy$ylab, expand=c(0,0),
+                     sec.axis=sec_axis(~., breaks=as.numeric(tps$i), labels=tps$n_grp)) +
+    scale_fill_gradientn(name='# hits',colors=cols100v) +
+    #scale_fill_viridis(name='normalized eigengene value') +
+    scale_color_manual(values=c('black','white')) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F,
+           margin = c(.3,1,.3,.3),
+           xtick=T, ytick=F, xtitle=F, xtext=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=30, hjust=0, vjust=.5, size=7.5)) +
+    #theme(axis.text.y = element_markdown(size=7.5)) +
+    guides(color=F)
+p3b %>% ggexport(filename =sprintf("%s/10.n.mtf.2.pdf", dirw), width=4, height=5)
+#}}}
 #}}}
 
 #{{{ top 50 motifs found in each module
-r1 = r$mtf %>% filter(ctag=='dreme') %>% select(mid,fid) %>%
-    inner_join(r$grp[c('fid','fname','n_cisbp')], by='fid') %>%
-    select(mid, fid, fname, n_cisbp) %>%
-    inner_join(tk, by='mid') %>%
-    select(mid,fid,fname,n_cisbp, lid,pval) %>%
+r1 = r$kmer %>% select(mid,fid,fname,cisbp, lid,pval) %>%
     inner_join(tl[,c('lid','bat_mid','bat','note','bin_epi','ng0')], by='lid')
 tp = r1 %>% arrange(bat_mid, pval) %>%
-    group_by(bat_mid, bat, note, ng0, fid, fname, n_cisbp) %>%
+    group_by(bat_mid, bat, note, ng0, fid, fname, cisbp) %>%
     summarise(pval = min(pval)) %>% ungroup() %>%
     arrange(bat_mid, pval) %>%
-    group_by(bat_mid, bat, note) %>% slice(1:50) %>%
+    group_by(bat_mid, bat, note) %>%
+    slice(1:40) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     mutate(score = -log10(pval)) %>%
-    mutate(lab = ifelse(n_cisbp>0, fname, '')) %>%
+    mutate(lab = ifelse(cisbp, fname, '')) %>%
     mutate(i = factor(i, levels=50:1))
 tpx = tp %>% distinct(bat_mid, bat, ng0, note) %>%
     mutate(xlab = sprintf("%s: %s (%d)", bat, note, ng0))
 tp1 = tibble(o=cumsum(c(6,5,4))+.5)
 
 swit = (min(tp$score) + max(tp$score)) / 2
-p = ggplot(tp, aes(x=bat_mid,y=i)) +
+p4 = ggplot(tp, aes(x=bat_mid,y=i)) +
     geom_tile(aes(fill=score), na.rm = F, size=.5, color='white') +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     geom_vline(xintercept=tp1$o, color='blue') +
@@ -252,13 +288,14 @@ p = ggplot(tp, aes(x=bat_mid,y=i)) +
     scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           margin = c(.5,4.3,.3,.3), legend.vjust=-1.7,
+    otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
+           margin = c(.3,4.3,.3,.3), legend.vjust=-1.7,
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
+    theme(legend.position = c(1,0), legend.justification = c(0,0)) +
     theme(axis.text.x = element_text(angle=25, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
-p %>% ggexport(filename =sprintf("%s/10.top50.mtf.pdf", dirw), width = 10, height = 10)
+p4 %>% ggexport(filename =sprintf("%s/10.top.mtf.pdf", dirw), width=10, height=7)
 #}}}
 #}}}
 

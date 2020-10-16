@@ -4,7 +4,9 @@ suppressPackageStartupMessages(library("argparse"))
 ps <- ArgumentParser(description = 'Run machine learning classification on given dataset')
 ps$add_argument("fi", nargs=1, help = "input dataset")
 ps$add_argument("fo1", nargs=1, help = "output metrics file")
-ps$add_argument("fo2", nargs=1, help = "output best model file")
+#ps$add_argument("fo2", nargs=1, help = "output best model file")
+ps$add_argument("--perm", default=1, type='integer',
+                help = "number permutations [default: %(default)s]")
 ps$add_argument("--alg", default='rf',
                 help = "ML algorithm [default: %(default)s]")
 ps$add_argument("--holdout", default=.8, type='double',
@@ -201,17 +203,27 @@ ml1 <- function(ti, alg='rf', split_prop=.8, fold=10, fold_repeat=1,
 #}}}
 
 ti = read_tsv(args$fi)
-ti = ti %>% mutate(status = factor(status, levels=c(1,0)))
 if(args$response != 'status') ti = ti %>% rename(status=args$response)
-if(args$downsample) ti = downsample(ti, seed=args$seed)
-res = ml1(ti, alg=args$alg, split_prop=args$holdout,
-          fold=args$fold, fold_repeat=args$fold_repeat,
-          nlevel=args$nlevel,
-          cpu=args$cpu, seed=args$seed)
+ti = ti %>% mutate(status = factor(status, levels=c(1,0)))
+to0 = tibble(perm = 1:args$perm, ti0 = list(ti))
+if(args$downsample) {
+    to = to0 %>% mutate(ti = map2(ti0, perm, downsample)) %>% select(-ti0)
+} else {
+    to = to0 %>% rename(ti=ti0)
+}
 
-res %>% select(metric) %>% unnest(metric)
-r1 = res %>% select(-fit)
-r2 = res %>% pluck('fit',1)
-saveRDS(r1, args$fo1)
-saveRDS(r2, args$fo2)
+to = to %>%
+    mutate(r = map(ti, ml1, alg=args$alg, split_prop=args$holdout,
+        fold=args$fold, fold_repeat=args$fold_repeat,
+        nlevel=args$nlevel,
+        cpu=args$cpu, seed=args$seed)) %>%
+    select(-ti) %>% unnest(r)
+
+perm_best = to %>% select(perm, metric) %>% unnest(metric) %>%
+    filter(metric=='f_meas') %>% arrange(desc(estimate)) %>%
+    pluck('perm', 1)
+
+res = to %>% mutate(fit = ifelse(perm==perm_best, fit, NA))
+saveRDS(res, args$fo1)
+#saveRDS(r2, args$fo2)
 

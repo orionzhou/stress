@@ -328,5 +328,22 @@ get_tss <- function(genome) {
     ti %>% select(gid, chrom, pos=tss, srd)
     #}}}
 }
+downsample <- function(ti, seed=1, colname='status') {
+  #{{{
+  if(colname != 'status')
+    ti = ti %>% rename(status = get('colname'))
+  levs = levels(ti$status)
+  stopifnot(length(levs) == 2)
+  tis = ti %>% count(status) %>% arrange(n)
+  lev1 = tis %>% pluck('status', 1)
+  lev2 = tis %>% pluck('status', 2)
+  n1 = tis %>% pluck('n', 1)
+  n2 = tis %>% pluck('n', 2)
+  ti1 = ti %>% filter(status == lev1)
+  set.seed(seed)
+  ti2 = ti %>% filter(status == lev2) %>% slice(sample(n2, n1))
+  ti1 %>% bind_rows(ti2)
+  #}}}
+}
 
 

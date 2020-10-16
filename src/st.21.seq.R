@@ -236,8 +236,6 @@ write_tsv(to, fo, na='')
 fo = file.path(dirw, '15.rds')
 saveRDS(tlp, fo)
 to = tlp %>% filter(pick) %>% select(-tg, -pick, -tg_c)
-fo = file.path(dirw, '15.picked.tsv2')
+fo = file.path(dirw, '15.picked.tsv')
 write_tsv(to, fo, na='')
 #}}}
-
-

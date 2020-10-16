@@ -318,7 +318,7 @@ saveRDS(to, fo)
 
 #{{{ plot MEs for selected merging parameters
 #{{{ read modules and config
-fi = file.path(dirw, "25.modules.rds")
+fi = file.path(dirw, "25.wgcna.modules.rds")
 x = readRDS(fi)
 fi = file.path(dirw, '01.tc.rds')
 tc = readRDS(fi)
@@ -398,7 +398,7 @@ tp0 = xp %>% inner_join(xm, by=c('bat','mid')) %>%
     ungroup() %>%
     #mutate(val = ifelse(val > 1, 1, val)) %>%
     #mutate(val = ifelse(val < -1, -1, val)) %>%
-    mutate(lab=sprintf("%s (%d): %s", mid, n, note)) %>%
+    mutate(lab=sprintf("%s (%d)", note, n)) %>%
     mutate(bat = factor(bat, levels=bats)) %>%
     mutate(i = factor(i))
 tpx = tp0 %>% distinct(cond) %>% arrange(cond) %>% mutate(x=1:n()) %>%
@@ -454,7 +454,7 @@ p06 = ggplot(tp) +
     geom_point(tp, mapping=aes(x=x,y=val), color='gray35', size=1) +
     geom_text(tpl, mapping=aes(x=8.2,y=y,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5) +
     #geom_text_repel(tpl, mapping=aes(x=8.1,y=i*.2,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5, direction='y',nudge_x=.5, nudge_y=0, segment.size=.2) +
-    scale_x_discrete(name='Hours after Treatment', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.5))) +
+    scale_x_discrete(name='Hours after Treatment', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.4))) +
     scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
     scale_color_aaas() +
     facet_wrap(~blab, ncol=1, scale='free') +
@@ -532,7 +532,7 @@ fo = file.path(dirw, "21.multi.lines.pdf")
 ggarrange(to$p06[[1]], to$p06[[2]], to$p06[[3]],
     labels = c("B73", "Mo17", "W22"),
     nrow = 1, ncol = 3, widths=c(1,1,1,1), heights = c(1,1)) %>%
-    ggexport(filename = fo, width = 14, height = 8)
+    ggexport(filename = fo, width = 13, height = 6)
 #}}}
 
 #{{{ prepare picked module lists
