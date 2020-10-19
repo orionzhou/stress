@@ -12,7 +12,7 @@ dirg = '~/data/genome'
 dirp = "~/projects/stress"
 dird = file.path(dirp, 'data')
 dirr = '~/projects/stress/nf/raw'
-dirf = file.path(dird, '95_figures')
+dirf = file.path(dird, '95_figures', 'plots')
 gcfg = read_genome_conf()
 fh = file.path(dird, 'samples.xlsx')
 th = read_xlsx(fh, sheet='merged') %>%

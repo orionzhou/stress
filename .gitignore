@@ -5,6 +5,10 @@ logs
 
 # data folder
 #data/*
+raw
+work
+results
+.nextflow*
 
 # app temp files
 .snakemake/*

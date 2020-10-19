@@ -302,11 +302,13 @@ pv = ggplot(tp) +
     scale_color_manual(values=pal_d3()(4)[c(1,2)]) +
     facet_grid(Genotype ~ cond, switch='y', scales='free_x', space='free_x') +
     #otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4,
-    otheme(legend.pos='none', xtext=T, xtick=T) +
+    otheme(legend.pos='none', strip.style='white', panel.spacing='.1',
+           xtext=T, xtick=T) +
     theme(axis.text.x = element_text(angle = 20, hjust=.8, vjust=1.1)) +
     guides(color=F,fill=F)
 fo = file.path(dirw, '10.deg.pdf')
 ggsave(pv, filename=fo, width=5, height=8)
+saveRDS(pv, file.path(dirf, 'f.1b.rds'))
 #}}}
 
 #{{{ ## time0 v timeM: venn graph
