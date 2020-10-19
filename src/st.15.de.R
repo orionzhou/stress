@@ -665,6 +665,46 @@ z = td2 %>% filter(!is.na(BMW)) %>%
 #}}}
 #}}}
 
+#{{{ create gene status table for ML evaluation
+fi = file.path(dirw, '05.rds')
+x = readRDS(fi)
+deg48 = x$deg48
+#
+td1 = deg48 %>%
+    select(gt=Genotype,cond=Treatment,time=Timepoint,cond2,ds) %>%
+    unnest(ds) %>%
+    mutate(deg = ifelse(padj<.05 & abs(log2fc)>=1, ifelse(log2fc < 0, 'D','U'), 'N')) %>%
+    select(-padj, -log2fc) %>%
+    spread(cond2, deg) %>%
+    mutate(st = 'N') %>%
+    mutate(st = ifelse(time0=='U' & timeM=='U', 'U', st)) %>%
+    mutate(st = ifelse(time0=='D' & timeM=='D', 'D', st)) %>%
+    mutate(cond = str_to_lower(cond)) %>%
+    select(cond,time,gt,gid,st)
+ton = gcfg$gene %>% filter(! gid %in% td1$gid) %>%
+    select(gid) %>% mutate(st = 'zero') %>%
+    crossing(td1 %>% distinct(cond, time, gt))
+td1 = td1 %>% bind_rows(ton) %>%
+    mutate(st = factor(st, levels=c("U",'D','N', 'zero')))
+td1 %>% count(cond,time,gt,st) %>% spread(st,n)
+
+fi = file.path(dirw, '08.de.rds')
+ti = readRDS(fi)
+ti2 = ti %>% select(-cond) %>% rename(cond=stress, time=Timepoint) %>%
+    mutate(cond=str_to_lower(cond))
+ddegs=c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-', 'A+B-','A-B+','A=B=')
+ddegs1 = c(str_c('d',ddegs), str_c('n',ddegs))
+td2 = ti2 %>% mutate(st1 = ifelse(ddeg, 'd', 'n')) %>%
+    mutate(st = str_c(st1, deg)) %>%
+    select(cond,time, qry,tgt, gid,st) %>%
+    mutate(st = factor(st, levels = ddegs1))
+td2 %>% count(cond,time, qry,tgt,st) %>% spread(st,n)
+
+r = list(td1=td1, td2=td2)
+fo = file.path(dirw, '09.gene.status.rds')
+saveRDS(r, fo)
+#}}}
+
 #{{{ share DEG list
 to = td2 %>% mutate(n_deg = map_int(gids, length)) %>%
     mutate(gid = map_chr(gids, str_c, collapse=',')) %>%

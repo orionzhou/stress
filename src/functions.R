@@ -1,6 +1,7 @@
 #{{{ load & read
 require(devtools)
 load_all('~/git/rmaize')
+require(progress)
 require(ape)
 require(ggtree)
 require(ggforce)
