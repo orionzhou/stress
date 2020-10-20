@@ -86,7 +86,8 @@ Figure S4.  Transcription Factor Family Enrichment in Select DEG Modules. Enrich
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf5.pdf){width=100%}
+![]($st/data/95_figures/plots/sf5.pdf){width=80%}
+
 Figure S5. Erika's figure
 
 
@@ -97,7 +98,7 @@ Figure 3.
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf6.pdf){width=100%}
+![]($st/data/95_figures/plots/sf6.pdf){width=90%}
 
 Figure S6. 
 
@@ -109,7 +110,7 @@ Figure S7.
 
 
 \pagebreak
-![]($st/data/95_figures/plots/f4.pdf){width=100%}
+![]($st/data/95_figures/plots/f4.pdf){width=80%}
 
 Figure 4. 
 
