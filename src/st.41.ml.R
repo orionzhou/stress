@@ -186,19 +186,21 @@ maximize_f1 <- function(pPred, truth) {
 
 ######## MODEL EVALUATION ########
 #{{{ read models
-fi = file.path(dirw, 'Zmays_B73', '01.tsv')
+tag = 'mod4_288_c2'
+tag = 'mod7_252'
+fi = glue("{dirw}/01_models/{tag}.tsv")
 th = read_tsv(fi)
-fi = file.path(dirr, "42.ml.1.rds")
+fi = glue("{dirw}/01_models/{tag}.rds")
 ml = readRDS(fi)
 ml1 = ml %>% select(did=sid, perm, metric) %>%
-  unnest(metric) %>% spread(metric, estimate) %>%
+  unnest(metric) %>% spread(metric, estimate) %>% rename(f1=f_meas) %>%
   inner_join(th, by='did')
 tb = ml %>% filter(!is.na(fit)) %>% select(did=sid,perm,fit,metric) %>%
   inner_join(th, by='did')
 #}}}
 
 #{{{ eval model performance in B
-plot_model_perf <- function(ti, metric='f_meas') {
+plot_model_perf <- function(ti, metric='f1') {
   #{{{ plot
   bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
   nfeas = c("top30",'top50','top100')
@@ -240,12 +242,115 @@ plot_model_perf <- function(ti, metric='f_meas') {
   p
   #}}}
 }
+plot_model_perf1 <- function(ti, metric='f1') {
+  #{{{ plot
+  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
+  nfeas = c("top30",'top50','top100')
+  tp = ti %>%
+    filter(nfea == 'top30', mod=='zoops') %>%
+    mutate(score = get(metric)) %>%
+    group_by(bat, note, bin, epi, nfea, mod) %>%
+    summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
+    #summarise(score=median(roc_auc)) %>% ungroup() %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    mutate(note = factor(note)) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    group_by(bat, note, bin, epi, nfea, mod) %>%
+    mutate(bat_note_mod = fct_cross(bat, note, mod, sep=': ')) %>%
+    mutate(bat_note_epi = str_c(bat, note, epi, sep=': ')) %>%
+    mutate(bat_note_epi = as_factor(bat_note_epi)) %>%
+    mutate(epi_nfea = fct_cross(nfea, epi, sep=':')) %>%
+    mutate(y = str_c(bat, note, nfea, sep=":")) %>%
+    mutate(x = str_c(bin, epi, sep=":")) %>%
+    mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
+    mutate(lab = glue("{number(score,accuracy=.01)}")) %>%
+    filter(!is.na(score))
+  tp = tp %>% mutate(bat_note_epi = factor(bat_note_epi, levels=rev(levels(tp$bat_note_epi))))
+  swit = (min(tp$score) + max(tp$score)) / 2
+  p = ggplot(tp, aes(x=bin,y=bat_note_epi)) +
+      geom_tile(aes(fill=score), na.rm = F) +
+      geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2, parse=T) +
+      #geom_vline(xintercept=tpy$x, color='blue') +
+      scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
+      scale_y_discrete(expand=c(0,0)) +
+      scale_fill_gradientn(name='F1 score',colors=cols100v) +
+      #scale_fill_viridis(name='normalized eigengene value') +
+      scale_color_manual(values=c('black','white')) +
+      #facet_wrap(bat_note_mod ~ ., nrow=4) +
+      otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
+             margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
+             xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
+      theme(axis.text.x = element_text(angle=75, hjust=0, vjust=.5, size=7.5)) +
+      theme(axis.text.y = element_text(size=7)) +
+      #theme(axis.text.y = element_markdown(size=7.5)) +
+      guides(color=F)
+  p
+  #}}}
+}
+plot_model_perf2 <- function(ti, metric='f1') {
+  #{{{ plot
+  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
+  nfeas = c("top30",'top50','top100')
+  tp = ti %>%
+    filter(nfea == 'top30', bin=='+/-2k') %>%
+    mutate(score = get(metric)) %>%
+    group_by(bat, note, bin, epi, nfea) %>%
+    summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
+    #summarise(score=median(roc_auc)) %>% ungroup() %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    mutate(note = factor(note)) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    group_by(bat, note, bin, epi, nfea) %>%
+    mutate(bat_note = fct_cross(bat, note, sep=': ')) %>%
+    mutate(bat_note_epi = str_c(bat, note, epi, sep=': ')) %>%
+    mutate(bat_note_epi = as_factor(bat_note_epi)) %>%
+    mutate(epi_nfea = fct_cross(nfea, epi, sep=':')) %>%
+    mutate(y = str_c(bat, note, nfea, sep=":")) %>%
+    mutate(x = str_c(bin, epi, sep=":")) %>%
+    mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
+    mutate(lab = glue("{number(score,accuracy=.01)}")) %>%
+    filter(!is.na(score))
+  swit = (min(tp$score) + max(tp$score)) / 2
+  tp = mutate(tp, epi=factor(epi, levels=rev(epis)))
+  p = ggplot(tp, aes(x=bat_note,y=epi)) +
+      geom_tile(aes(fill=score), na.rm = F) +
+      geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2, parse=T) +
+      #geom_vline(xintercept=tpy$x, color='blue') +
+      scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
+      scale_y_discrete(expand=c(0,0)) +
+      scale_fill_gradientn(name='F1 score',colors=cols100v) +
+      #scale_fill_viridis(name='normalized eigengene value') +
+      scale_color_manual(values=c('black','white')) +
+      #facet_wrap(bat_note_mod ~ ., nrow=4) +
+      otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
+             margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
+             xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
+      theme(axis.text.x = element_text(angle=75, hjust=0, vjust=.5, size=7.5)) +
+      theme(axis.text.y = element_text(size=7)) +
+      #theme(axis.text.y = element_markdown(size=7.5)) +
+      guides(color=F)
+  p
+  #}}}
+}
 
-metric = 'roc_auc'
-metric = 'f_meas'
-fo = sprintf("%s/04.%s.c1.pdf", dirw, metric)
-p = plot_model_perf(ml1, metric=metric)
+metric='f1'
+fo = glue("{dirw}/08.{metric}.pdf")
+p = plot_model_perf2(ml1, metric=metric)
 p %>% ggexport(filename=fo, width=6, height=6)
+
+p = plot_model_perf1(ml1, metric='f1')
+saveRDS(p, glue("{dirf}/f.4a.rds"))
+p = plot_model_perf1(ml1, metric='roc_auc')
+saveRDS(p, glue("{dirf}/f.4b.rds"))
+
+p = plot_model_perf2(ml1, metric='f1')
+saveRDS(p, glue("{dirf}/f.4c.rds"))
+p = plot_model_perf2(ml1, metric='roc_auc')
+saveRDS(p, glue("{dirf}/f.4d.rds"))
 #}}}
 
 #{{{ evaluate model performance in M/W

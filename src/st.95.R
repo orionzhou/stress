@@ -1,4 +1,6 @@
 source('functions.R')
+require(magick)
+require(ggplotify)
 setwd(dirf)
 
 #{{{ Fig 1
@@ -49,5 +51,16 @@ ggexport(filename="f3.pdf", width=5, height=9)
 
 # Fig S6 is done
 # Fig S7 is done
+
+#{{{ Fig 4
+a = readRDS('f.4a.rds')
+b = readRDS('f.4b.rds')
+c = readRDS('f.4c.rds')
+d = readRDS('f.4d.rds')
+ggarrange(a, b, c, d, nrow=2, ncol=2,
+          labels = c("A - F1", "B - AUROC", "C - F1", "D - AUROC"),
+          widths=c(2,2), heights=c(2,1.5)) %>%
+ggexport(filename="f4.pdf", width=6, height=6)
+#}}}
 
 

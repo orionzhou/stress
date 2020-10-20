@@ -130,6 +130,11 @@ tmb = mer %>%
 
 fo = file.path(dirw, '03.best.motifs.rds')
 saveRDS(tmb, fo)
+
+tmb2 = tmb %>% mutate(kmers=map_chr(kmers, str_c, collapse=',')) %>%
+    select(bat,note,i,mid,fid,fname,ng,ng_c,pval,kmers)
+fo = file.path(dirw, '03.best.motifs.tsv')
+write_tsv(tmb2, fo)
 #}}}
 
 #{{{ prepare for ML input
