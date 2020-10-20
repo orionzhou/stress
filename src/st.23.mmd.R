@@ -216,9 +216,9 @@ tpy = tp %>% distinct(i, bat, mid, ng0, note) %>%
 tp1 = tibble(o=cumsum(c(5,4,5))+.5)
 tp2 = tibble(o=seq(4,to=20,by=4)+.5)
 
-#{{{ supp (p3b.2)
+#{{{ all motifs
 swit = (min(tp$score) + max(tp$score)) / 2
-p3b.2 = ggplot(tp, aes(x=bin_epi,y=i)) +
+p_all = ggplot(tp, aes(x=bin_epi,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     geom_hline(yintercept=tp1$o, color='purple') +
@@ -235,12 +235,11 @@ p3b.2 = ggplot(tp, aes(x=bin_epi,y=i)) +
     theme(axis.text.x = element_text(angle=30, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
-p3b.2 %>% ggexport(filename =sprintf("%s/10.n.mtf.pdf", dirw), width=8, height=5)
 #}}}
-#{{{ fig 3b (p3b)
+#{{{ selected motifs
 tpf = tp %>% filter(str_detect(bin_epi, "\\+/\\-2k"))
 swit = (min(tpf$score) + max(tpf$score)) / 2
-p3b = ggplot(tpf, aes(x=bin_epi,y=i)) +
+p_sel = ggplot(tpf, aes(x=bin_epi,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     geom_hline(yintercept=tp1$o, color='purple') +
@@ -257,11 +256,13 @@ p3b = ggplot(tpf, aes(x=bin_epi,y=i)) +
     theme(axis.text.x = element_text(angle=30, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
-p3b %>% ggexport(filename =sprintf("%s/10.n.mtf.2.pdf", dirw), width=4, height=5)
 #}}}
+p_sel %>% ggexport(filename =sprintf("%s/10.n.mtf.2.pdf", dirw), width=4, height=5)
+saveRDS(p_sel, file.path(dirf, 'f.3b.rds'))
+p_all %>% ggexport(filename =file.path(dirf, "sf6.pdf"), width=8, height=5)
 #}}}
 
-#{{{ top 50 motifs found in each module
+#{{{ top 40 motifs found in each module
 r1 = r$kmer %>% select(mid,fid,fname,cisbp, lid,pval) %>%
     inner_join(tl[,c('lid','bat_mid','bat','note','bin_epi','ng0')], by='lid')
 tp = r1 %>% arrange(bat_mid, pval) %>%
@@ -295,7 +296,7 @@ p4 = ggplot(tp, aes(x=bat_mid,y=i)) +
     theme(axis.text.x = element_text(angle=25, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
-p4 %>% ggexport(filename =sprintf("%s/10.top.mtf.pdf", dirw), width=10, height=7)
+p4 %>% ggexport(filename=glue("{dirf}/sf7.pdf"), width=10, height=7)
 #}}}
 #}}}
 

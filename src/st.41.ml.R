@@ -188,7 +188,7 @@ maximize_f1 <- function(pPred, truth) {
 #{{{ read models
 fi = file.path(dirw, 'Zmays_B73', '01.tsv')
 th = read_tsv(fi)
-fi = file.path(dirr, "42.ml.c1.rds")
+fi = file.path(dirr, "42.ml.1.rds")
 ml = readRDS(fi)
 ml1 = ml %>% select(did=sid, perm, metric) %>%
   unnest(metric) %>% spread(metric, estimate) %>%

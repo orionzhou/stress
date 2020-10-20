@@ -455,12 +455,12 @@ p06 = ggplot(tp) +
     geom_text(tpl, mapping=aes(x=8.2,y=y,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5) +
     #geom_text_repel(tpl, mapping=aes(x=8.1,y=i*.2,label=lab,color=as.character(i)), hjust=0, vjust=0, size=2.5, direction='y',nudge_x=.5, nudge_y=0, segment.size=.2) +
     scale_x_discrete(name='Hours after Treatment', breaks=tpx$x, labels=tpx$xlab, expand=expansion(mult=c(.02,.4))) +
-    scale_y_continuous(name='normalized eigengene value',expand=expansion(mult=c(.01,.08))) +
+    scale_y_continuous(name='Normalized Eigengene Expression',expand=expansion(mult=c(.01,.08))) +
     scale_color_aaas() +
     facet_wrap(~blab, ncol=1, scale='free') +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
            panel.border = F, margin = c(.3,.3,.3,.3), strip.style='white',
-           ygrid=T, xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F) +
+           ygrid=T, xtick=T, ytick=F, xtitle=T, ytitle=T,xtext=T, ytext=T) +
     theme(strip.text = element_text(hjust=.5, size=9))
 fo = file.path(diro, '06.multi.line.pdf')
 ggsave(p06, file=fo, width=5, height=6)
@@ -528,11 +528,17 @@ to = ti %>% slice(1:4) %>%
     mutate(p01=map(r,'p01'), p03=map(r,'p03'), p06=map(r,'p06'), to=map(r,'to'))
 
 
+saveRDS(to$p06[[1]], file.path(dirf, 'f.2a.rds'))
 fo = file.path(dirw, "21.multi.lines.pdf")
 ggarrange(to$p06[[1]], to$p06[[2]], to$p06[[3]],
     labels = c("B73", "Mo17", "W22"),
     nrow = 1, ncol = 3, widths=c(1,1,1,1), heights = c(1,1)) %>%
     ggexport(filename = fo, width = 13, height = 6)
+fo = file.path(dirf, "sf3.pdf")
+ggarrange(to$p06[[2]], to$p06[[3]],
+    labels = c("Mo17", "W22"),
+    nrow = 1, ncol = 2, widths=c(1,1,1,1), heights = c(1,1)) %>%
+ggexport(filename = fo, width = 9, height = 6)
 #}}}
 
 #{{{ prepare picked module lists
