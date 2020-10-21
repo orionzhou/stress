@@ -237,6 +237,7 @@ ggsave(p, file = fp, width = 4.5, height = 6)
 #}}}
 
 #{{{ cis/trans for dDEGs
+#{{{ read
 fi = file.path(dird, '15_de/08.de.rds')
 td = readRDS(fi)
 tp1 = td %>% filter(ddrc != 0, deg != 'A=B=') %>%
@@ -277,8 +278,10 @@ tp = ddeg %>% filter(condB!='Control0', deg %in% c("A+B=",'A=B+')) %>% select(-x
     mutate(cond = factor(cond, levels=nconds)) %>%
     mutate(reg=factor(reg, levels=regs))
 linecol = 'azure3'; lty = 'solid'
-cols9 = pal_npg()(10)
-#{{{ scatter plot
+cols9 = pal_simpsons()(10)
+#}}}
+
+#{{{ scatter plot - sf13a
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
@@ -288,14 +291,15 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -.4, legend.box='h',
+           legend.vjust = -.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
-fp = sprintf('%s/13.modex.pdf', dirw)
+fp = glue('{dirw}/13.modex.pdf')
 ggsave(p, file = fp, width = 5, height = 7)
+fo = glue('{dirf}/sf13a.rds')
+saveRDS(p, fo)
 #}}}
-
-#{{{ bar plot showing counts
+#{{{ bar plot showing counts - sf13b
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -305,13 +309,53 @@ p = ggplot(tp1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
     scale_x_continuous(breaks=tpx$x, labels=tpx$reg, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
-    scale_fill_manual(name='Modes:', values=cols9) +
+    scale_fill_manual(name='Mode:', values=cols9) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -.4, legend.box='h',
+           legend.vjust = -.6, legend.box='h',
            xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
-fp = sprintf('%s/13.modex.cnt.pdf', dirw)
+fp = glue('{dirw}/13.modex.cnt.pdf')
 ggsave(p, file = fp, width = 4.5, height = 6)
+fo = glue('{dirf}/sf13b.rds')
+saveRDS(p, fo)
+#}}}
+
+#{{{ scatter plot fig 5d
+tp1 = tp %>% filter(cond=='Cold25_B73xMo17')
+p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
+    geom_point(aes(color=reg, shape=reg), size=1) +
+    geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
+    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_color_manual(name='Mode:', values=cols9) +
+    scale_shape_manual(name='Mode:', values=c(1:5)) +
+    facet_wrap(~cond, ncol=1) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
+           legend.vjust = -.6, legend.box='h',
+           xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
+    guides(color=guide_legend(nrow=1))
+fo = glue('{dirf}/f5d.rds')
+saveRDS(p, fo)
+#}}}
+#{{{ bar plot fig 5e
+tp1 = tp %>% count(cond, x, reg) %>%
+    filter(cond=='Cold25_B73xMo17')
+tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
+    mutate(lab=sprintf("N=%d", n))
+p = ggplot(tp1) +
+    geom_bar(aes(x=x, y=n, fill=reg), width=.7, stat='identity') +
+    geom_text(data=tp1s,aes(x=5.6,y=120,label=lab), size=2.5, vjust=.5,hjust=1) +
+    geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
+    scale_x_continuous(breaks=tpx$x, labels=tpx$reg, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
+    scale_fill_manual(name='Modes:', values=cols9) +
+    facet_wrap(~cond, ncol=1, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           legend.vjust = -.6, legend.box='h',
+           xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=20, size=7.5, vjust=1, hjust=1))
+fo = glue('{dirf}/f5e.rds')
+saveRDS(p, fo)
 #}}}
 #}}}
 

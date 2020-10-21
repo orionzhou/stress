@@ -251,13 +251,13 @@ fo = file.path(dirw, '05.rds')
 saveRDS(res, fo)
 #}}}
 
-____plot DEGs___
-
+######## plot DEGs ########
 fi = file.path(dirw, '05.rds')
 x = readRDS(fi)
 deg48 = x$deg48; deg12 = x$deg12
 
-#{{{ bar plot
+#{{{ bar plot - f1b
+#{{{ pre-process
 td1 = deg48 %>%
     select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
     gather(drc, gids, -Treatment,-Genotype,-Timepoint,-cond2) %>%
@@ -267,7 +267,9 @@ td1 = deg48 %>%
     mutate(n0 = map_int(gids0, length)) %>%
     mutate(n1 = map_int(gids1, length)) %>%
     mutate(n = map_int(gids, length))
-#
+#}}}
+
+#{{{ bar plot - f1b
 tp = td1 %>% filter(Genotype %in% gts3) %>% mutate(n0 = n0-n, n1=n1-n) %>%
     select(Genotype,Treatment,Timepoint,drc,ctrl0_uniq=n0,ctrlx_uniq=n1,
            ctrl0_share=n, ctrlx_share=n) %>%
@@ -289,8 +291,8 @@ tpa = tibble(x=.35, y=c(20,-20), color=pal_d3()(2)[c(2,1)], lab=c('up','down')) 
     mutate(yt = ifelse(lab=='down', y-off, y+off)) %>%
     mutate(cond = 'Cold_1h') %>% crossing(Genotype=gts3)
 labs = c('time0_control', 'timeM_control')
-
-pv = ggplot(tp) +
+#
+p = ggplot(tp) +
     geom_bar(aes(x=x, y=y, fill=opt2), stat='identity', position='stack', alpha=1, size=0, color='white', width=.8) +
     geom_hline(yintercept = 0, size=.1) +
     geom_text(data=tpt1, aes(x=x, y=yt, label=lab), color='white', size=2.5) +
@@ -307,8 +309,9 @@ pv = ggplot(tp) +
     theme(axis.text.x = element_text(angle = 20, hjust=.8, vjust=1.1)) +
     guides(color=F,fill=F)
 fo = file.path(dirw, '10.deg.pdf')
-ggsave(pv, filename=fo, width=5, height=8)
-saveRDS(pv, file.path(dirf, 'f.1b.rds'))
+ggsave(p, filename=fo, width=5, height=8)
+saveRDS(p, file.path(dirf, 'f1b.rds'))
+#}}}
 #}}}
 
 #{{{ ## time0 v timeM: venn graph
@@ -328,6 +331,7 @@ ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
 #{{{ simple gt venn graph
+#{{{ preprocsss
 drcs = c('up','down')
 td2 = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     select(Genotype, cond, drc,  gids) %>%
@@ -344,45 +348,52 @@ td3 = td2 %>% select(Genotype,cond,drc, gids) %>%
     dplyr::rename(gidsB=B73, gidsM=Mo17, gidsW=W22) %>%
     mutate(vdc = pmap(list(gidsB, gidsM, gidsW), run_matplotlib_venn3, labs=gts3)) %>%
     mutate(tc = map(vdc, 'tc'), tl = map(vdc, 'tl'))
+#}}}
 
 cols3 = pal_tron()(5)[c(1,2,3)]
-#{{{
-tp = td3 %>% filter(drc=='up') %>%
-    mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
+#{{{ single panel venn - fig 5a
+tp = td3 %>% filter(cond=='Cold_25h', drc=='up') %>%
+    mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
     arrange(drc,cond)
 tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
 tpc = tp %>% select(pan, tc) %>% unnest(tc)
 tpl = tp %>% select(pan, tl) %>% unnest(tl)
-p3a = ggplot(tpc) +
-    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
+p = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, color=lab), alpha=.2, size=.5) +
+    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
+    facet_wrap(~ pan, scale='free', ncol=2) +
+    scale_color_manual(values=cols3) +
+    otheme(legend.pos='top.center.out', strip.style='white',
+           legend.dir='h', legend.vjust=-.7)
+#fo = sprintf('%s/11.gt.venn.pdf', dirw)
+#ggsave(p, filename=fo, width=4, height=4.5)
+fo = glue("{dirf}/f5a.rds")
+saveRDS(p, fo)
+#}}}
+#{{{ all panel venn- sf11a
+tp = td3 %>%
+    mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
+    arrange(drc,cond)
+tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
+tpc = tp %>% select(pan, tc) %>% unnest(tc)
+tpl = tp %>% select(pan, tl) %>% unnest(tl)
+p = ggplot(tpc) +
+    geom_circle(aes(x0=x, y0=y, r=r, color=lab), alpha=.2, size=.5) +
     geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
     facet_wrap(~ pan, scale='free', ncol=2) +
     scale_color_manual(values=cols3) +
     scale_fill_manual(values=cols3) +
-    #scale_fill_manual(values=pal_tron()(5)) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
-fo = sprintf('%s/11.gt.venn.pdf', dirw)
-ggsave(p3a, filename=fo, width=4, height=4)
-#}}}
-#{{{
-tp = td3 %>% mutate(pan = str_c(cond,str_to_upper(drc), sep='_')) %>%
-    arrange(drc,cond)
-tp = tp %>% mutate(pan = factor(pan, levels=tp$pan))
-tpc = tp %>% select(pan, tc) %>% unnest(tc)
-tpl = tp %>% select(pan, tl) %>% unnest(tl)
-pv = ggplot(tpc) +
-    geom_circle(aes(x0=x, y0=y, r=r, fill=lab, color=lab), alpha=.2, size=1) +
-    geom_text(tpl, mapping=aes(x=x,y=y,label=cnt), size=2.5) +
-    facet_wrap(~ pan, scale='free', ncol=4) +
-    scale_color_manual(values=cols3) +
-    scale_fill_manual(values=cols3) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.vjust=-.4)
+    otheme(legend.pos='top.center.out', strip.style='white',
+           legend.dir='h', legend.vjust=-.7)
 fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
-ggsave(pv, filename=fo, width=8, height=4.5)
+ggsave(p, filename=fo, width=4, height=8)
+fo = glue("{dirf}/sf11a.rds")
+saveRDS(p, fo)
 #}}}
 #}}}
 
-#{{{ log2fc heatmap of DEGs in 1/2 genotypes
+#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf11b
+#{{{ preprocess
 drcs = c('up','down')
 ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     select(Genotype, cond, drc,  gids) %>%
@@ -399,7 +410,7 @@ ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     mutate(nDE = B73+Mo17+W22) %>%
     mutate(tag = str_c(as.integer(B73),as.integer(Mo17),as.integer(W22))) %>%
     select(-B73,-Mo17,-W22)
-
+#}}}
 tf = deg48 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
     filter(cond2 == 'time0', Genotype %in% gts3) %>%
     select(Genotype, cond, ds) %>% unnest(ds) %>%
@@ -419,6 +430,7 @@ ty2 = ty %>%
 ty2 %>% count(cond, drc, nDE) %>% print(n=4)
 #}}}
 
+#{{{ heatmap plot - sf11b
 fmax=5
 drc = 'up'
 tp = ty2 %>% filter(drc==!!drc) %>%
@@ -443,10 +455,13 @@ p1 = ggplot() +
     facet_wrap(~cond, scale='free',nrow=1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            panel.border=F, xtick=T, xtext=T, legend.vjust=-.4,
-           margin=c(1,.1,.1,0), strip.style = 'dark') +
+           margin=c(1,.1,.1,0)) +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
-fp = sprintf('%s/12.heatmap.pdf', dirw)
+fp = glue("{dirw}/12.heatmap.pdf")
 ggsave(p1, file = fp, width = 8, height = 8)
+fo = glue("{dirf}/sf11b.rds")
+saveRDS(p1, fo)
+#}}}
 
 #{{{ old
 tp0 = td3 %>% filter(!is.na(BMW))
@@ -534,7 +549,7 @@ td = deg12 %>%
     mutate(deg = factor(deg, levels=tx$deg)) %>%
     mutate(log2fc.q = map_dbl(log2fc.q, set_bound, minV=-fmax, maxV=fmax)) %>%
     mutate(log2fc.t = map_dbl(log2fc.t, set_bound, minV=-fmax, maxV=fmax)) %>%
-    mutate(cond = str_c(stress,Timepoint,qry,tgt, sep="_")) #%>%
+    mutate(cond = glue("{stress}_{Timepoint}h: {qry} vs {tgt}")) #%>%
     #filter(! (deg=='0' & ddeg == 'no-diff-deg'))
 td %>% count(qry,tgt,stress,Timepoint,ddrc,drc.q,drc.t) %>%
     print(n=50)
@@ -547,14 +562,15 @@ tp = td %>% filter(ddrc != 0, deg != 'A=B=')
 linecol = 'azure3'; lty = 'solid'
 cols9 = brewer.pal(10, "Paired")[c(2,4,6,8,9,7,5,3,1)]
 cols9 = pal_npg()(10)[c(1:7,10)]
-#{{{ scatter plot
+
+#{{{ scatter plot - sf12a
 p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
     geom_point(aes(color=deg, shape='k'), size=1.5) +
-    scale_x_continuous(name='Genotype (A) log2fc', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Genotype (B) log2fc', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name='Genotype (A) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Genotype (B) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='DEG status:', values=cols9) +
     scale_shape_manual(name='Genotype Effect:', labels=c("negative","positive"), values=c(1,4)) +
     facet_wrap(~cond, ncol=3) +
@@ -562,14 +578,16 @@ p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1), shape=F)
-fp = sprintf('%s/15.ddeg.pdf', dirw)
+fp = glue("{dirw}/15.ddeg.pdf")
 ggsave(p, file = fp, width = 8, height = 9.5)
+fo = glue("{dirf}/sf12a.rds")
+saveRDS(p, fo)
 #}}}
-#{{{ bar plot showing counts
+#{{{ bar plot showing counts - sf12b
 tp1 = tp %>% count(cond, x, deg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
-p3b = ggplot(tp1) +
+p = ggplot(tp1) +
     geom_bar(aes(x=x, y=n, fill=deg), width=.8, stat='identity') +
     geom_text(data=tp1s,aes(x=11,y=500,label=lab), size=3, vjust=.5,hjust=1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
@@ -581,8 +599,50 @@ p3b = ggplot(tp1) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
-fp = sprintf('%s/15.ddeg.cnt.pdf', dirw)
-ggsave(p3b, file = fp, width = 6, height = 6)
+fp = glue("{dirw}/15.ddeg.cnt.pdf")
+ggsave(p, file = fp, width = 6, height = 6)
+fo = glue("{dirf}/sf12b.rds")
+saveRDS(p, fo)
+#}}}
+
+#{{{ scatter plot fig 5b
+tp1 = tp %>% filter(cond == "Cold_25h: Mo17 vs B73")
+p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
+    geom_vline(xintercept=0, linetype=lty, color=linecol) +
+    geom_hline(yintercept=0, linetype=lty, color=linecol) +
+    geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
+    geom_point(aes(color=deg, shape='k'), size=1.5) +
+    scale_x_continuous(name='Genotype (A) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Genotype (B) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_color_manual(name='DEG status:', values=cols9) +
+    scale_shape_manual(name='Genotype Effect:', labels=c("negative","positive"), values=c(1,4)) +
+    facet_wrap(~cond, ncol=3) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
+           legend.vjust = -.4, legend.box='h',
+           xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
+    guides(color=guide_legend(nrow=1), shape=F)
+fo = glue("{dirf}/f5b.rds")
+saveRDS(p, fo)
+#}}}
+#{{{ bar plot fig 5c
+tp1 = tp %>% count(cond, x, deg) %>%
+    filter(cond == "Cold_25h: Mo17 vs B73")
+tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
+    mutate(lab=sprintf("N=%d", n))
+p = ggplot(tp1) +
+    geom_bar(aes(x=x, y=n, fill=deg), width=.8, stat='identity') +
+    geom_text(data=tp1s,aes(x=11,y=400,label=lab), size=3, vjust=.5,hjust=1) +
+    geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
+    scale_x_continuous(breaks=tx$x, labels=tx$deg, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
+    scale_fill_manual(name='DEG status:', values=cols9) +
+    facet_wrap(~cond, ncol=1, scale='free') +
+    otheme(legend.pos='none', legend.dir='h', legend.title=T,
+           legend.vjust = -.4, legend.box='h',
+           xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
+fo = glue("{dirf}/f5c.rds")
+saveRDS(p, fo)
 #}}}
 
 #{{{ plot mean CPM for each category of genes
@@ -715,7 +775,7 @@ fo = file.path(dirw, '05.deg.tsv')
 write_tsv(to, fo)
 #}}}
 
-________BELOW ARE DEPRECATED_________
+######## BELOW ARE DEPRECATED ########
 #{{{ alluvial
 require(ggalluvial)
 

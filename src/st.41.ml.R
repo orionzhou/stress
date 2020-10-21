@@ -185,172 +185,186 @@ maximize_f1 <- function(pPred, truth) {
 #}}}
 
 ######## MODEL EVALUATION ########
-#{{{ read models
-tag = 'mod4_288_c2'
-tag = 'mod7_252'
-fi = glue("{dirw}/01_models/{tag}.tsv")
-th = read_tsv(fi)
-fi = glue("{dirw}/01_models/{tag}.rds")
-ml = readRDS(fi)
-ml1 = ml %>% select(did=sid, perm, metric) %>%
-  unnest(metric) %>% spread(metric, estimate) %>% rename(f1=f_meas) %>%
-  inner_join(th, by='did')
-tb = ml %>% filter(!is.na(fit)) %>% select(did=sid,perm,fit,metric) %>%
-  inner_join(th, by='did')
+#{{{ functions to read models
+get_model_fits <- function(tag, dirw) {
+  #{{{
+  fi = glue("{dirw}/01_models/{tag}.tsv")
+  th = read_tsv(fi)
+  fi = glue("{dirw}/01_models/{tag}.rds")
+  ml = readRDS(fi)
+  ml %>% filter(!is.na(fit)) %>% select(did=sid,perm,fit,metric) %>%
+    inner_join(th, by='did')
+  #}}}
+}
+get_model_metrics <- function(tag, dirw) {
+  #{{{
+  fi = glue("{dirw}/01_models/{tag}.tsv")
+  th = read_tsv(fi)
+  fi = glue("{dirw}/01_models/{tag}.rds")
+  ml = readRDS(fi)
+  ml1 = ml %>% select(did=sid, perm, metric) %>%
+    unnest(metric) %>% spread(metric, estimate) %>%
+    rename(f1=f_meas, auroc=roc_auc, auprc=pr_auc) %>%
+    inner_join(th, by='did')
+  ml1
+  #}}}
+}
+
+tm = tibble(tag = c('mod4_288_c2','mod7_252')) %>%
+  mutate(x = map(tag, get_model_metrics, dirw=dirw)) %>%
+  select(-mid0) %>% replace_na(list(mod='zoops'))
+fm = file.path(dirw, '01.model.metrics.rds')
+saveRDS(tm, fm)
+
+fm = file.path(dirw, '01.model.metrics.rds')
+tm = readRDS(fm)
+  #{{{ prepare tm for plot
+  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
+  nfeas = c("top30",'top50','top100')
+  mods = c("zoops",'anr')
+  epis = c("All Sequence", "UMR")
+  notes = unique(tm$note)
+  bat_notes = crossing(bat=bats, note=notes) %>%
+    mutate(bat_note = str_c(bat, note, sep=': ')) %>%
+    mutate(bat=factor(bat, levels=bats)) %>%
+    mutate(note=factor(note, levels=notes)) %>%
+    arrange(bat, note) %>% pull(bat_note)
+  tm = tm %>%
+    mutate(epi = ifelse(epi=='raw', 'All Sequence', 'UMR')) %>%
+    mutate(bat = factor(bat, levels=bats)) %>%
+    mutate(note = as_factor(note)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(mod = factor(mod, levels=mods)) %>%
+    arrange(tag, bat, note, bin, epi, nfea, mod) %>%
+    mutate(bat_note = str_c(bat, note, sep=': ')) %>%
+    mutate(bat_note = factor(bat_note, levels=bat_notes)) %>%
+    mutate(bat_mod = as_factor(str_c(bat, mod, sep=': '))) %>%
+    mutate(bat_epi = as_factor(str_c(bat, epi, sep=': '))) %>%
+    mutate(epi_nfea = as_factor(str_c(epi, nfea, sep=': ')))
+  #}}}
+tm1 = tm %>% filter(tag == 'mod4_288_c2')
+tm2 = tm %>% filter(tag == 'mod7_252')
+
 #}}}
 
 #{{{ eval model performance in B
-plot_model_perf <- function(ti, metric='f1') {
+plot_model_heatmap <- function(ti, metric='f1', pnl='bat_mod') {
   #{{{ plot
-  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
-  nfeas = c("top30",'top50','top100')
-  tp = ti %>%# filter(mod=='zoops') %>%
+  tp = ti %>%# filter(tag == 'mod4_288_c2') %>%
     mutate(score = get(metric)) %>%
-    group_by(bat, note, bin, epi, nfea, mod) %>%
+    filter(!is.na(score)) %>%
+    mutate(x = bin, y = epi_nfea, pnl = get(pnl)) %>%
+    group_by(bat, note, bin, epi, nfea, mod, x, y, pnl) %>%
     summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
-    #summarise(score=median(roc_auc)) %>% ungroup() %>%
-    mutate(bat = factor(bat, levels=bats)) %>%
-    mutate(note = factor(note)) %>%
-    mutate(nfea = factor(nfea, levels=nfeas)) %>%
-    mutate(bin = factor(bin, levels=bins)) %>%
-    mutate(epi = factor(epi, levels=epis)) %>%
-    mutate(bat_note_mod = fct_cross(bat, note, mod, sep=': ')) %>%
-    mutate(epi_nfea = fct_cross(nfea, epi, sep=':')) %>%
-    mutate(y = str_c(bat, note, nfea, sep=":")) %>%
-    mutate(x = str_c(bin, epi, sep=":")) %>%
     mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
-    mutate(lab = glue("{number(score,accuracy=.01)}")) %>%
-    filter(!is.na(score))
-  swit = (min(tp$score) + max(tp$score)) / 2
-  p = ggplot(tp, aes(x=bin,y=epi_nfea)) +
+    mutate(lab = glue("{number(score,accuracy=.01)}"))
+    #{{{
+    tp = tp %>% mutate(y = fct_rev(y))
+    swit = (min(tp$score) + max(tp$score)) / 2
+    p = ggplot(tp, aes(x=x,y=y)) +
       geom_tile(aes(fill=score), na.rm = F) +
       geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2, parse=T) +
       #geom_vline(xintercept=tpy$x, color='blue') +
       scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
       scale_y_discrete(expand=c(0,0)) +
-      scale_fill_gradientn(name='F1 score',colors=cols100v) +
+      scale_fill_gradientn(name='metric',colors=cols100v) +
       #scale_fill_viridis(name='normalized eigengene value') +
       scale_color_manual(values=c('black','white')) +
-      facet_wrap(bat_note_mod ~ ., nrow=4) +
-      otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
-             margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
+      facet_wrap(pnl ~ ., ncol=1) +
+      otheme(legend.pos='none', legend.dir='v', legend.title=F,
+             margin = c(.3,.3,.3,.3), ygrid=T,
+             strip.style='white', strip.compact=T, panel.spacing=.1,
              xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
-      theme(axis.text.x = element_text(angle=75, hjust=0, vjust=.5, size=7.5)) +
+      theme(axis.text.x = element_text(angle=0, hjust=.5, vjust=.5, size=7)) +
       theme(axis.text.y = element_text(size=7)) +
       #theme(axis.text.y = element_markdown(size=7.5)) +
       guides(color=F)
-  p
+    #}}}
+  tit = str_to_upper(ifelse(metric=='f1','f-score',metric))
+  p + ggtitle(tit)
   #}}}
 }
-plot_model_perf1 <- function(ti, metric='f1') {
-  #{{{ plot
-  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
-  nfeas = c("top30",'top50','top100')
-  tp = ti %>%
-    filter(nfea == 'top30', mod=='zoops') %>%
+plot_model_barplot <- function(ti, metric='f1', x='bin', pnl='bat_mod', tit=F) {
+  #{{{
+  ymax = ifelse(x=='bat_note', .95, .8)
+  tp = ti %>%# filter(tag == 'mod4_288_c2') %>%
     mutate(score = get(metric)) %>%
-    group_by(bat, note, bin, epi, nfea, mod) %>%
-    summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
-    #summarise(score=median(roc_auc)) %>% ungroup() %>%
-    mutate(bat = factor(bat, levels=bats)) %>%
-    mutate(note = factor(note)) %>%
-    mutate(nfea = factor(nfea, levels=nfeas)) %>%
-    mutate(bin = factor(bin, levels=bins)) %>%
-    mutate(epi = factor(epi, levels=epis)) %>%
-    group_by(bat, note, bin, epi, nfea, mod) %>%
-    mutate(bat_note_mod = fct_cross(bat, note, mod, sep=': ')) %>%
-    mutate(bat_note_epi = str_c(bat, note, epi, sep=': ')) %>%
-    mutate(bat_note_epi = as_factor(bat_note_epi)) %>%
-    mutate(epi_nfea = fct_cross(nfea, epi, sep=':')) %>%
-    mutate(y = str_c(bat, note, nfea, sep=":")) %>%
-    mutate(x = str_c(bin, epi, sep=":")) %>%
-    mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
-    mutate(lab = glue("{number(score,accuracy=.01)}")) %>%
-    filter(!is.na(score))
-  tp = tp %>% mutate(bat_note_epi = factor(bat_note_epi, levels=rev(levels(tp$bat_note_epi))))
-  swit = (min(tp$score) + max(tp$score)) / 2
-  p = ggplot(tp, aes(x=bin,y=bat_note_epi)) +
-      geom_tile(aes(fill=score), na.rm = F) +
-      geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2, parse=T) +
-      #geom_vline(xintercept=tpy$x, color='blue') +
-      scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
-      scale_y_discrete(expand=c(0,0)) +
-      scale_fill_gradientn(name='F1 score',colors=cols100v) +
-      #scale_fill_viridis(name='normalized eigengene value') +
-      scale_color_manual(values=c('black','white')) +
-      #facet_wrap(bat_note_mod ~ ., nrow=4) +
-      otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
-             margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
-             xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
-      theme(axis.text.x = element_text(angle=75, hjust=0, vjust=.5, size=7.5)) +
-      theme(axis.text.y = element_text(size=7)) +
-      #theme(axis.text.y = element_markdown(size=7.5)) +
+    filter(!is.na(score)) %>%
+    mutate(x = get(x), pnl = get(pnl)) %>%
+    group_by(bat, note, bin, epi, nfea, mod, x, pnl) %>%
+    summarise(sd = sd(score), score = mean(score)) %>% ungroup()
+    #{{{
+    pd = position_dodge(width=.9)
+    p = ggplot(tp, aes(x=x,y=score)) +
+      geom_col(aes(fill = epi), position=pd, width=.6) +
+      geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=epi), width=.2, size=.3, position=pd) +
+      scale_x_discrete(expand=expansion(mult=c(.1,.1))) +
+      scale_y_continuous(name=str_to_upper(metric), expand=expansion(mult=c(0,.05))) +
+      coord_cartesian(ylim= c(.5, ymax)) +
+      scale_fill_npg(name='') +
+      scale_color_manual(values=c('black','black')) +
+      facet_wrap(pnl ~ ., scale='free_y', ncol=1) +
+      otheme(legend.pos='none', legend.dir='v', legend.box='v',legend.title=F,
+             margin = c(.3,.3,.3,.3), ygrid=T,
+             strip.style='white', strip.compact=F, panel.spacing=.1,
+             xtick=T, ytick=T, ytitle=T, xtext=T, ytext=T) +
+      theme(axis.text.x=element_text(angle=0, hjust=.5, vjust=.5, size=7)) +
+      theme(axis.text.y=element_text(size=7)) +
       guides(color=F)
-  p
-  #}}}
-}
-plot_model_perf2 <- function(ti, metric='f1') {
-  #{{{ plot
-  bins = c("-500","+500","+/-500","-2k","+2k","+/-2k")
-  nfeas = c("top30",'top50','top100')
-  tp = ti %>%
-    filter(nfea == 'top30', bin=='+/-2k') %>%
-    mutate(score = get(metric)) %>%
-    group_by(bat, note, bin, epi, nfea) %>%
-    summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
-    #summarise(score=median(roc_auc)) %>% ungroup() %>%
-    mutate(bat = factor(bat, levels=bats)) %>%
-    mutate(note = factor(note)) %>%
-    mutate(nfea = factor(nfea, levels=nfeas)) %>%
-    mutate(bin = factor(bin, levels=bins)) %>%
-    mutate(epi = factor(epi, levels=epis)) %>%
-    group_by(bat, note, bin, epi, nfea) %>%
-    mutate(bat_note = fct_cross(bat, note, sep=': ')) %>%
-    mutate(bat_note_epi = str_c(bat, note, epi, sep=': ')) %>%
-    mutate(bat_note_epi = as_factor(bat_note_epi)) %>%
-    mutate(epi_nfea = fct_cross(nfea, epi, sep=':')) %>%
-    mutate(y = str_c(bat, note, nfea, sep=":")) %>%
-    mutate(x = str_c(bin, epi, sep=":")) %>%
-    mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
-    mutate(lab = glue("{number(score,accuracy=.01)}")) %>%
-    filter(!is.na(score))
-  swit = (min(tp$score) + max(tp$score)) / 2
-  tp = mutate(tp, epi=factor(epi, levels=rev(epis)))
-  p = ggplot(tp, aes(x=bat_note,y=epi)) +
-      geom_tile(aes(fill=score), na.rm = F) +
-      geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2, parse=T) +
-      #geom_vline(xintercept=tpy$x, color='blue') +
-      scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
-      scale_y_discrete(expand=c(0,0)) +
-      scale_fill_gradientn(name='F1 score',colors=cols100v) +
-      #scale_fill_viridis(name='normalized eigengene value') +
-      scale_color_manual(values=c('black','white')) +
-      #facet_wrap(bat_note_mod ~ ., nrow=4) +
-      otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
-             margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
-             xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
-      theme(axis.text.x = element_text(angle=75, hjust=0, vjust=.5, size=7.5)) +
-      theme(axis.text.y = element_text(size=7)) +
-      #theme(axis.text.y = element_markdown(size=7.5)) +
-      guides(color=F)
+    #}}}
+  if(x=='bat_note')
+    p = p +
+      theme(axis.text.x=element_text(angle=25, hjust=1, vjust=1, size=7.5))
+  if(tit) {
+    tit1 = str_to_upper(ifelse(metric=='f1','f-score',metric))
+    p = p + ggtitle(tit)
+  }
   p
   #}}}
 }
 
-metric='f1'
-fo = glue("{dirw}/08.{metric}.pdf")
-p = plot_model_perf2(ml1, metric=metric)
-p %>% ggexport(filename=fo, width=6, height=6)
+#{{{ heatmap: sf09
+pa = plot_model_heatmap(tm1, metric='f1', pnl='bat_mod')
+pb = plot_model_heatmap(tm1, metric='auroc', pnl='bat_mod') +
+  theme(plot.margin = margin(.3, .3, .3, 0, "lines")) +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+fo = glue("{dirf}/sf09a.pdf")
+ggarrange(pa, pb, nrow=1, ncol=2,
+          labels = c(), widths=c(2,1.4)) %>%
+ggexport(filename=fo, width=6, height=8)
 
-p = plot_model_perf1(ml1, metric='f1')
-saveRDS(p, glue("{dirf}/f.4a.rds"))
-p = plot_model_perf1(ml1, metric='roc_auc')
-saveRDS(p, glue("{dirf}/f.4b.rds"))
+pa = plot_model_heatmap(tm2, metric='f1', pnl='bat_note')
+pb = plot_model_heatmap(tm2, metric='auroc', pnl='bat_note') +
+  theme(plot.margin = margin(.3, .3, .3, 0, "lines")) +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+fo = glue("{dirf}/sf09b.pdf")
+ggarrange(pa, pb, nrow=1, ncol=2,
+          labels = c(), widths=c(2,1.4)) %>%
+ggexport(filename=fo, width=6, height=7)
+#}}}
 
-p = plot_model_perf2(ml1, metric='f1')
-saveRDS(p, glue("{dirf}/f.4c.rds"))
-p = plot_model_perf2(ml1, metric='roc_auc')
-saveRDS(p, glue("{dirf}/f.4d.rds"))
+#{{{ f4 - barplot
+tm3a = tm1 %>% filter(nfea=='top30', mod=='zoops')
+#pa = plot_model_barplot(tm3a, metric='f1', pnl='bat_note')
+pb = plot_model_barplot(tm3a, metric='auroc', pnl='bat_note') +
+  o_margin(.2,.2,.2,.2)
+#
+tm3b = tm2 %>% filter(nfea=='top30', bin=='+/-2k', mod=='zoops')
+#pc = plot_model_barplot(tm3b, metric='f1', x='bat_note', pnl='bin')
+pd = plot_model_barplot(tm3b, metric='auroc', x='bat_note', pnl='bin') +
+  o_margin(0,.2,.2,.2) +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+#
+fo = glue("{dirf}/f4.pdf")
+pab = ggarrange(pa, pb, nrow=1, ncol=2, widths=c(2,1.8))
+pcd = ggarrange(pc, pd, nrow=1, ncol=2, widths=c(2,1.8))
+ggarrange(pb, pd, nrow=2, ncol=1,
+          labels = LETTERS[1:2], heights=c(2,1)) %>%
+ggexport(filename=fo, width=4, height=6)
+#}}}
+
 #}}}
 
 #{{{ evaluate model performance in M/W
@@ -501,6 +515,7 @@ p %>% ggexport(filename=fo, width=6, height=6)
 #}}}
 
 smap = c("+"=1,"-"=-1,"="=0)
+smap2 = c('1'='+','-1'="-",'0'="=")
 get_acc2 <- function(ti) {
   #{{{
   ti %>%
@@ -517,10 +532,72 @@ pd3 = pd2 %>% mutate(pred=as.integer(as.character(pred))) %>%
 to2 = td2 %>%
   inner_join(pd3, by=c('cond','qry'='gt','gid')) %>% rename(qPred=pred) %>%
   inner_join(pd3, by=c('bat','cond','drc','note','tgt'='gt','gid')) %>% rename(tPred=pred) %>%
-  group_by(bat,cond,drc,note,qry,tgt,time) %>% nest() %>% ungroup() %>%
-  rename(ti=data) %>%
-  mutate(acc = map(ti, get_acc2)) %>%
-  select(-ti) %>% unnest(acc)
+  #group_by(bat,cond,drc,note,qry,tgt,time) %>% nest() %>% ungroup() %>%
+  mutate(pred1 = smap2[as.character(qPred)]) %>%
+  mutate(pred2 = smap2[as.character(tPred)]) %>%
+  mutate(pred = as.character(glue("A{pred1}B{pred2}"))) %>%
+  count(bat,cond,drc,note,qry,tgt,time, st, pred)
+
+#{{{ de acc bar plot
+tp = to2 %>% filter(tgt=='B73') %>%
+  filter((drc=='up' & st %in% c("dA+B+",'nA+B+','dA+B=','dA=B+')) |
+         (drc=='down' & st %in% c('dA-B-','nA-B-','dA-B=', 'dA=B-'))) %>%
+  mutate(st = as.character(st)) %>%
+  mutate(st = ifelse(str_detect(st, 'A\\+B\\+'),'A+B+', st)) %>%
+  mutate(st = ifelse(str_detect(st, 'A\\-B\\-'),'A-B-', st)) %>%
+  mutate(st = str_replace(st, 'd', '')) %>%
+  mutate(st = str_replace(st, 'n', '')) %>%
+  mutate(bat = factor(bat, levels=bats)) %>%
+  mutate(time = as_factor(time)) %>%
+  mutate(note = as_factor(note)) %>%
+  mutate(pred = as_factor(pred)) %>%
+  group_by(bat,cond,drc,note,st,pred) %>% summarise(n=sum(n)) %>% ungroup() %>%
+  rename(tag1=st, tag2=pred, pnl=bat)
+preds1 = c('A=B=',"A+B=","A=B+","A+B+")
+preds2 = c('A=B=',"A-B=","A=B-","A-B-")
+tp1 = tp %>% filter(drc == 'up') %>% mutate(tag2=factor(tag2,levels=preds1))
+tp2 = tp %>% filter(drc == 'down') %>% mutate(tag2=factor(tag2,levels=preds2))
+
+plot_dde_bar <- function(ti) {
+#{{{
+tags1 = levels(ti$tag1)
+tags2 = levels(ti$tag2)
+sep = ifelse(T, " ", "\n")
+col1 = 'black'; col2 = 'black'
+tp = ti %>%
+    arrange(tag1, desc(tag2)) %>%
+    group_by(pnl, tag1) %>% mutate(n_tot = sum(n)) %>%
+    mutate(prop = n/n_tot) %>%
+    mutate(y = cumsum(prop)) %>%
+    mutate(y = y - prop/2) %>%
+    mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
+    ungroup() %>%
+    mutate(tag2 = factor(tag2, levels=tags2))
+tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
+fillcols = brewer.pal("Accent",n=4)[c(2,1,4,3)]
+p = ggplot(tp) +
+    geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
+    geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
+    geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
+    scale_x_discrete(name='Observed Status', expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='Number of Genes', expand=expansion(mult=c(0,.05))) +
+    scale_fill_manual(name="Prediction", values=fillcols) +
+    facet_wrap(~pnl, nrow=1) +
+    otheme(legend.pos='right',legend.dir='v',
+           legend.title=T, legend.vjust=-.3, panel.spacing=.2,
+           strip.style='white',
+           xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
+           margin = c(.3, .3, .3, .3))
+#}}}
+}
+
+pa = plot_dde_bar(tp1)
+pb = plot_dde_bar(tp2)
+fo = sprintf("%s/13.dde.bar.pdf", dirw)
+ggarrange(pa, pb, nrow=2, ncol=1,
+          labels = LETTERS[1:2], heights=c(1,1)) %>%
+ggexport(filename=fo, width=5, height=7)
+#}}}
 
 #{{{ de acc plot
 tp = to2 %>% rename(score=acc) %>%
@@ -560,54 +637,6 @@ p %>% ggexport(filename=fo, width=14, height=5)
 #}}}
 
 ######## BELOW ARE DEPRECATED ########
-#{{{ model performance [old]
-readRDS2 <- function(fi) if(file.exists(fi)) readRDS(fi) else tibble()
-x = tibble(i=1:54) %>% mutate(fi = sprintf("%s/10_rf/%d.rds", dirw, i)) %>%
-  mutate(to = map(fi, readRDS2)) %>%
-  unnest(to) %>% select(-fi,-i)
-
-bins=c("-500","+500","+/-500","-2k","+2k","+/-2k")
-epis=c("raw",'umr')
-tpl = crossing(bin=bins,epi=epis) %>% mutate(bin_epi=str_c(bin,epi,sep=':')) %>%
-  mutate(bin=factor(bin,levels=bins), epi=factor(epi,levels=epis)) %>%
-  arrange(bin,epi)
-tp = x %>% filter(epi != 'pos') %>%
-  arrange(bat_mid,bin,epi) %>%
-  mutate(bin_epi = str_c(bin, epi, sep=':')) %>%
-  mutate(bin_epi = factor(bin_epi, levels=tpl$bin_epi)) %>%
-  select(bat_mid, bin, epi, bin_epi, metric) %>% unnest(metric) %>% filter(metric=='f_meas')
-tps = tp %>% group_by(bat_mid, bin_epi) %>%
-  summarise(y = median(estimate), ymin = quantile(estimate,.25),
-            ymax=quantile(estimate, .75)) %>% ungroup()
-
-pv = ggplot(tp) +
-    geom_violin(aes(x=bin_epi, y=estimate, fill=epi), trim=T, alpha=.8) +
-    #geom_jitter(aes(x=bin_epi, y=estimate), color='darkgray') +
-    geom_pointrange(data=tps, aes(x=bin_epi, y=y,ymin=ymin, ymax=ymax)) +
-    scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(limits=c(.5,1), expand=expansion(mult=c(0,.01))) +
-    scale_fill_manual(values=pal_jco()(8)) +
-    facet_wrap(~bat_mid, scales='free', ncol=1) +
-    otheme(legend.pos='none', strip.style='white',
-           xtext=T, xtick=T, ytext=T, ytick=T, ygrid=T) +
-    theme(axis.text.x = element_text(angle = 20, hjust=.8, vjust=1.1)) +
-    guides(color=F)
-fo = file.path(dirw, 'tt.pdf')
-ggsave(pv, filename=fo, width=8, height=8)
-
-ti2 = x %>%
-  mutate(nfeature = map_dbl(fit, pluck, 'fit','num.independent.variables')) %>%
-  select(bat_mid, bin, epi, nfeature)
-to = x %>% select(-metric) %>% rename(metric=metricB) %>%
-  select(bat_mid, bin, epi, metric) %>% unnest(metric) %>%
-  spread(metric, estimate) %>%
-  inner_join(ti2, by=c('bat_mid','bin','epi')) %>%
-  select(bat_mid, bin, epi, nfeature, sens, spec, accuracy, precision, f1=f_meas) %>%
-  arrange(bat_mid, bin, epi)
-fo = file.path(dirw, '11.tsv')
-write_tsv(to, fo)
-#}}}
-
 #{{{ test python script from shiulab/ML_workshop
 tt = r %>%
   filter(bat_mid=='cold_up:m21',bin=='2k',epi=='umr') %>%

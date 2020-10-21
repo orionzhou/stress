@@ -60,7 +60,7 @@ Figure 1. (A) t-SNE clustering of samples from the HY experiment under control, 
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf2.pdf){width=100%}
+![]($st/data/95_figures/plots/sf02.pdf){width=100%}
 
 Figure S2. Hierarchical (A) and t-SNE (B) clustering of all samples from the TC experiment under control, cold and heat conditions.
 
@@ -71,13 +71,13 @@ Figure S2. Hierarchical (A) and t-SNE (B) clustering of all samples from the TC 
 Figure 2. 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf3.pdf){width=100%}
+![]($st/data/95_figures/plots/sf03.pdf){width=100%}
 
 
 Figure S3. 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf4.pdf){width=80%}
+![]($st/data/95_figures/plots/sf04.pdf){width=80%}
 
 
 Figure S4.  Transcription Factor Family Enrichment in Select DEG Modules. Enrichment for transcription factor was determined in both the cold_up (A) and heat_up (B) bulk and module-assigned differentially expressed gene lists. Numbers in parentheses indicate group size, while numbers in tiles indicate how many DEGs of specific transcription factor families were identified in each module. Enrichment was determined through hypergeometric testing (p < 0.05), and enrichment was not considered for modules with fewer than 3 TFs in a given family. Transcription factor family assignments were pulled from Grassius TFDB (ref).
@@ -86,7 +86,7 @@ Figure S4.  Transcription Factor Family Enrichment in Select DEG Modules. Enrich
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf5.pdf){width=80%}
+![]($st/data/95_figures/plots/sf05.pdf){width=80%}
 
 Figure S5. Erika's figure
 
@@ -98,22 +98,45 @@ Figure 3.
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf6.pdf){width=90%}
+![]($st/data/95_figures/plots/sf06.pdf){width=90%}
 
 Figure S6. 
 
 
 \pagebreak
-![]($st/data/95_figures/plots/sf7.pdf){width=100%}
+![]($st/data/95_figures/plots/sf07.pdf){width=100%}
 
 Figure S7. 
 
 
 \pagebreak
-![]($st/data/95_figures/plots/f4.pdf){width=80%}
+![]($st/data/95_figures/plots/f4.pdf){width=70%}
 
 Figure 4. 
 
+
+\pagebreak
+![]($st/data/95_figures/plots/f5.pdf){width=100%}
+
+Figure 5. 
+
+
+\pagebreak
+![]($st/data/95_figures/plots/sf11.pdf){width=100%}
+
+Figure S11. 
+
+
+\pagebreak
+![]($st/data/95_figures/plots/sf12.pdf){width=100%}
+
+Figure S12. 
+
+
+\pagebreak
+![]($st/data/95_figures/plots/sf13.pdf){width=100%}
+
+Figure S13. 
 
 
 
