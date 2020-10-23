@@ -593,7 +593,8 @@ p = ggplot(tp) +
 
 pa = plot_dde_bar(tp1)
 pb = plot_dde_bar(tp2)
-fo = sprintf("%s/13.dde.bar.pdf", dirw)
+fo = glue("{dirf}/f6.pdf")
+#sprintf("%s/13.dde.bar.pdf", dirw)
 ggarrange(pa, pb, nrow=2, ncol=1,
           labels = LETTERS[1:2], heights=c(1,1)) %>%
 ggexport(filename=fo, width=5, height=7)

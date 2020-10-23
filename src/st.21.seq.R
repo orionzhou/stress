@@ -1,8 +1,13 @@
 source('functions.R')
 dirw = file.path(dird, '21_seq')
+setwd(dirw)
 
 #{{{ create CRE regions
-tssB = get_tss('Zmays_B73')
+fi = glue("{dirw}/regions.xlsx")
+tr = read_xlsx(fi) %>% mutate(bin=as_factor(bin))
+bins = levels(tr$bin)
+epis = c('raw','umr','acrL','acrE')
+tssB = get_tss_tts('Zmays_B73')
 get_coords <- function(tss, srd, opt) {
     #{{{
     offu=0; offd=0
@@ -37,15 +42,16 @@ get_coords <- function(tss, srd, opt) {
     #}}}
 }
 
-tt = tssB %>% crossing(bin = bins) %>%
-    mutate(coord=pmap(list(pos,srd,bin), get_coords)) %>%
-    mutate(pstart = map_dbl(coord, 'start')) %>%
-    mutate(pend = map_dbl(coord, 'end')) %>%
+tt = tssB %>% crossing(tr) %>%
+    mutate(pos = ifelse(opt=='tts', tts, tss)) %>%
+    mutate(start = pos, end = pos + 1) %>%
+    mutate(start = ifelse(srd=='-', pos-offd, pos-offu)) %>%
+    mutate(end = ifelse(srd=='-', pos+offu, pos+offd)) %>%
     inner_join(gcfg$chrom[,c("chrom",'size')], by='chrom') %>%
-    mutate(pstart = pmax(0, pstart), pend=pmin(pend, size)) %>%
-    select(chrom, start=pstart,end=pend, srd, gid, bin) %>%
+    mutate(start = pmax(0, start), pend=pmin(end, size)) %>%
+    select(chrom, start, end, srd, gid, bin) %>%
     arrange(chrom,start,end)
-tt %>% mutate(size=end-start) %>% count(size)
+tt %>% mutate(size=end-start) %>% count(bin,size)
 
 tp = tt
 tu = read_regions('umr')
@@ -66,7 +72,7 @@ tp = rbind(tp0, tp1, tp2, tp3) %>%
 tps = tp %>% group_by(bin,epi,gid) %>% summarise(size=sum(size)) %>% ungroup() %>%
     filter(size >= bp_min) %>% select(-size)
 tp = tp %>% inner_join(tps, by=c('bin','epi','gid')) %>%
-    mutate(sid = sprintf("s%06d", 1:n()))
+    mutate(sid = sprintf("s%07d", 1:n()))
 tp %>%
     group_by(bin,epi,gid) %>% summarise(size=sum(size)) %>% ungroup() %>%
     group_by(bin,epi) %>%
@@ -76,28 +82,29 @@ tp %>%
         q95 = quantile(size, .95)) %>% ungroup() %>% print(n=40)
 
 to = tp %>% mutate(score=1) %>% select(chrom,start,end,sid,score,srd)
-fo = file.path(dirw, '03.bed')
+fo = glue("{dirw}/03.bed")
 write_tsv(to, fo, col_names = F)
-#bedtools getfasta -fi $ref/10.fasta -tab -bed 03.bed -fo 03.tsv -nameOnly -s
-##fasta.py cleanid tmp.fas >05.cre.fas
+#system("bedtools getfasta -fi $ref/10.fasta -tab -bed 03.bed -fo 03.tsv -nameOnly -s")
+####system("fasta.py cleanid tmp.fas >05.cre.fas")
 
 fs = file.path(dirw, '03.tsv')
-ts = read_tsv(fs, col_names=c('sid','seq'))
-ts2 = ts %>% mutate(sid = str_replace(sid, '\\(.*\\)', ''))
+ts = read_tsv(fs, col_names=c('sid','seq')) %>%
+    mutate(sid = str_replace(sid, '\\(.*\\)', ''))
 
-tl = tp %>% inner_join(ts2, by='sid')
+tl = tp %>% inner_join(ts, by='sid')
+gap = str_c(rep("N",10), collapse='')
 tl1 = tl %>% filter(srd == '+') %>% arrange(bin, epi, gid, chrom, start) %>%
     group_by(bin,epi,gid) %>%
-    summarise(size=sum(size), nseg=n(), seq=str_c(seq, collapse='NNNNN')) %>%
+    summarise(size=sum(size), nseg=n(), seq=str_c(seq, collapse=gap)) %>%
     ungroup()
 tl2 = tl %>% filter(srd == '-') %>% arrange(bin, epi, gid, chrom, desc(start)) %>%
     group_by(bin,epi,gid) %>%
-    summarise(size=sum(size), nseg=n(), seq=str_c(seq, collapse='NNNNN')) %>%
+    summarise(size=sum(size), nseg=n(), seq=str_c(seq, collapse=gap)) %>%
     ungroup()
 to = rbind(tl1, tl2) %>% arrange(bin, epi, gid) %>%
     mutate(sid = sprintf("s%06d", 1:n())) %>%
     select(sid, bin, epi, gid, size, nseg, seq)
-to %>% count(bin, epi) %>% print(n=28)
+to %>% count(bin, epi) %>% spread(epi, n) %>% print(n=36)
 
 to1 = to %>% select(-seq)
 to2 = to %>% select(sid, seq)
@@ -105,9 +112,9 @@ fo = file.path(dirw, '05.cre.loc.tsv')
 write_tsv(to1, fo, col_names = T)
 fo = file.path(dirw, '05.cre.seq.tsv')
 write_tsv(to2, fo, col_names = F)
-# bioawk -t '{print ">"$1"\n"$2}' 05.cre.seq.tsv > 05.cre.fas
-# fasta.py extract 05.cre.fas s00001
-# fasta-get-markov -dna 05.cre.fas 05.cre.bg
+system("bioawk -t '{print \">\"$1\"\\n\"$2}' 05.cre.seq.tsv > 05.cre.fas")
+system("fasta.py extract 05.cre.fas s000001")
+system("fasta-get-markov -dna 05.cre.fas 05.cre.bg")
 #}}}
 
 
@@ -167,7 +174,7 @@ p = ggplot(tp, aes(x=bin_epi,y=bat_mid)) +
     guides(color = F, fill=F)
 #
 fo = sprintf("%s/07.ngene.pdf", dirw)
-p %>% ggexport(filename = fo, width = 8, height = 6)
+p %>% ggexport(filename = fo, width = 10, height = 6)
 #}}}
 
 fo = file.path(dirw, '10.rds')
@@ -204,7 +211,7 @@ tc = tc %>%
     mutate(lid = sprintf("c%02d", 1:n())) %>%
     select(lid, cond, bin,epi,bin_epi,ng,tg)
 
-tc1 = tc %>% mutate(fo = sprintf("%s/11_bg_lists/%s.txt", dirw, lid)) %>%
+tc1 = tc %>% mutate(fo = glue("{dirw}/11_bg_lists/{lid}.txt")) %>%
     mutate(sids = map(tg, 'sid')) %>%
     mutate(j = map2(sids, fo, write))
 

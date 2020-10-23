@@ -32,8 +32,6 @@ gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)
 cols100v = viridis_pal(direction=-1,option='magma')(100)
 bats = c('cold_up', 'heat_up', 'cold_down', 'heat_down')
-bins = c("-500",'+/-500','-1k','+/-1k', '-2k','+/-2k')
-epis = c('raw','umr','acrL','acrE')
 #}}}
 colbright <- function(col) {x = col2rgb(col); as.integer(.2126*x[1] + .7152*x[2] + .0722*x[3])}
 cols36 = c(pal_ucscgb()(18)[8], pal_igv()(18), pal_ucscgb()(18)[c(1:7,9:18)])
@@ -310,6 +308,23 @@ run_wgcna_pipe <- function(cid, cond, drc, opt_deg, opt_clu, optQ,
     cat(msg, '\n')
     stats = list(ng=ng,np=np,nm1=nm1,nm2=nm2)
     c(x, stats)
+    #}}}
+}
+get_tss_tts <- function(genome) {
+    #{{{
+    fi = file.path(dirg, genome, '50_annotation', '10.tsv')
+    ti = read_tsv(fi) %>%
+        filter(ttype == 'mRNA', etype == 'exon') %>%
+        mutate(start=start-1) %>%
+        group_by(gid, tid) %>%
+        summarise(chrom=chrom[1], start=min(start), end=max(end), srd=srd[1]) %>%
+        ungroup() %>% mutate(size = end-start) %>%
+        arrange(gid, desc(size)) %>%
+        group_by(gid) %>% slice(1) %>% ungroup() %>%
+        mutate(tss = ifelse(srd=='-', end, start)) %>%
+        mutate(tts = ifelse(srd=='-', start, end)) %>%
+        filter(!str_detect(gid, "^(Zeam|Zema)"))
+    ti %>% select(gid, chrom, tss, tts, srd)
     #}}}
 }
 get_tss <- function(genome) {
