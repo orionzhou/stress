@@ -38,115 +38,88 @@ xref = read_xref()
 gt = 'Zmays_B73'
 gt = 'Zmays_Mo17'
 gt = 'Zmays_W22'
+
 #{{{ prepare promoter db for B/M/W/
 diro = file.path(dirw, gt)
 if(!dir.exists(diro)) system(sprintf("mkdir -p %s", diro))
+fi = glue("{dird}/21_seq/regions.xlsx")
+tr = read_xlsx(fi) %>% filter(offu==2000,offd==2000) %>% mutate(bin=as_factor(bin))
+bins = levels(tr$bin)
+setwd(diro)
 
 #{{{ B
-tss = get_tss(gt)
+tss = get_tss_tts(gt)
 #}}}
 #{{{ M
-tssM = get_tss(gt)
+tssM = get_tss_tts(gt)
 tss = xref %>% filter(qry=='Mo17',tgt=='B73') %>%
     select(gid1,gid2,type) %>%
     inner_join(tssM, by=c('gid2'='gid')) %>%
-    select(gid=gid1,chrom,pos,srd)
+    select(gid=gid1,chrom,tss,tts,srd)
 #}}}
 #{{{ W
-tssW = get_tss(gt)
+tssW = get_tss_tts(gt)
 tss = xref %>% filter(qry=='W22',tgt=='B73') %>%
     select(gid1,gid2,type) %>%
     inner_join(tssW, by=c('gid2'='gid')) %>%
-    select(gid=gid1,chrom,pos,srd)
+    select(gid=gid1,chrom,tss,tts,srd)
 #}}}
 
-tt = tss %>% crossing(bin="+/-2k") %>%
-    mutate(coord=pmap(list(pos,srd,bin), get_coords)) %>%
-    mutate(pstart = map_dbl(coord, 'start')) %>%
-    mutate(pend = map_dbl(coord, 'end')) %>%
-    inner_join(read_chrom_size(gt), by='chrom') %>%
-    mutate(pstart = pmax(0, pstart), pend=pmin(pend, size)) %>%
-    select(chrom, start=pstart,end=pend, srd, gid, bin) %>%
-    arrange(chrom,start,end)
+#{{{ prepare tl
+chrom_size = read_chrom_size(gt)
+tt = tss %>% crossing(tr) %>%
+    mutate(pos = ifelse(str_detect(bin,"^TTS"), tts, tss)) %>%
+    mutate(start = pos, end = pos + 1) %>%
+    mutate(start = ifelse(srd=='-', pos-offd, pos-offu)) %>%
+    mutate(end = ifelse(srd=='-', pos+offu, pos+offd)) %>%
+    inner_join(chrom_size, by='chrom') %>%
+    mutate(start=pmax(0, start), end=pmin(end, size)) %>%
+    select(chrom, start, end, srd, gid, bin) %>%
+    arrange(chrom,start,end) %>%
+    mutate(sid = sprintf("s%05d", 1:n()))
+tt %>% mutate(size=end-start) %>% count(bin,size)
+tl1 = tt %>% filter(srd == '+') %>% arrange(gid, chrom, start) %>%
+    group_by(gid) %>% mutate(i = 1:n()) %>% ungroup()
+tl2 = tt %>% filter(srd == '-') %>% arrange(gid, chrom, desc(start)) %>%
+    group_by(gid) %>% mutate(i = 1:n()) %>% ungroup()
+tl = tl1 %>% bind_rows(tl2) %>% arrange(gid, i)
+#}}}
+
+#{{{ obtain segment sequence ts
+to = tt %>% mutate(score='.') %>% select(chrom,start,end,sid,score,srd)
+write_tsv(to, '01.bed', col_names = F)
+system(glue("bedtools getfasta -fi $genome/data/{gt}/10.fasta -tab -bed 01.bed -fo 01.tsv -nameOnly -s"))
+ts = read_tsv('01.tsv', col_names=c('sid','seq')) %>%
+    mutate(sid = str_replace(sid, '\\(.*\\)', ''))
+#}}}
+
+#{{{ make tl/to
+gap = str_c(rep("N",50), collapse='')
+tl0 = tl %>% inner_join(ts, by='sid') %>% arrange(gid, i) %>%
+    group_by(gid) %>%
+    summarise(size=sum(nchar(seq)), nseg=n(), seq=str_c(seq, collapse=gap)) %>%
+    ungroup() %>% mutate(size2=map_int(seq, nchar)) %>%
+    select(gid, nseg, size, size2, seq)
+tl0 %>% count(nseg, size,size2)
+#}}}
+
+to = tl0 %>% select(gid, seq)
+write_tsv(to, '02.tsv', col_names = F)
+system("bioawk -t '{print \">\"$1\"\\n\"$2}' 02.tsv > 02.fas")
+system("fasta.py extract 02.fas s1")
+system("fasta.py size 02.fas > 02.sizes")
+
+tb0 = tl %>% distinct(gid) %>% mutate(cid = 1:n())
+tb = tl %>% inner_join(tb0, by='gid') %>%
+    mutate(start2=0, end2=end-start) %>%
+    mutate(start2 = ifelse(i==2, start2+4050, start2)) %>%
+    mutate(end2=ifelse(i==2, end2+4050, end2)) %>%
+    arrange(chrom,start,end) %>%
+    select(chrom,start,end, srd, gid,start2,end2, cid)
+write_tsv(tb, '10.bed', col_names = F)
 #
-bp_min1 = 50; bp_min = 100
-tp = tt %>%
-    mutate(size=end-start) %>%
-    filter(size >= bp_min1)
-
-to = tp %>% mutate(score='.') %>% select(chrom,start,end,gid,score,srd)
-fo = file.path(diro, '01.bed')
-write_tsv(to, fo, col_names = F)
-# run readme.sh
-#}}}
-
-#{{{ prepare module list
-#{{{ read in
-fi = file.path(dird, "17_cluster/27.modules.rds")
-md0 = readRDS(fi)
-#
-fi = file.path(dirw, '../15_de/05.rds')
-x = readRDS(fi)
-deg48 = x$deg48; deg12 = x$deg12
-#}}}
-
-gt = 'Zmays_B73'
-gt = 'Zmays_Mo17'
-gt = 'Zmays_W22'
-
-md1 = md0 %>% filter(gt==!!gt, pick) %>% select(-gt) %>%
-    unnest(gids) %>% rename(gid=gids)
-
-fp = file.path(dirw, gt, '01.bed')
-tp = read_tsv(fp, col_names=c("chrom",'start','end','gid','score','srd')) %>%
-    select(gid,chrom,start,end,srd)
-#{{{ create background-CRE list
-tb = deg48 %>% filter(cond2=='timeM', Genotype==str_replace(gt,"^Zmays_",'')) %>%
-    select(-up, -down) %>% unnest(ds)
-tb1 = tb %>% mutate(nde = padj > .05 | abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c1')
-tb2 = tb %>% mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c2')
-tb = tb1 %>% bind_rows(tb2) %>%
-    group_by(ctag, gid, Treatment) %>%
-    summarise(n_nde = sum(nde)) %>% ungroup() %>%
-    filter(n_nde == 2) %>%
-    select(-n_nde) %>% mutate(cond = str_to_lower(Treatment)) %>%
-    select(-Treatment)
-tb %>% count(ctag, cond)
-#
-tc = tp %>% select(gid, chrom, start, end, srd) %>%
-    inner_join(tb, by='gid') %>%
-    group_by(ctag, cond) %>%
-    nest() %>% ungroup() %>%
-    mutate(ng = map_int(data, xf <- function(x) length(unique(x$gid)))) %>%
-    select(ctag, cond, ng, tg = data)
-#}}}
-
-#{{{ prepare gids for each module
-min_ng = 50
-tl = md1 %>%
-    inner_join(tp, by='gid') %>%
-    group_by(bat, mid, ng0, note, pick) %>%
-    nest() %>% ungroup() %>%
-    mutate(ng = map_int(data, xf <- function(x) length(unique(x$gid)))) %>%
-    select(bat,mid,ng0,note,  ng, pick, tg = data) %>%
-    mutate(bat=factor(bat, levels=bats)) %>%
-    #mutate(bat_mid = fct_cross(bat, mid, sep=":")) %>%
-    mutate(bat_mid=str_c(bat,mid,sep=":")) %>%
-    filter(ng >= min_ng) %>%
-    select(bat_mid,pick,note,bat,mid,ng0,ng,tg)
-y1 = tl %>% distinct(bat,mid,bat_mid) %>% mutate(bat=factor(bat, levels=bats)) %>%
-    arrange(bat, mid)
-tl = tl %>% mutate(bat_mid = factor(bat_mid, levels=y1$bat_mid)) %>%
-    arrange(bat_mid)
-#
-tc1 = tc %>% select(ctag, cond, ng_c=ng,tg_c=tg)
-tl2 = tl %>% separate(bat, c("cond",'drc'), sep='_', remove=F) %>%
-    select(-pick) %>% inner_join(tc1, by=c('cond'))
-md = tl2
-
-fo = file.path(dirw, gt, '15.module.rds')
-saveRDS(md, fo)
-#}}}
+system(glue("chain.py fromBed 10.bed $genome/data/{gt}/15_intervals/01.chrom.sizes 02.sizes > 10.reverse.chain"))
+system("chainSwap 10.reverse.chain 10.forward.chain")
 #}}}
 
 #{{{ # check liftover TSSs vs. ATGs in M and W
@@ -190,4 +163,7 @@ tx2 %>% count(type, opt)
 skim(tx2 %>% filter(opt=='good') %>% pull(dist))
 #}}}
 
-
+# many genes have 0-bp UTR5
+x = md1 %>% inner_join(utr5, by='gid') %>%
+    group_by(bat,note) %>% summarise(n_utr0=sum(size.utr5==0), nt=n()) %>%
+    ungroup() %>% mutate(pct=n_utr0/nt) %>% print(n=30)

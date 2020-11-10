@@ -89,3 +89,14 @@ ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
 ggexport(filename="sf13.pdf", width=10, height=8)
 #}}}
 
+#{{{ Fig 6
+a = readRDS('f6a.rds')
+b = readRDS('f6b.rds')
+ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:2],
+          widths=c(2,2,2), heights=c(2,2)) %>%
+ggexport(filename="f6.pdf", width=8, height=7)
+#}}}
+
+
+
+

@@ -203,6 +203,7 @@ ml1 <- function(ti, alg='rf', split_prop=.8, fold=10, fold_repeat=1,
 #}}}
 
 ti = read_tsv(args$fi)
+if('gid' %in% colnames(ti)) ti = ti %>% select(-gid)
 if(args$response != 'status') ti = ti %>% rename(status=args$response)
 ti = ti %>% mutate(status = factor(status, levels=c(1,0)))
 to0 = tibble(perm = 1:args$perm, ti0 = list(ti))
@@ -219,9 +220,11 @@ to = to %>%
         cpu=args$cpu, seed=args$seed)) %>%
     select(-ti) %>% unnest(r)
 
-perm_best = to %>% select(perm, metric) %>% unnest(metric) %>%
-    filter(metric=='f_meas') %>% arrange(desc(estimate)) %>%
-    pluck('perm', 1)
+tb = to %>% select(perm, metric) %>% unnest(metric) %>%
+    filter(metric=='f_meas') %>% arrange(desc(estimate))
+cat("best model F1-score: ",tb %>% pluck('estimate', 1), "\n")
+perm_best = tb %>% pluck('perm', 1)
+
 
 res = to %>% mutate(fit = ifelse(perm==perm_best, fit, NA))
 saveRDS(res, args$fo1)

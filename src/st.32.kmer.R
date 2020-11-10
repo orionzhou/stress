@@ -90,7 +90,7 @@ identical(ti$idx,ti$idx2)
 kl = ti %>% select(-idx2,-kmer2) %>% group_by(kmer) %>% nest() %>% rename(loc=data)
 #}}}
 
-#{{{ assess significance in c1 control
+#{{{ assess significance in c2 control
 x3 = tk %>% filter(ctag=='c2') %>% select(-ctag) %>%
     unnest(kmers) %>% rename(kmer=kmers) %>%
     inner_join(kl, by='kmer') %>%

@@ -126,7 +126,7 @@ scale_by_first <- function(x) {
     x1# / rge1
     #}}}
 }
-plot_soft_power <- function(ti, fo, wd=9, ht=5) {
+pick_soft_power <- function(ti) {
     #{{{
     datExpr = t(as.matrix(ti[,-1]))
     colnames(datExpr) = ti$gid
@@ -134,6 +134,10 @@ plot_soft_power <- function(ti, fo, wd=9, ht=5) {
     powers = c(c(1:10), seq(from = 12, to=20, by=2))
     powers = 1:20
     sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5)
+    #}}}
+}
+plot_soft_power <- function(sft, fo, wd=9, ht=5) {
+    #{{{
     pdf(fo, width = 9, height = 5)
     #sizeGrWindow(9, 5)
     par(mfrow = c(1,2))
@@ -153,58 +157,126 @@ plot_soft_power <- function(ti, fo, wd=9, ht=5) {
     dev.off()
     #}}}
 }
-run_wgcna <- function(ti, optQ='raw',
-                      softPower=6, minModuleSize=20, hclust.opt='ward.D',
-                      deepSplit=2, MEDissThres=.25, minGap=NULL) {
+run_wgcna <- function(ti, softPower=8, type='signed hybrid', corFnc='cor',
+                      TOM=T, TOMType='signed', hclust.opt='ward.D') {
     #{{{
-    sd2 <- function(x) sd(x[!(is.na(x) | is.infinite(x) | is.nan(x))])
-    gids_f = ti %>% gather(cond, val, -gid) %>%
-        group_by(gid) %>% summarise(sdv = sd2(val)) %>% ungroup() %>%
-        dplyr::filter(sdv == 0) %>% pull(gid)
-    cat(sprintf("%d rows removed due to zero variance\n", length(gids_f)))
-    ti = ti %>% dplyr::filter(!gid %in% gids_f)
+    require(WGCNA)
+    #enableWGCNAThreads()
     #
     datExpr = t(as.matrix(ti[,-1]))
     colnames(datExpr) = ti$gid
     datExpr[is.na(datExpr)] = 0
-    if(optQ %in% c("raw","diff")) datExpr = asinh(datExpr)
     #
-    adj = adjacency(datExpr, power=softPower, type="signed hybrid", corFnc="cor")
+    adj = adjacency(datExpr, power=softPower, type=type, corFnc=corFnc)
     dim(adj)
-    #
-    TOM = TOMsimilarity(adj, TOMType = "signed")
-    dissTOM = 1-TOM
-    geneTree = hclust(as.dist(dissTOM), method = hclust.opt)
-    #
+    if (TOM) {
+        TOM = TOMsimilarity(adj, TOMType =TOMType)
+        diss = 1-TOM
+    } else {
+        diss = 1-adj
+    }
+    tree = hclust(as.dist(diss), method = hclust.opt)
+    list(datExpr=datExpr, diss=diss, tree=tree)
+    #}}}
+}
+make_raw_modules <- function(datExpr, dissTOM, tree,
+                             minModuleSize=20, deepSplit=2, minGap=0, pre='rc') {
+    #{{{
     # Module identification using dynamic tree cut:
     if(minGap == 0) minGap = NULL
-    dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,
+    dynamicMods = cutreeDynamic(dendro = tree, distM = dissTOM,
                   deepSplit = deepSplit, pamRespectsDendro = FALSE,
                   minClusterSize = minModuleSize, minGap = minGap)
     dynamicColors = labels2colors(dynamicMods)
     clus1 = dynamicMods; cols1 = dynamicColors
+    # Calculate eigengenes
+    MEList = moduleEigengenes(datExpr, colors=dynamicColors, excludeGrey=T, subHubs=T, returnValidOnly = T)
+    MEs = MEList$eigengenes
     #
+    # Construct numerical labels corresponding to the colors
+    tu = tibble(gid=colnames(datExpr), clu=clus1, col=cols1) %>%
+        group_by(clu, col) %>%
+        summarise(n=n(), gids=list(gid)) %>% ungroup()
+    me = MEs %>% as_tibble() %>% mutate(cond=rownames(MEs)) %>%
+        gather(col, val, -cond) %>% spread(cond, val) %>%
+        mutate(col=str_replace(col, "^ME", "")) %>%
+        group_by(col) %>% nest() %>% rename(me = data) %>% ungroup() %>%
+        inner_join(tu, by=c('col')) %>%
+        arrange(desc(n)) %>%
+        mutate(cid = str_c(pre, str_pad(1:n(),2,pad='0'))) %>%
+        #select(ctag, col, clu, me, n, gids)
+        select(cid, n, me, gids)
+    # make clu
+    clu = me %>% select(cid, gids) %>% unnest(gids) %>% rename(gid=gids)
+    clu = tibble(gid=colnames(datExpr)) %>% inner_join(clu,by='gid')
+    #
+    list(me=me, clu=clu)
+    #}}}
+}
+merge_modules <- function(rc, datExpr, cutHeight=.2, pre='mc') {
+    #{{{
+    tMEs = rc$me %>% select(cid, me) %>% unnest(me) %>%
+        gather(cond, val, -cid) %>% spread(cid, val)
+    MEs = tMEs %>% select(-cond) %>% as.data.frame()
+    rownames(MEs) = tMEs$cond
+    # Cluster module eigengenes
+    #MEDiss = 1-cor(MEs) #, use="pairwise.complete.obs")
+    #METree = hclust(as.dist(MEDiss), method = 'ward.D')
+    #
+    mg = mergeCloseModules(datExpr, rc$clu$cid,# MEs=MEs,
+                           cutHeight=cutHeight, verbose=0)
+    MEs2 = mg$newMEs; mergedColors = mg$colors;
+    #
+    # Construct numerical labels corresponding to the colors
+    tu = tibble(gid=colnames(datExpr), col=mergedColors) %>%
+        group_by(col) %>% summarise(n=n(), gids=list(gid)) %>% ungroup()
+    me = MEs2 %>% as_tibble() %>% mutate(cond=rownames(MEs2)) %>%
+        gather(col, val, -cond) %>% spread(cond, val) %>%
+        mutate(col=str_replace(col, "^ME", "")) %>%
+        group_by(col) %>% nest() %>% rename(me = data) %>% ungroup() %>%
+        inner_join(tu, by=c('col')) %>%
+        arrange(desc(n)) %>%
+        mutate(cid = str_c(pre, str_pad(1:n(),2,pad='0'))) %>%
+        #select(ctag, col, clu, me, n, gids)
+        select(cid, n, me, gids)
+    #
+    clu = me %>% select(cid, gids) %>% unnest(gids) %>% rename(gid=gids)
+    clu = tibble(gid=colnames(datExpr)) %>% inner_join(clu,by='gid')
+    #
+    list(me=me, clu=clu)
+    #}}}
+}
+cut_merge_modules <- function(datExpr, dissTOM, tree,
+                              minModuleSize=20, deepSplit=2,
+                              MEDissThres=.25, minGap=0) {
+    #{{{
+    #{{{ Module identification using dynamic tree cut:
+    if(minGap == 0) minGap = NULL
+    dynamicMods = cutreeDynamic(dendro = tree, distM = dissTOM,
+                  deepSplit = deepSplit, pamRespectsDendro = FALSE,
+                  minClusterSize = minModuleSize, minGap = minGap)
+    dynamicColors = labels2colors(dynamicMods)
+    clus1 = dynamicMods; cols1 = dynamicColors
     # Calculate eigengenes
     MEList = moduleEigengenes(datExpr, colors=dynamicColors, excludeGrey=T, subHubs=T, returnValidOnly = T)
     MEs = MEList$eigengenes
     MEs1 = MEs
-    #
+    #}}}
+    #{{{ Cluster module eigengenes
     MEDiss = 1-cor(MEs) #, use="pairwise.complete.obs")
-    # Cluster module eigengenes
-    METree = hclust(as.dist(MEDiss), method = hclust.opt)
+    METree = hclust(as.dist(MEDiss), method = 'ward.D')
     #
     mg = mergeCloseModules(datExpr, dynamicColors, cutHeight = MEDissThres, verbose = 0)
     mergedColors = mg$colors;
     mergedMEs = mg$newMEs;
     MEs2 = mergedMEs
-    #
-    # Construct numerical labels corresponding to the colors
+    #}}}
+    #{{{ Construct numerical labels corresponding to the colors
     colorOrder = c("grey", standardColors(50))
     moduleLabels = match(mergedColors, colorOrder)-1
     clus2 = moduleLabels; cols2 = mergedColors
     #
-    tree = geneTree
-    clu = tibble(gid=ti$gid, clu1=clus1, col1=cols1, clu2=clus2, col2=cols2)
+    clu = tibble(gid=colnames(datExpr), clu1=clus1, col1=cols1, clu2=clus2, col2=cols2)
     tu1 = clu %>% group_by(clu1, col1) %>%
         summarise(n=n(), gids=list(gid)) %>%
         ungroup() %>% mutate(ctag='raw') %>% rename(clu=clu1,col=col1)
@@ -217,12 +289,42 @@ run_wgcna <- function(ti, optQ='raw',
         gather(col, val, -cond) %>% spread(cond, val) %>% mutate(ctag = 'raw')
     tp2 = MEs2 %>% as_tibble() %>% mutate(cond=rownames(MEs2)) %>%
         gather(col, val, -cond) %>% spread(cond, val) %>% mutate(ctag = 'merged')
-    me = tp1 %>% bind_rows(tp2) %>% mutate(col=str_replace(col, "^ME", "")) %>%
-        group_by(ctag, col) %>% nest() %>% rename(me = data) %>%
+    me0 = tp1 %>% bind_rows(tp2) %>%
+        mutate(col=str_replace(col, "^ME", "")) %>%
+        group_by(ctag, col) %>% nest() %>% rename(me = data) %>% ungroup() %>%
         inner_join(tu, by=c('ctag','col')) %>%
         select(ctag, col, clu, me, n, gids)
+    me = me0 %>% filter(ctag=='merged') %>%
+        arrange(desc(n)) %>%
+        mutate(cid = str_c('c', str_pad(1:n(),2,pad='0'))) %>%
+        select(cid, n, me, gids)
+    #}}}
     #clu = tu %>% select(-clu) %>% rename(clu=nclu) %>% select(ctag,clu,n,gids)
-    list(tree=tree, me=me, clu=clu)
+    list(me=me, me0=me0, clu=clu)
+    #}}}
+}
+plot_me <- function(me, ncol=3, tit='', strip.compact=T) {
+    #{{{
+    tp = me %>%
+        mutate(pnl = glue("{cid} [{number(n,accuracy=1)}]")) %>%
+        select(pnl, n, me) %>% unnest(me) %>%
+        gather(x, val, -pnl, -n) %>%
+        mutate(hr=as.double(str_replace(x, 'h', ''))/10)
+    tpx = tp %>% distinct(x, hr) %>% arrange(hr)
+    tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
+    tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
+    times = c(0,2,4,8,25)
+    ggplot(tp, aes(x=x, y=val, group=1)) +
+        geom_point(size=1.5) +
+        geom_line() +
+        #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
+        scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$hr, expand=expansion(mult=c(.05,.05))) +
+        scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
+        facet_wrap(pnl~., ncol=ncol) +
+        ggtitle(tit) +
+        otheme(panel.spacing=.1, strip.compact=strip.compact,
+               xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2)) +
+        theme(plot.title=element_text(hjust=.5, size=10))
     #}}}
 }
 plot_me0 <- function(me, cond) {
@@ -344,21 +446,12 @@ get_tss <- function(genome) {
     ti %>% select(gid, chrom, pos=tss, srd)
     #}}}
 }
-downsample <- function(ti, seed=1, colname='status') {
+eval_pred <- function(ti, seed=1, downsample=F) { # status, pred, prob
   #{{{
-  if(colname != 'status')
-    ti = ti %>% rename(status = get('colname'))
-  levs = levels(ti$status)
-  stopifnot(length(levs) == 2)
-  tis = ti %>% count(status) %>% arrange(n)
-  lev1 = tis %>% pluck('status', 1)
-  lev2 = tis %>% pluck('status', 2)
-  n1 = tis %>% pluck('n', 1)
-  n2 = tis %>% pluck('n', 2)
-  ti1 = ti %>% filter(status == lev1)
-  set.seed(seed)
-  ti2 = ti %>% filter(status == lev2) %>% slice(sample(n2, n1))
-  ti1 %>% bind_rows(ti2)
+  if(downsample) ti = downsample(ti, seed=seed, colname='status')
+  metrics6 <- metric_set(sens,spec,precision,accuracy, f_meas, roc_auc, pr_auc)
+  metrics6(ti, truth=status, estimate=pred, prob) %>%
+    select(metric=.metric, estimate=.estimate)
   #}}}
 }
 
