@@ -75,9 +75,6 @@ ti = tc %>% select(cid,cond,note) %>%
     mutate(x = map(fi, read_mtf_loc)) %>%
     select(-fi)
 
-ti2 = ti %>% filter(cid == 'c21') %>% unnest(x) %>%
-    inner_join(rb2, by=c('cid','fid'))
-
 tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
     mutate(mod=glue("{cond}: {note} ({nt})")) %>%
     mutate(mod = as_factor(mod)) %>%
@@ -85,6 +82,10 @@ tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
     select(cid, nt, mod, fill)
 ts2 = ts %>% inner_join(tss, by='cid') %>% select(nt, gid, mod)
 
+cid = 'c31'
+ti2 = ti %>% filter(cid == !!cid) %>% unnest(x) %>%
+    inner_join(rb2, by=c('cid','fid'))
+#
 ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
     inner_join(ts2, by=c("gid")) %>%
     count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
@@ -117,7 +118,7 @@ fo = glue("{dirw}/53_metaplots/{cid}_{i}.pdf")
 ggsave(p, file=fo, width = 8, height = 6)
     #}}}
 }
-tibble(cid='c21', i=1:10) %>%
+tibble(cid=!!cid, i=1:10) %>%
     mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb2=rb2,ti3=ti3,dirw=dirw))
 #}}}
 #}}}
