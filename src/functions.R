@@ -8,6 +8,7 @@ require(ggforce)
 require(Rtsne)
 require(ggpubr)
 require(lubridate)
+options(dplyr.summarise.inform = F)
 dirg = '~/data/genome'
 dirp = "~/projects/stress"
 dird = file.path(dirp, 'data')

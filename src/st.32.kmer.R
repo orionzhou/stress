@@ -1,5 +1,5 @@
 source('functions.R')
-dirw = file.path(dird, '32_kmer')
+dirw = glue('{dird}/32_kmer')
 #{{{ functions
 filter_kmer_loc <- function(gids, gids_c, loc) {
     #{{{

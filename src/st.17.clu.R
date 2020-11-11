@@ -430,61 +430,6 @@ ggsave(p, file=fo, width=4, height=7)
 
 #}}}
 
-#{{{ check enrichment of top50 motifs in wgcna modules
-fi  = glue("{dirw}/64.modules.rds")
-tic = readRDS(fi)
-fi  = glue("{dird}/25_dreme/03.best.mtfs.rds")
-tim = readRDS(fi)
-fi = glue("{dirw}/27.modules.rds")
-x = readRDS(fi)
-ti = x %>% filter(gt=='Zmays_B73') %>% select(bnid,bat,note) %>%
-    inner_join(tim, by='bnid') %>%
-    filter(note=='all') %>% select(bnid, bat, note) %>%
-    separate(bat, c('cond','drc'), sep='_') %>%
-    inner_join(tic %>% select(cid,cond,mcid,notec=note,nc=n), by='cond')
-fo = glue("{dird}/25_dreme/81.mtf.enrich.tsv")
-write_tsv(ti, fo, na='')
-
-fm = glue("{dird}/25_dreme/01.kmer.grp.rds")
-tm = readRDS(fm)$grp %>% select(fid,fname)
-fi = glue("{dird}/25_dreme/81.mtf.enrich.tsv")
-ti = read_tsv(fi) %>%
-    mutate(fi = glue("{dird}/25_dreme/82_mtf_loc/{cid}_{bnid}.tsv")) %>%
-    mutate(x = map(fi, read_tsv)) %>%
-    select(-fi) %>% unnest(x)
-#}}}
-
-#{{{ meta plot of selected TFBS motifs
-#{{{ selected groups + background
-fid = 'g0097'
-itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
-tp = ti %>% filter(fid==!!fid) %>%
-    mutate(pos = (start+end)/2) %>%
-    mutate(bin = cut(pos, breaks=itvs, include.lowest=T)) %>%
-    mutate(bin = as.numeric(bin)) %>%
-    mutate(pnl = glue("{cond} {mcid} {notec}")) %>%
-    distinct(pnl,nc,bin,gid) %>%
-    count(pnl,nc,bin) %>% mutate(prop = n/nc)
-#
-tpx = tibble(x=c(.5,10.5,20.5,30.5,40.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
-p = ggplot(tp, aes(x=bin,y=prop)) +
-    geom_line(aes(), size=.5, na.rm = F) +
-    geom_point(aes(), size=1, na.rm = F) +
-    scale_x_continuous(expand=expansion(mult=c(.05,.05)),breaks=tpx$x,labels=tpx$lab) +
-    scale_y_continuous(name="Proportion of TFBS", expand=expansion(mult=c(.05,.05))) +
-    scale_color_aaas(name='strand') +
-    #scale_shape(labels=types) +
-    #scale_linetype(labels=types) +
-    facet_wrap(~pnl, scale='free_x', ncol=5) +
-    otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
-           strip.style='white',margin = c(.3,.3,.3,.3),
-           xgrid=T, xtick=T, ytick=T, ytitle=T,xtext=T, ytext=T) +
-    guides(fill=F)
-fo = glue("{dirw}/t.pdf")
-ggsave(p, file=fo, width = 10, height = 10)
-#}}}
-#}}}
-
 
 ######## obsolete ########
 #{{{ # [old] wgcna-based DEG clustering

@@ -1,93 +1,177 @@
 source('functions.R')
 require(progress)
-dirw = file.path(dird, '41_ml')
-#{{{ functions
-filter_kmer_loc <- function(tl, ts) tl %>% filter(gid %in% ts$gid)
-prepare_ti <- function(ti, bin, epi, nfea, mod, tst, keep_gid=F) {
-  #{{{
-  pb$tick()
-  to = ti %>% mutate(pos = pos - 2000)
-  if(bin == '-500') {
-    to = to %>% filter(pos >= -500, pos <= 0)
-  } else if(bin == '+500') {
-    to = to %>% filter(pos >= 0, pos <= 500)
-  } else if(bin == '+/-500') {
-    to = to %>% filter(pos >= -500, pos <= 500)
-  } else if(bin == '-2k') {
-    to = to %>% filter(pos <= 0)
-  } else if(bin == '+2k') {
-    to = to %>% filter(pos >= 0)
-  }
-  if(epi == 'umr') {
-    to = to %>% filter(umr>0)
-  }
-  if(nfea == 'top30') {
-    to = to %>% filter(i <= 30)
-  } else if(nfea == 'top50') {
-    to = to %>% filter(i <= 50)
-  } else if(nfea == 'top100') {
-    to = to %>% filter(i <= 100)
-  }
-  if(mod == 'zoops') {
-    to = to %>% distinct(gid, fid) %>% mutate(x = 1)
-  } else if(mod == 'anr') {
-    to = to %>% count(gid, fid) %>% rename(x = n)
-  }
-  fids = to %>% distinct(fid) %>% pull(fid)
-  x = tst %>% crossing(fid=fids) %>%
-    left_join(to, by=c('gid','fid')) %>%
-    replace_na(list(x=0)) %>%
-    spread(fid, x)
-  if(!keep_gid)
-    x %>% select(-gid)
-  else
-    x
-  #}}}
+dirw = glue('{dird}/41_ml')
+
+#{{{ prepare training input: gene lists + kmer lists
+fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
+r3 = readRDS(fi)
+tl = r3$tl; tc = r3$tc; tk = r3$tk
+
+# gene lists
+tc %>% mutate(fo=glue("{dirw}/01_gene_lists/{cid}.tsv")) %>%
+    mutate(x = map2(ts, fo, write_tsv))
+
+t1 = tk %>% select(mid,fid,fname,known, lid,pval) %>%
+    inner_join(tl %>% select(lid, cid, bin, epi), by='lid')
+t2 = t1 %>% arrange(cid, pval) %>%
+    separate(bin,c('opt','bin'),sep=":", remove=F) %>%
+    arrange(cid, pval) %>%
+    group_by(cid, fid, fname) %>%
+    slice(1) %>% ungroup() %>%
+    arrange(cid, pval) %>%
+    group_by(cid) %>%
+    mutate(i = 1:n()) %>% ungroup() %>%
+    inner_join(tk %>% select(mid,kmer,kmers), by='mid') %>%
+    mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
+    select(cid, i, opt,bin,epi, pval,fid,fname,kmers)
+t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup()
+
+fo = glue("{dirw}/03.best.mtfs.rds")
+saveRDS(t3, fo)
+
+t3 %>% mutate(fo = glue("{dirw}/03_motif_lists/{cid}.tsv")) %>%
+    mutate(l = map2(kmer, fo, write_tsv))
+#}}}
+
+#{{{ motif meta plots
+fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
+r3 = readRDS(fi)
+tl = r3$tl; tc = r3$tc; tk = r3$tk
+
+#{{{ prepare module genen lists to get  motif locations
+ts1 = tc %>% select(cid, cond, note, gids)
+ts2 = tc %>% distinct(cond, gids_c) %>% mutate(cid=c('c29','c49')) %>%
+    mutate(note='bg') %>% select(cid,cond,note,gids=gids_c)
+ts = ts1 %>% bind_rows(ts2) %>% arrange(cid) %>%
+    unnest(gids) %>% rename(gid=gids)
+
+fo = glue("{dirw}/51.mod.genes.rds")
+saveRDS(ts, fo)
+to = ts %>% distinct(gid) %>% mutate(status=1)
+fo = glue("{dirw}/51.mod.genes.tsv")
+write_tsv(to, fo, na='')
+#}}}
+
+read_mtf_loc <- function(fi) {
+    #{{{
+    itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
+    tp = read_tsv(fi) %>%
+        mutate(pos = (start+end)/2) %>%
+        mutate(bin = cut(pos, breaks=itvs, include.lowest=T)) %>%
+        mutate(bin = as.numeric(bin)) %>%
+        distinct(fid,gid,bin)
+    tp
+    #}}}
 }
+
+fi = glue("{dirw}/03.best.mtfs.rds")
+rb = readRDS(fi)
+rb2 = rb %>% unnest(kmer) %>%
+    mutate(fnote = glue("{cid}_{i} {fid} ({fname}): {opt} {bin} {epi}")) %>%
+    select(cid,i,fid,fnote)
+
+ti = tc %>% select(cid,cond,note) %>%
+    mutate(fi = glue("{dirw}/52_mtf_loc/{cid}.tsv")) %>%
+    mutate(x = map(fi, read_mtf_loc)) %>%
+    select(-fi)
+
+ti2 = ti %>% filter(cid == 'c21') %>% unnest(x) %>%
+    inner_join(rb2, by=c('cid','fid'))
+
+tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
+    mutate(mod=glue("{cond}: {note} ({nt})")) %>%
+    mutate(mod = as_factor(mod)) %>%
+    mutate(fill = ifelse(note=='bg', 'grey', 'white')) %>%
+    select(cid, nt, mod, fill)
+ts2 = ts %>% inner_join(tss, by='cid') %>% select(nt, gid, mod)
+
+ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
+    inner_join(ts2, by=c("gid")) %>%
+    count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
+    mutate(prop = nh/nt)
+
+#{{{ meta plot of selected TFBS motifs
+plot_tss_meta <- function(cid, i, tss, rb2, ti3, dirw) {
+    #{{{
+    tit1=tss %>% filter(cid==!!cid) %>% pull(mod)
+tit2 = rb2 %>% filter(cid == !!cid, i==!!i) %>% pull(fnote)
+tit = glue("{tit1} | {tit2}")
+tp = ti3 %>% filter(cid == !!cid, i== !!i)
+tpx = tibble(x=c(.5,10.5,20.5,31.5,41.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
+p = ggplot(tp, aes(x=bin,y=prop)) +
+    geom_line(aes(), size=.5, na.rm = F) +
+    geom_point(aes(), size=1, na.rm = F) +
+    scale_x_continuous(expand=expansion(mult=c(.05,.05)),breaks=tpx$x,labels=tpx$lab) +
+    scale_y_continuous(name="Proportion of TFBS", expand=expansion(mult=c(.05,.05))) +
+    scale_color_aaas(name='strand') +
+    #scale_shape(labels=types) +
+    #scale_linetype(labels=types) +
+    facet_wrap(~mod, scale='free_x', ncol=4) +
+    ggtitle(tit) +
+    otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
+           strip.style='white',margin = c(.3,.3,.3,.3),
+           xgrid=T, xtick=T, ytick=T, ytitle=T,xtext=T, ytext=T) +
+    theme(plot.title=element_text(hjust=.5, size=10)) +
+    guides(fill=F)
+fo = glue("{dirw}/53_metaplots/{cid}_{i}.pdf")
+ggsave(p, file=fo, width = 8, height = 6)
+    #}}}
+}
+tibble(cid='c21', i=1:10) %>%
+    mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb2=rb2,ti3=ti3,dirw=dirw))
+#}}}
 #}}}
 
 #{{{ create ML training config
-fi = glue("{dird}/17_cluster/50.modules.ctrl.rds")
-tl = readRDS(fi)
-fi = glue("{dird}/23_mmd/03.best.mtfs.rds")
+fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
+r3 = readRDS(fi)
+tl = r3$tl; tc = r3$tc; tk = r3$tk
+fi = glue("{dirw}/03.best.mtfs.rds")
 tm = readRDS(fi)
 
 #{{{ b1: 4 modules * 14 bin * 2 epis * 2 nfeas * 2 mods = 448
-ctag = 'b1'
-to0 = tl %>% select(-ng0) %>% filter(gt == 'Zmays_B73') %>%
-  inner_join(tm, by='bnid') %>%
-  mutate(n_mtf = map_int(kmer, nrow)) %>%
-  filter(n_mtf >= 20)
-#
 bins = c(
-         "TSS:-500","TSS:+500","TSS:-/+500","TSS:-2k",'TSS:+2k','TSS:-/+2k',
-         "TTS:-500","TTS:+500","TTS:-/+500","TTS:-2k",'TTS:+2k','TTS:-/+2k',
-         "TSS:-/+2k;TTS:-/+500", "TSS:-/+2k;TTS:-/+2k"
+         "TSS:-500","TSS:+500","TSS:-/+500",
+         "TSS:-2k",'TSS:+2k','TSS:-/+2k',
+         "TTS:-500","TTS:+500","TTS:-/+500",
+         "TTS:-2k",'TTS:+2k','TTS:-/+2k',
+         "TSS:-/+2k,TTS:-500",
+         "TSS:-/+2k,TTS:-1k"
 )
 epis = c('raw','umr')
-nfeas = c('top50', 'top100')
+nfeas = c('top30', 'top50', 'top100', 'top200')
 mods = c('zoops', 'anr')
-to = to0 %>%
-  filter(note == 'all') %>%
-  crossing(bin = bins, epi = epis, nfea = nfeas, mod = mods) %>%
-  mutate(nfea = factor(nfea, levels=nfeas)) %>%
-  mutate(bin = factor(bin, levels=bins)) %>%
-  mutate(epi = factor(epi, levels=epis)) %>%
-  mutate(mod = factor(mod, levels=mods)) %>%
-  arrange(bnid, bin, epi, nfea, mod) %>%
-  mutate(did = sprintf("d%03d", 1:n())) %>%
-  select(did, bnid, bat, cond, drc, note, bin, epi, nfea, mod, gt)
-#
-fo = glue("{dirw}/01_models/{ctag}.cfg.rds")
+bins1 = c("TSS:-/+2k")
+epis1 = c('umr')
+nfeas1 = c('top100')
+mods1 = c('anr')
+
+ctag = 'b1'
+to1 = tc %>% select(cid) %>%
+  crossing(bin = bins, epi = epis1, nfea = nfeas1, mod = mods1)
+to2 = tc %>% select(cid) %>%
+  crossing(bin = bins1, epi = epis, nfea = nfeas, mod = mods)
+to = to1 %>% bind_rows(to2) %>%
+    distinct(cid, bin, epi, nfea, mod) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    mutate(mod = factor(mod, levels=mods)) %>%
+    arrange(cid, bin, epi, nfea, mod) %>%
+    mutate(did = sprintf("d%03d", 1:n())) %>%
+    mutate(gt = 'Zmays_B73') %>%
+    select(did, cid, bin, epi, nfea, mod, gt)
+
+fo = glue("{dirw}/10_models/{ctag}.cfg.rds")
 saveRDS(to, fo)
-fo = glue("{dirw}/01_models/{ctag}.cfg.tsv")
+fo = glue("{dirw}/10_models/{ctag}.cfg.tsv")
 write_tsv(to, fo)
 #}}}
 
 #{{{ b2: 4 modules * 7 bin * 1 epis * 1 nfeas * 2 mods = 56
 ctag = 'b2'
 to0 = tl %>% select(-ng0) %>% filter(gt == 'Zmays_B73') %>%
-  inner_join(tm, by='bnid') %>%
+  inner_join(tm, by='cid') %>%
   mutate(n_mtf = map_int(kmer, nrow)) %>%
   filter(n_mtf >= 20)
 #
@@ -108,13 +192,13 @@ to = to0 %>%
   mutate(did = sprintf("d%03d", 1:n())) %>%
   select(did, bnid, bat, cond, drc, note, bin, epi, nfea, mod, gt)
 #
-fo = glue("{dirw}/01_models/{ctag}.cfg.rds")
+fo = glue("{dirw}/10_models/{ctag}.cfg.rds")
 saveRDS(to, fo)
-fo = glue("{dirw}/01_models/{ctag}.cfg.tsv")
+fo = glue("{dirw}/10_models/{ctag}.cfg.tsv")
 write_tsv(to, fo)
 #}}}
 #}}}
-# run pipeline to build B(M/W) models
+# run pipeline to build B models
 
 ######## MODEL EVALUATION ########
 #{{{ process trained models
@@ -142,16 +226,16 @@ get_model_fits <- function(tag, dirw) {
   #}}}
 }
 
-tags = c("b2")
+tags = c("b1")
 tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_model_metrics, dirw=dirw))
-fm = glue('{dirw}/02.model.metrics.rds')
+fm = glue('{dirw}/11.model.metrics.rds')
 saveRDS(tm, fm)
 
 #}}}
 
 #{{{ eval model performance in B
-fm = file.path(dirw, '02.model.metrics.rds')
+fm = glue('{dirw}/11.model.metrics.rds')
 tm = readRDS(fm)
 tm1 = tm %>% filter(tag == 'b2') %>% unnest(x) %>%
   mutate(note = as_factor(note)) %>%
