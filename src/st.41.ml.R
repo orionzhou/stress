@@ -82,7 +82,7 @@ tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
     select(cid, nt, mod, fill)
 ts2 = ts %>% inner_join(tss, by='cid') %>% select(nt, gid, mod)
 
-cid = 'c31'
+cid = 'c10'
 ti2 = ti %>% filter(cid == !!cid) %>% unnest(x) %>%
     inner_join(rb2, by=c('cid','fid'))
 #
@@ -91,7 +91,7 @@ ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
     count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
     mutate(prop = nh/nt)
 
-#{{{ meta plot of selected TFBS motifs
+# meta plot of selected TFBS motifs
 plot_tss_meta <- function(cid, i, tss, rb2, ti3, dirw) {
     #{{{
     tit1=tss %>% filter(cid==!!cid) %>% pull(mod)
@@ -120,7 +120,6 @@ ggsave(p, file=fo, width = 8, height = 6)
 }
 tibble(cid=!!cid, i=1:10) %>%
     mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb2=rb2,ti3=ti3,dirw=dirw))
-#}}}
 #}}}
 
 #{{{ create ML training config
@@ -205,9 +204,9 @@ write_tsv(to, fo)
 #{{{ process trained models
 collect_model_metrics <- function(tag, dirw) {
   #{{{
-  fi = glue("{dirw}/01_models/{tag}.cfg.rds")
+  fi = glue("{dirw}/10_models/{tag}.cfg.rds")
   th = readRDS(fi)
-  fi = glue("{dirw}/01_models/{tag}.rds")
+  fi = glue("{dirw}/10_models/{tag}.rds")
   ml = readRDS(fi)
   ml1 = ml %>% select(did=sid, perm, metric) %>%
     unnest(metric) %>% spread(metric, estimate) %>%
@@ -232,28 +231,52 @@ tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_model_metrics, dirw=dirw))
 fm = glue('{dirw}/11.model.metrics.rds')
 saveRDS(tm, fm)
-
 #}}}
 
 #{{{ eval model performance in B
 fm = glue('{dirw}/11.model.metrics.rds')
 tm = readRDS(fm)
-tm1 = tm %>% filter(tag == 'b2') %>% unnest(x) %>%
-  mutate(note = as_factor(note)) %>%
-  mutate(bat_note = as_factor(str_c(bat, note, sep=': '))) %>%
-  mutate(bat_note_nfea_mod = as_factor(str_c(bat,note,nfea,mod,sep=': '))) %>%
-  mutate(bin_epi = as_factor(str_c(bin, epi, sep=': '))) %>%
-  mutate(bat_mod = as_factor(str_c(bat, mod, sep=': '))) %>%
-  mutate(bat_epi = as_factor(str_c(bat, epi, sep=': '))) %>%
-  mutate(epi_nfea = as_factor(str_c(epi, nfea, sep=': ')))
 
-plot_model_heatmap <- function(ti, metric='auroc', pnl='bat_mod') {
+#{{{ prepare tc1
+bins = c(
+         "TSS:-500","TSS:+500","TSS:-/+500",
+         "TSS:-2k",'TSS:+2k','TSS:-/+2k',
+         "TTS:-500","TTS:+500","TTS:-/+500",
+         "TTS:-2k",'TTS:+2k','TTS:-/+2k',
+         "TSS:-/+2k,TTS:-500",
+         "TSS:-/+2k,TTS:-1k"
+)
+epis = c('raw','umr')
+nfeas = c('top30', 'top50', 'top100', 'top200')
+mods = c('zoops', 'anr')
+tc1 = tc %>% select(cid,cond,note) %>%
+    crossing(bin = bins, epi = epis, nfea = nfeas, mod = mods) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    mutate(mod = factor(mod, levels=mods)) %>%
+    arrange(cid, bin, epi, nfea, mod) %>%
+    mutate(cond_note = as_factor(str_c(cond, note, sep=': '))) %>%
+    mutate(cond_note_nfea_mod = as_factor(str_c(cond,note,nfea,mod,sep=': '))) %>%
+    mutate(bin_epi = as_factor(str_c(bin, epi, sep=': '))) %>%
+    mutate(cond_mod = as_factor(str_c(cond, mod, sep=': '))) %>%
+    mutate(cond_epi = as_factor(str_c(cond, epi, sep=': '))) %>%
+    mutate(bin_epi_nfea = as_factor(str_c(bin, epi, nfea, sep=': '))) %>%
+    mutate(bin_epi_mod = as_factor(str_c(bin, epi, mod, sep=': '))) %>%
+    mutate(epi_nfea_mod = as_factor(str_c(epi, nfea, mod, sep=': '))) %>%
+    mutate(bin_nfea_mod = as_factor(str_c(bin, nfea, mod, sep=': ')))
+#}}}
+tm1 = tm %>% filter(tag == 'b1') %>% unnest(x) %>%
+    inner_join(tc1, by=c('cid','bin','epi','nfea','mod'))
+
+plot_model_heatmap <- function(ti, metric='auroc', x='cond_note', y='bin',
+                               pnl='', x.rotate=F, tit=F) {
   #{{{ plot
-  tp = ti %>%# filter(tag == 'mod4_288_c2') %>%
+  tp = ti %>%
     mutate(score = get(metric)) %>%
     filter(!is.na(score)) %>%
-    mutate(x = bin, y = epi_nfea, pnl = get(pnl)) %>%
-    group_by(bat, note, bin, epi, nfea, mod, x, y, pnl) %>%
+    mutate(x = get(x), y = get(y), pnl = get(pnl)) %>%
+    group_by(cond, note, bin, epi, nfea, mod, x, y, pnl) %>%
     summarise(sd = sd(score), score = mean(score)) %>% ungroup() %>%
     mutate(lab = glue("{number(score,accuracy=.01)}%+-%{number(sd,accuracy=.01)}")) %>%
     mutate(lab = glue("{number(score,accuracy=.01)}"))
@@ -269,7 +292,7 @@ plot_model_heatmap <- function(ti, metric='auroc', pnl='bat_mod') {
       scale_fill_gradientn(name='metric',colors=cols100v) +
       #scale_fill_viridis(name='normalized eigengene value') +
       scale_color_manual(values=c('black','white')) +
-      facet_wrap(pnl ~ ., ncol=1) +
+      #facet_wrap(pnl ~ ., ncol=1) +
       otheme(legend.pos='none', legend.dir='v', legend.title=F,
              margin = c(.3,.3,.3,.3), ygrid=T,
              strip.style='white', strip.compact=T, panel.spacing=.1,
@@ -279,30 +302,37 @@ plot_model_heatmap <- function(ti, metric='auroc', pnl='bat_mod') {
       #theme(axis.text.y = element_markdown(size=7.5)) +
       guides(color=F)
     #}}}
-  tit = str_to_upper(ifelse(metric=='f1','f-score',metric))
-  p + ggtitle(tit)
+  if(x.rotate)
+    p = p +
+      theme(axis.text.x=element_text(angle=25, hjust=0, vjust=0, size=7.5))
+  if(tit) {
+    tit = str_to_upper(ifelse(metric=='f1','f-score',metric))
+    p = p + ggtitle(tit) +
+      theme(plot.title=element_text(hjust=0, size=10))
+  }
+  p
   #}}}
 }
 plot_model_barplot <- function(ti, metric='auroc', x='bin', fill='epi',
-                               pnl='bat_mod', x.rotate=F, tit=F) {
+    pnl='cond_mod', x.rotate=F, tit=F, cols=pal_npg()(8)) {
   #{{{
   ymax = 1.0 * max(ti[[metric]])
   tp = ti %>%
     mutate(score = get(metric)) %>%
     filter(!is.na(score)) %>%
     mutate(x = get(x), pnl = get(pnl)) %>%
-    group_by(bat, note, bin, epi, nfea, mod, x, pnl) %>%
+    group_by(cond, note, cond_note, bin, epi, nfea, mod, x, pnl) %>%
     summarise(sd = sd(score), score = mean(score)) %>% ungroup()
     #{{{
     pd = position_dodge(width=.7)
     p = ggplot(tp, aes(x=x,y=score)) +
       geom_col(aes(fill = get(fill)), position=pd, width=.7) +
-      geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=get(fill)), width=.2, size=.3, position=pd) +
+      geom_errorbar(aes(ymin=score-sd, ymax=score+sd, col=get(fill)), width=.2, size=.3, position=pd) +
       scale_x_discrete(expand=expansion(mult=c(.03,.03))) +
       scale_y_continuous(name=str_to_upper(metric), expand=expansion(mult=c(0,.05))) +
       coord_cartesian(ylim= c(.5, ymax)) +
-      scale_fill_npg(name='') +
-      scale_color_manual(values=c('black','black')) +
+      scale_fill_manual(name='', values=cols) +
+      scale_color_manual(values=rep('black',20)) +
       facet_wrap(pnl ~ ., scale='free_y', ncol=1) +
       otheme(legend.pos='none', legend.dir='v', legend.box='v',legend.title=F,
              margin = c(.3,.3,.3,.3), ygrid=T,
@@ -323,7 +353,69 @@ plot_model_barplot <- function(ti, metric='auroc', x='bin', fill='epi',
   #}}}
 }
 
-#{{{ heatmap: sf09
+#{{{ f4 - barplot
+tpa = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='zoops')
+pa = plot_model_barplot(tpa, metric='auroc',, x='cond_note', fill='epi',
+                        pnl='bin_nfea_mod', x.rotate=T) +
+  o_margin(.2,.2,.2,1.2) + no_x_axis() +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+tpb = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top100')
+pb = plot_model_barplot(tpb, metric='auroc',, x='cond_note', fill="mod",
+                        pnl='bin_epi_nfea', x.rotate=T, cols=pal_aaas()(4)) +
+  o_margin(0,.2,.2,1.2) + no_x_axis() +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+tpc = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', mod=='anr')
+pc = plot_model_barplot(tpc, metric='auroc',, x='cond_note', fill="nfea",
+                        pnl='bin_epi_mod', x.rotate=T, cols=pal_simpsons()(8)) +
+  o_margin(0,.2,.2,1.2) +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+cids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(cid)
+tpd = tm1 %>% filter(cid %in% cids4, epi=='umr', nfea=='top100', mod=='anr')
+pd = plot_model_barplot(tpd, metric='auroc',, x='cond_note', fill="bin",
+                        pnl='epi_nfea_mod', x.rotate=F, cols=pal_igv()(14)) +
+  theme(legend.position = c(.5,1), legend.justification = c(.5,-.2)) +
+  theme(legend.direction='horizontal') +
+  o_margin(2,.5,.2,.2)
+#
+fo = glue("{dirf}/f4.pdf")
+pbc = ggarrange(pb, pc, nrow=1, ncol=2, labels=LETTERS[2:3], widths=c(2,2))
+ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
+          labels = LETTERS[1:4], heights=c(1,1,1.3, 1.5)) %>%
+ggexport(filename=fo, width=6, height=9)
+#}}}
+
+#{{{ sf09 - barplot
+tpa = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='zoops')
+pa = plot_model_barplot(tpa, metric='f1',, x='cond_note', fill='epi',
+                        pnl='bin_nfea_mod', x.rotate=T) +
+  o_margin(.2,.2,.2,1.2) + no_x_axis() +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+tpb = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top100')
+pb = plot_model_barplot(tpb, metric='f1',, x='cond_note', fill="mod",
+                        pnl='bin_epi_nfea', x.rotate=T, cols=pal_aaas()(4)) +
+  o_margin(0,.2,.2,1.2) + no_x_axis() +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+tpc = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', mod=='anr')
+pc = plot_model_barplot(tpc, metric='f1',, x='cond_note', fill="nfea",
+                        pnl='bin_epi_mod', x.rotate=T, cols=pal_simpsons()(8)) +
+  o_margin(0,.2,.2,1.2) +
+  theme(legend.position = c(1,1), legend.justification = c(1,1))
+cids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(cid)
+tpd = tm1 %>% filter(cid %in% cids4, epi=='umr', nfea=='top100', mod=='anr')
+pd = plot_model_barplot(tpd, metric='f1',, x='cond_note', fill="bin",
+                        pnl='epi_nfea_mod', x.rotate=F, cols=pal_igv()(14)) +
+  theme(legend.position = c(.5,1), legend.justification = c(.5,-.2)) +
+  theme(legend.direction='horizontal') +
+  o_margin(2,.5,.2,.2)
+#
+fo = glue("{dirf}/sf09.pdf")
+pbc = ggarrange(pb, pc, nrow=1, ncol=2, labels=LETTERS[2:3], widths=c(2,2))
+ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
+          labels = LETTERS[1:4], heights=c(1,1,1.3, 1.5)) %>%
+ggexport(filename=fo, width=6, height=9)
+#}}}
+
+#{{{ [old] heatmap: sf09
 pa = plot_model_heatmap(tm1, metric='f1', pnl='bat_note') +
   theme(axis.text.x = element_text(angle=30, hjust=0, vjust=0, size=7))
 pb = plot_model_heatmap(tm1, metric='auroc', pnl='bat_note') +
@@ -344,30 +436,6 @@ ggarrange(pa, pb, nrow=1, ncol=2,
           labels = c(), widths=c(2,1.4)) %>%
 ggexport(filename=fo, width=6, height=7)
 #}}}
-
-#{{{ f4 - barplot
-tpa = tm1 %>% filter(nfea=='top100', mod=='zoops')
-pa = plot_model_barplot(tpa, x='bin', fill='epi',
-                        pnl='bat_note_nfea_mod', x.rotate=T) +
-  o_margin(.2,.2,.2,.2)
-tpb = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top100')
-pb = plot_model_barplot(tpb, x='bat_note', fill="mod",
-                        pnl='bin_epi', x.rotate=T) +
-  o_margin(0,.2,.2,.2) +
-  theme(legend.position = c(1,1), legend.justification = c(1,1))
-tpc = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', mod=='anr')
-pc = plot_model_barplot(tpc, x='bat_note', fill="nfea",
-                        pnl='bin_epi', x.rotate=T) +
-  o_margin(0,.2,.2,.2) +
-  theme(legend.position = c(1,1), legend.justification = c(1,1))
-#
-fo = glue("{dirf}/f4.pdf")
-pbc = ggarrange(pb, pc, nrow=1, ncol=2, labels=LETTERS[2:3], widths=c(2,2))
-ggarrange(pa, pbc, nrow=2, ncol=1,
-          labels = c("A"), heights=c(2,1)) %>%
-ggexport(filename=fo, width=5, height=6)
-#}}}
-
 #}}}
 
 #{{{ gather & save model predictions for all B/M/W genes

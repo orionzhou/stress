@@ -45,29 +45,34 @@ saveRDS(tc, fo)
 fi = file.path(dirw, '../15_de/05.rds')
 x =  readRDS(fi)
 deg48 = x$deg48; deg12 = x$deg12
-deg = deg48 %>%
+conds = c('cold','heat')
+drcs = c('up','down')
+deg = deg48 %>% filter(Genotype %in% gts3) %>%
     select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
     gather(drc, gids, -Treatment,-Genotype,-Timepoint,-cond2) %>%
     spread(cond2, gids) %>%
     dplyr::rename(gids0 = time0, gids1 = timeM) %>%
     mutate(gids = map2(gids0, gids1, intersect)) %>%
-    select(Genotype,Treatment,Timepoint,drc, gids)
+    select(gt=Genotype,cond=Treatment,Timepoint,drc, gids) %>%
+    unnest(gids) %>% mutate(gids = glue("{gt}_{gids}")) %>%
+    mutate(cond = str_to_lower(cond)) %>%
+    mutate(cond = factor(cond, levels=conds)) %>%
+    mutate(drc = factor(drc, levels=drcs)) %>%
+    group_by(cond, Timepoint, drc) %>% summarise(gids = list(gids)) %>%
+    ungroup()
 #
 fi = glue('{dirw}/01.tc.rds')
 tc = readRDS(fi)
+tc$raw = tc$raw %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
+tc$ratio= tc$ratio %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
+tc$diff = tc$diff %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
 #}}}
 
 ######## create pos-neg gene lists ########
 #{{{ all-DEG lists
-conds = c('cold','heat')
-drcs = c('up','down')
-top = deg %>% filter(Genotype=='B73') %>%
-    select(cond=Treatment, drc, gids) %>%
-    mutate(cond = str_to_lower(as.character(cond))) %>%
-    mutate(cond = factor(cond, levels=conds)) %>%
-    mutate(drc = factor(drc, levels=drcs)) %>%
-    unnest(gids) %>%
-    group_by(cond, drc) %>% summarise(ng=n(), gids=list(gids)) %>% ungroup() %>%
+top = deg %>% unnest(gids) %>%
+    group_by(cond, drc) %>%
+    summarise(ng=n(), gids=list(unique(gids))) %>% ungroup() %>%
     arrange(cond, drc) %>%
     mutate(cid = glue("c{1:n()}")) %>%
     mutate(note = glue("all {drc}-regulated")) %>%
@@ -75,26 +80,26 @@ top = deg %>% filter(Genotype=='B73') %>%
 
 #{{{ create background/negtavie list
 tb = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
-    mutate(gt = str_c("Zmays", Genotype, sep='_')) %>%
+    mutate(gt = Genotype) %>%# str_c("Zmays", Genotype, sep='_')) %>%
     select(-up, -down, -Genotype) %>% unnest(ds)
-tb1 = tb %>% mutate(nde = padj > .05 | abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c1')
-tb2 = tb %>% mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c2')
-#tb = tb1 %>% bind_rows(tb2) %>%
-ton = tb2 %>%
+ton = tb %>%
+    mutate(cond = str_to_lower(Treatment)) %>%
+    mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
     filter(nde) %>%
-    #count(gt, ctag, gid, Treatment) %>% rename(n_nde = n) %>%
-    count(gt, gid, Treatment) %>% rename(n_nde = n) %>%
-    filter(n_nde == 2) %>%
-    select(-n_nde) %>% mutate(cond = str_to_lower(Treatment)) %>%
-    select(-Treatment) %>%
-    group_by(gt, cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
+    count(gt, gid, cond) %>% rename(n_nde = n) %>%
+    filter(n_nde == 2) %>% select(-n_nde) %>%
+    count(cond, gid) %>% rename(n_nde = n) %>%
+    filter(n_nde == 3) %>% select(-n_nde) %>%
+    crossing(gt = gts3) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
     mutate(ng = map_int(gids, length)) %>%
-    select(gt, cond, ng, gids)
+    select(cond, ng, gids)
 #}}}
 
 #{{{ build module gene list pairs
 min_ng = 50
-ton1 = ton %>% filter(gt == 'Zmays_B73') %>% select(cond,ng_c=ng,gids_c=gids)
+ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
 make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
 make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
 md = top %>% inner_join(ton1, by=c('cond')) %>%
@@ -109,14 +114,10 @@ saveRDS(md, fo)
 #}}}
 
 #{{{ DEG-based modules
-gt = 'B73'
 #{{{ check ovlp w. DEG sets  - prepare t_deg
 drcs = c('up','down')
-t_deg = deg %>% filter(Genotype==gt) %>% select(-Genotype) %>%
-    mutate(drc = factor(drc, levels=drcs)) %>%
-    unnest(gids) %>% rename(gid = gids) %>%
-    rename(cond=Treatment) %>% mutate(cond=str_to_lower(cond)) %>%
-    mutate(st = 1) %>%
+t_deg = deg %>%
+    mutate(st = 1) %>% unnest(gids) %>% rename(gid=gids) %>%
     spread(Timepoint, st) %>% rename(t1=`1`, t25=`25`) %>%
     replace_na(list(t1=0,t25=0)) %>% mutate(tag = '') %>%
     mutate(tag = ifelse(t1==1 & t25==0, '1h', tag)) %>%
@@ -130,23 +131,21 @@ tags = levels(t_deg$lab)
 
 #{{{ cold
 cond = 'cold'
-gids = deg %>%
-    filter(Genotype == gt, str_to_lower(Treatment)==cond) %>%
+gids = deg %>% filter(cond==!!cond) %>%
     select(gids) %>% unnest(gids) %>% distinct(gids) %>% pull(gids)
 #
-ti1 = tc$diff %>%
-    filter(Genotype==gt, str_to_lower(Treatment)==cond, gid %in% gids) %>%
-    select(-Genotype, -Treatment)
-ti2 = filter_expr(ti1, wide=T, min_cpm=.2, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='asinh')
-#sft = pick_soft_power(ti2)
+ti1 = tc$diff %>% filter(gt %in% gts3) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>% select(-gt) %>%
+    filter(cond==!!cond, gid %in% gids) %>% select(-cond)
+ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='no')
 #
-w = run_wgcna(ti2, softPower=1, type='signed', corFnc='cor', TOM=F,
+w = run_wgcna(ti2, softPower=1, type='signed hybrid', corFnc='cor', TOM=F,
               TOMType='signed', hclust.opt='ward.D2')
 #
 rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20,
-                      deepSplit=2, minGap=0)
+                      deepSplit=3, minGap=0)
 
-mc = merge_modules(rc, w$datExpr, cutHeight=.2, pre=str_sub(cond,1,1))
+mc = merge_modules(rc, w$datExpr, cutHeight=.25, pre=str_sub(cond,1,1))
 nc = 4
 pa = plot_me(mc$me, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
 #{{{ plot ovlp w. DEG sets
@@ -174,23 +173,20 @@ me_cold = mc$me %>% mutate(cond = cond)
 gids_tf = c('Zm00001d031736','Zm00001d021263','Zm00001d033987', 'Zm00001d032923', 'Zm00001d016255')
 #{{{ heat
 cond = 'heat'
-gids = deg %>%
-    filter(Genotype == gt, str_to_lower(Treatment)==cond) %>%
+gids = deg %>% filter(cond==!!cond) %>%
     select(gids) %>% unnest(gids) %>% distinct(gids) %>% pull(gids)
 #
-ti1 = tc$diff %>%
-    filter(Genotype==gt, str_to_lower(Treatment)==cond, gid %in% gids) %>%
-    select(-Genotype, -Treatment)
-ti2 = filter_expr(ti1, wide=T, min_cpm=.2, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='asinh')
-#sft = pick_soft_power(ti2)
-#
+ti1 = tc$diff %>% filter(gt %in% gts3) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>% select(-gt) %>%
+    filter(cond==!!cond, gid %in% gids) %>% select(-cond)
+ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='no')
 w = run_wgcna(ti2, softPower=1, type='signed', corFnc='cor', TOM=F,
               TOMType='signed', hclust.opt='ward.D2')
 #
 rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20,
-                      deepSplit=2, minGap=0)
+                      deepSplit=3, minGap=0)
 
-mc = merge_modules(rc, w$datExpr, cutHeight=.2, pre=str_sub(cond,1,1))
+mc = merge_modules(rc, w$datExpr, cutHeight=.25, pre=str_sub(cond,1,1))
 nc = 4
 pa = plot_me(mc$me, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
 #{{{ plot ovlp w. DEG sets
@@ -213,6 +209,7 @@ ggarrange(pa, pb, nrow=1, ncol=2, labels=LETTERS[1:2],
           widths=c(2,2,2), heights=c(2,2)) %>%
 ggexport(filename=fo, width=8, height=7)
 me_heat = mc$me %>% mutate(cond = cond)
+mc$clu %>% filter(str_replace(gid, '^.*_', '') %in% gids_tf)
 #}}}
 
 f_cfg = glue('{dirw}/config.xlsx')
@@ -228,26 +225,26 @@ top = rbind(me_cold, me_heat) %>%
 
 #{{{ create background/negtavie list
 tb = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
-    mutate(gt = str_c("Zmays", Genotype, sep='_')) %>%
+    mutate(gt = Genotype) %>%# str_c("Zmays", Genotype, sep='_')) %>%
     select(-up, -down, -Genotype) %>% unnest(ds)
-tb1 = tb %>% mutate(nde = padj > .05 | abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c1')
-tb2 = tb %>% mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>% mutate(ctag='c2')
-#tb = tb1 %>% bind_rows(tb2) %>%
-ton = tb2 %>%
+ton = tb %>%
+    mutate(cond = str_to_lower(Treatment)) %>%
+    mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
     filter(nde) %>%
-    #count(gt, ctag, gid, Treatment) %>% rename(n_nde = n) %>%
-    count(gt, gid, Treatment) %>% rename(n_nde = n) %>%
-    filter(n_nde == 2) %>%
-    select(-n_nde) %>% mutate(cond = str_to_lower(Treatment)) %>%
-    select(-Treatment) %>%
-    group_by(gt, cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
+    count(gt, gid, cond) %>% rename(n_nde = n) %>%
+    filter(n_nde == 2) %>% select(-n_nde) %>%
+    count(cond, gid) %>% rename(n_nde = n) %>%
+    filter(n_nde == 3) %>% select(-n_nde) %>%
+    crossing(gt = gts3) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
     mutate(ng = map_int(gids, length)) %>%
-    select(gt, cond, ng, gids)
+    select(cond, ng, gids)
 #}}}
 
 #{{{ build module gene list pairs
 min_ng = 50
-ton1 = ton %>% filter(gt == 'Zmays_B73') %>% select(cond,ng_c=ng,gids_c=gids)
+ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
 make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
 make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
 md = top %>% inner_join(ton1, by=c('cond')) %>%
@@ -419,7 +416,7 @@ ncol=2
         #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
         scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$hr, expand=expansion(mult=c(.05,.05))) +
         scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
-        facet_wrap(pnl~., ncol=ncol) +
+        facet_wrap(pnl~., ncol=ncol, scale='free_y') +
         #ggtitle(tit) +
         otheme(panel.spacing=.1, strip.compact=F,
                xtitle=T, xtext=T, xtick=T, margin=c(.3,.3,.3,.3)) +

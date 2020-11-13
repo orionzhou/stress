@@ -186,7 +186,7 @@ make_raw_modules <- function(datExpr, dissTOM, tree,
     # Module identification using dynamic tree cut:
     if(minGap == 0) minGap = NULL
     dynamicMods = cutreeDynamic(dendro = tree, distM = dissTOM,
-                  deepSplit = deepSplit, pamRespectsDendro = FALSE,
+                  deepSplit = deepSplit, pamRespectsDendro = F,
                   minClusterSize = minModuleSize, minGap = minGap)
     dynamicColors = labels2colors(dynamicMods)
     clus1 = dynamicMods; cols1 = dynamicColors
@@ -321,7 +321,7 @@ plot_me <- function(me, ncol=3, tit='', strip.compact=T) {
         #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
         scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$hr, expand=expansion(mult=c(.05,.05))) +
         scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
-        facet_wrap(pnl~., ncol=ncol) +
+        facet_wrap(pnl~., ncol=ncol, scale='free_y') +
         ggtitle(tit) +
         otheme(panel.spacing=.1, strip.compact=strip.compact,
                xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2)) +
