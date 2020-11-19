@@ -6,36 +6,45 @@ yid = 'rn20a'
 res = rnaseq_cpm(yid)
 th = res$th; tm = res$tm; tl = res$tl; th_m = res$th_m; tm_m = res$tm_m
 
-th1 = th %>% filter(Experiment=='TC') %>% select(SampleID, Genotype, Treatment, Timepoint)
-th1b = th1 %>% filter(Timepoint==0) %>% mutate(Treatment='Cold')
-th1c = th1 %>% filter(Timepoint==0) %>% mutate(Treatment='Heat')
+th1 = th %>% filter(Experiment=='TC') %>%
+    select(sid=SampleID, gt=Genotype, cond=Treatment, time=Timepoint) %>%
+    mutate(cond = str_to_lower(cond))
+th1b = th1 %>% filter(time==0) %>% mutate(cond='cold')
+th1c = th1 %>% filter(time==0) %>% mutate(cond='heat')
 th2 = rbind(th1, th1b, th1c)# %>% filter(Timepoint != 8)
 
-rc = tm %>% select(gid, SampleID, CPM) %>%
-    inner_join(th2, by ='SampleID') %>%
-    mutate(has = sprintf("h%03d", Timepoint*10)) %>%
-    select(-SampleID, -Timepoint) %>% spread(has, CPM) %>%
+rr = tm %>% select(gid, sid=SampleID, cpm=CPM) %>%
+    inner_join(th2, by ='sid') %>%
+    mutate(has = sprintf("h%03d", time*10)) %>%
+    select(-sid, -time) %>% spread(has, cpm) %>%
     mutate(h015 = if_else(is.na(h015), (h010+h020)/2, h015)) %>%
     mutate(h030 = if_else(is.na(h030), (h020+h040)/2, h015)) %>%
     mutate(h080 = if_else(is.na(h080), h040*.8+h250*.2, h080))
-sum(is.na(rc))
-rc %>% dplyr::count(Genotype, Treatment)
+sum(is.na(rr))
+rr %>% dplyr::count(gt,cond)
 
-ra = rc %>% gather(has, rc, -gid, -Genotype, -Treatment) %>%
-    spread(Treatment, rc) %>%
-    mutate(rac = log2(Cold/Control), rah = log2(Heat/Control)) %>%
-    select(gid,Genotype,has,Cold=rac, Heat=rah) %>%
-    gather(Treatment, ra, -gid,-Genotype,-has) %>%
-    spread(has, ra) %>% arrange(gid, Genotype,Treatment)
+rd = rr %>% gather(time, rc, -gid, -gt, -cond) %>%
+    spread(cond, rc) %>%
+    mutate(rdc = cold-control, rdh = heat-control) %>%
+    select(gid,gt,time,cold=rdc, heat=rdh) %>%
+    gather(cond, rd, -gid,-gt,-time) %>%
+    spread(time, rd) %>% arrange(gid, gt, cond)
 
-rd = rc %>% gather(has, rc, -gid, -Genotype, -Treatment) %>%
-    spread(Treatment, rc) %>%
-    mutate(rdc = Cold-Control, rdh = Heat-Control) %>%
-    select(gid,Genotype,has,Cold=rdc, Heat=rdh) %>%
-    gather(Treatment, rd, -gid,-Genotype,-has) %>%
-    spread(has, rd) %>% arrange(gid, Genotype,Treatment)
+rc = tm %>% select(gid, sid=SampleID, rc=ReadCount) %>%
+    inner_join(th2, by ='sid') %>%
+    mutate(has = sprintf("h%03d", time*10)) %>%
+    select(-sid, -time) %>% spread(has, rc) %>%
+    mutate(h015 = if_else(is.na(h015), (h010+h020)/2, h015)) %>%
+    mutate(h030 = if_else(is.na(h030), (h020+h040)/2, h015)) %>%
+    mutate(h080 = if_else(is.na(h080), h040*.8+h250*.2, h080))
+rc0 = rc %>% filter(cond=='control') %>% select(-cond)
+rc1 = rc %>% filter(cond!='control') %>%
+    dplyr::rename(h505=h005,h510=h010,h515=h015,h520=h020,h530=h030,
+        h540=h040,h580=h080,h750=h250) %>% select(-h000)
+rc = rc0 %>% inner_join(rc1, by=c('gid','gt')) %>%
+    select(gid,cond,gt, everything())
 
-tc = list(raw=rc, ratio=ra, diff=rd)
+tc = list(raw=rr, diff=rd, wide_raw=rc)
 fo = file.path(dirw, '01.tc.rds')
 saveRDS(tc, fo)
 #}}}
@@ -63,27 +72,26 @@ deg = deg48 %>% filter(Genotype %in% gts3) %>%
 #
 fi = glue('{dirw}/01.tc.rds')
 tc = readRDS(fi)
-tc$raw = tc$raw %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
-tc$ratio= tc$ratio %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
-tc$diff = tc$diff %>% rename(gt=Genotype, cond=Treatment) %>% mutate(cond = str_to_lower(cond))
+tcr = tc$raw %>% mutate(gid=glue("{gt}_{gid}")) %>% select(-gt)
 #}}}
 
 ######## create pos-neg gene lists ########
-#{{{ all-DEG lists
+#{{{ B/M/W DEG lists
+tag = 'degA'
 top = deg %>% unnest(gids) %>%
     group_by(cond, drc) %>%
-    summarise(ng=n(), gids=list(unique(gids))) %>% ungroup() %>%
+    summarise(ng=length(unique(gids)), gids=list(unique(gids))) %>% ungroup() %>%
     arrange(cond, drc) %>%
     mutate(cid = glue("c{1:n()}")) %>%
     mutate(note = glue("all {drc}-regulated")) %>%
     select(cid, cond, note, ng, gids)
 
 #{{{ create background/negtavie list
-tb = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
+ton = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
     mutate(gt = Genotype) %>%# str_c("Zmays", Genotype, sep='_')) %>%
-    select(-up, -down, -Genotype) %>% unnest(ds)
-ton = tb %>%
+    select(-up, -down, -Genotype) %>%
     mutate(cond = str_to_lower(Treatment)) %>%
+    unnest(ds) %>%
     mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
     filter(nde) %>%
     count(gt, gid, cond) %>% rename(n_nde = n) %>%
@@ -93,6 +101,48 @@ ton = tb %>%
     crossing(gt = gts3) %>%
     mutate(gid = glue("{gt}_{gid}")) %>%
     group_by(cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
+    mutate(ng = map_int(gids, length)) %>%
+    mutate(cond = factor(cond, levels=conds)) %>% arrange(cond) %>%
+    select(clid, cond, ng, gids)
+#}}}
+
+#{{{ build module gene list pairs
+min_ng = 50
+ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
+make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
+make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
+md = top %>% inner_join(ton1, by=c('cond')) %>%
+    filter(ng >= min_ng) %>%
+    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
+    mutate(ts = map2(gids, gids_c, make_status_tibble))
+#}}}
+
+fo = glue("{dirw}/50_modules/{tag}.rds")
+saveRDS(md, fo)
+#}}}
+
+#{{{ B73 DEG lists
+tag = 'degB'
+top = deg %>% unnest(gids) %>% filter(str_detect(gids, '^B')) %>%
+    group_by(cond, drc) %>%
+    summarise(ng=length(unique(gids)), gids=list(unique(gids))) %>% ungroup() %>%
+    arrange(cond, drc) %>%
+    mutate(cid = glue("c{1:n()}")) %>%
+    mutate(note = glue("all {drc}-regulated")) %>%
+    select(cid, cond, note, ng, gids)
+
+#{{{ create background/negtavie list
+tb = deg48 %>% filter(cond2=='timeM', Genotype == 'B73') %>%
+    rename(gt = Genotype) %>%
+    select(-up, -down) %>% unnest(ds)
+ton = tb %>%
+    mutate(cond = str_to_lower(Treatment)) %>%
+    mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
+    filter(nde) %>%
+    count(gt, gid, cond) %>% rename(n_nde = n) %>%
+    filter(n_nde == 2) %>% select(-n_nde) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>% summarise(gids=list(unique(gid))) %>% ungroup() %>%
     mutate(ng = map_int(gids, length)) %>%
     select(cond, ng, gids)
 #}}}
@@ -108,7 +158,6 @@ md = top %>% inner_join(ton1, by=c('cond')) %>%
     mutate(ts = map2(gids, gids_c, make_status_tibble))
 #}}}
 
-tag = 'deg'
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
@@ -117,8 +166,8 @@ saveRDS(md, fo)
 #{{{ check ovlp w. DEG sets  - prepare t_deg
 drcs = c('up','down')
 t_deg = deg %>%
-    mutate(st = 1) %>% unnest(gids) %>% rename(gid=gids) %>%
-    spread(Timepoint, st) %>% rename(t1=`1`, t25=`25`) %>%
+    mutate(st = 1) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
+    spread(Timepoint, st) %>% dplyr::rename(t1=`1`, t25=`25`) %>%
     replace_na(list(t1=0,t25=0)) %>% mutate(tag = '') %>%
     mutate(tag = ifelse(t1==1 & t25==0, '1h', tag)) %>%
     mutate(tag = ifelse(t1==0 & t25==1, '25h', tag)) %>%
@@ -132,42 +181,45 @@ tags = levels(t_deg$lab)
 #{{{ cold
 cond = 'cold'
 gids = deg %>% filter(cond==!!cond) %>%
-    select(gids) %>% unnest(gids) %>% distinct(gids) %>% pull(gids)
+    select(gids) %>% unnest(gids) %>% distinct(gids) %>%
+    filter(str_detect(gids, "^[BMW]")) %>% pull(gids)
 #
-ti1 = tc$diff %>% filter(gt %in% gts3) %>%
+ti1 = tc$diff %>% dplyr::filter(gt %in% gts3) %>%
     mutate(gid = glue("{gt}_{gid}")) %>% select(-gt) %>%
     filter(cond==!!cond, gid %in% gids) %>% select(-cond)
-ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='no')
-#
+ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='norm')
+
 w = run_wgcna(ti2, softPower=1, type='signed hybrid', corFnc='cor', TOM=F,
               TOMType='signed', hclust.opt='ward.D2')
 #
-rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20,
-                      deepSplit=3, minGap=0)
+rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20, minGap=0,deepSplit=2)
 
-mc = merge_modules(rc, w$datExpr, cutHeight=.25, pre=str_sub(cond,1,1))
+mc = merge_modules(rc, w$datExpr, pre=str_sub(cond,1,1), cutHeight=.15,
+    mms=c('c13'='c04'))
 nc = 4
-pa = plot_me(mc$me, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
+pa = plot_me(mc$tu, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
+tcr1 = tcr %>% filter(cond %in% c(!!cond,'control'))
+pb = plot_cluster(mc$tul, tcr1, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
 #{{{ plot ovlp w. DEG sets
-tp = mc$me %>%
-    select(cid, gids) %>% unnest(gids) %>% rename(gid=gids) %>%
+tp = mc$tu %>%
+    select(cid, gids) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
     left_join(t_deg %>% filter(cond==!!cond), by=c('gid')) %>%
     mutate(lab=as.character(lab)) %>%
     replace_na(list(lab='non-DE'))
 tag2s = c(tags[1:3], 'non-DE', tags[4:6])
-tp2 = tp %>% count(cid,lab) %>% rename(tag1=cid,tag2=lab) %>%
+tp2 = tp %>% dplyr::count(cid,lab) %>% dplyr::rename(tag1=cid,tag2=lab) %>%
     mutate(tag1=as_factor(tag1), tag2=factor(tag2, levels=tag2s))
 fills = brewer.pal(9, 'Pastel1')
 fills = fills[c(1:3,4:6)]
 fills = c(brewer.pal(3, 'Reds'), brewer.pal(3, 'Greens'))
 #}}}
-pb = multi_pie(tp2, ncol=nc, fills=fills, legend.pos='top.center.out',
+pc = multi_pie(tp2, ncol=nc, fills=fills, legend.pos='top.center.out',
                legend.dir='h', legend.vjust=-.2) + o_margin(2,.2,.2,.2)
 fo = glue("{dirw}/61.{cond}.pdf")
-ggarrange(pa, pb, nrow=1, ncol=2, labels=LETTERS[1:2],
+ggarrange(pa, pb, pc, nrow=1, ncol=3, labels=LETTERS[1:3],
           widths=c(2,2,2), heights=c(2,2)) %>%
-ggexport(filename=fo, width=8, height=7)
-me_cold = mc$me %>% mutate(cond = cond)
+ggexport(filename=fo, width=12, height=7)
+me_cold = mc$tu %>% mutate(cond = cond)
 #}}}
 
 gids_tf = c('Zm00001d031736','Zm00001d021263','Zm00001d033987', 'Zm00001d032923', 'Zm00001d016255')
@@ -179,38 +231,41 @@ gids = deg %>% filter(cond==!!cond) %>%
 ti1 = tc$diff %>% filter(gt %in% gts3) %>%
     mutate(gid = glue("{gt}_{gid}")) %>% select(-gt) %>%
     filter(cond==!!cond, gid %in% gids) %>% select(-cond)
-ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='no')
+ti2 = filter_expr(ti1, wide=T, min_cpm=.5, num_sam_on=1, pct_sam_on=0, min_var_p=0, transform='norm')
+#
 w = run_wgcna(ti2, softPower=1, type='signed', corFnc='cor', TOM=F,
               TOMType='signed', hclust.opt='ward.D2')
-#
-rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20,
-                      deepSplit=3, minGap=0)
+rc = make_raw_modules(w$datExpr, w$diss, w$tree, minModuleSize=20, minGap=0, deepSplit=2)
 
-mc = merge_modules(rc, w$datExpr, cutHeight=.25, pre=str_sub(cond,1,1))
+mc = merge_modules(rc, w$datExpr, pre=str_sub(cond,1,1), cutHeight=.1,
+    mms = c('h05'='h01', 'h10'='h02'))
 nc = 4
-pa = plot_me(mc$me, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
+pa = plot_me(mc$tu, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
+tcr1 = tcr %>% filter(cond %in% c(!!cond,'control'))
+pb = plot_cluster(mc$tul, tcr1, ncol=nc, tit=glue("{cond} stress ({nrow(ti2)} genes)"))
 #{{{ plot ovlp w. DEG sets
-tp = mc$me %>%
-    select(cid, gids) %>% unnest(gids) %>% rename(gid=gids) %>%
+tp = mc$tu %>%
+    select(cid, gids) %>% unnest(gids) %>% dplyr::rename(gid=gids) %>%
     left_join(t_deg %>% filter(cond==!!cond), by=c('gid')) %>%
     mutate(lab=as.character(lab)) %>%
     replace_na(list(lab='non-DE'))
 tag2s = c(tags[1:3], 'non-DE', tags[4:6])
-tp2 = tp %>% count(cid,lab) %>% rename(tag1=cid,tag2=lab) %>%
+tp2 = tp %>% dplyr::count(cid,lab) %>% dplyr::rename(tag1=cid,tag2=lab) %>%
     mutate(tag1=as_factor(tag1), tag2=factor(tag2, levels=tag2s))
 fills = brewer.pal(9, 'Pastel1')
 fills = fills[c(1:3,4:6)]
 fills = c(brewer.pal(3, 'Reds'), brewer.pal(3, 'Greens'))
 #}}}
-pb = multi_pie(tp2, ncol=nc, fills=fills, legend.pos='top.center.out',
+pc = multi_pie(tp2, ncol=nc, fills=fills, legend.pos='top.center.out',
                legend.dir='h', legend.vjust=-.2) + o_margin(2,.2,.2,.2)
 fo = glue("{dirw}/61.{cond}.pdf")
-ggarrange(pa, pb, nrow=1, ncol=2, labels=LETTERS[1:2],
+ggarrange(pa, pb, pc, nrow=1, ncol=3, labels=LETTERS[1:3],
           widths=c(2,2,2), heights=c(2,2)) %>%
-ggexport(filename=fo, width=8, height=7)
-me_heat = mc$me %>% mutate(cond = cond)
-mc$clu %>% filter(str_replace(gid, '^.*_', '') %in% gids_tf)
+ggexport(filename=fo, width=12, height=7)
+me_heat = mc$tu %>% mutate(cond = cond)
+mc$tul %>% filter(str_replace(gid, '^.*_', '') %in% gids_tf)
 #}}}
+
 
 f_cfg = glue('{dirw}/config.xlsx')
 cfg = read_xlsx(f_cfg)
@@ -253,7 +308,48 @@ md = top %>% inner_join(ton1, by=c('cond')) %>%
     mutate(ts = map2(gids, gids_c, make_status_tibble))
 #}}}
 
-tag = 'dmod'
+tag = 'dmodA'
+fo = glue("{dirw}/50_modules/{tag}.rds")
+saveRDS(md, fo)
+#}}}
+
+#{{{ B73 DEG modules
+fi = glue("{dirw}/50_modules/dmodA.rds")
+ti = readRDS(fi)
+top = ti %>% select(cid,cond,note,ng,me,gids) %>% unnest(gids) %>%
+    filter(str_detect(gids, '^B73')) %>%
+    group_by(cid, cond, note) %>%
+    summarise(ng=length(unique(gids)), gids=list(unique(gids))) %>% ungroup() %>%
+    select(cid, cond, note, ng, gids)
+
+#{{{ create background/negtavie list
+tb = deg48 %>% filter(cond2=='timeM', Genotype == 'B73') %>%
+    rename(gt = Genotype) %>%
+    select(-up, -down) %>% unnest(ds)
+ton = tb %>%
+    mutate(cond = str_to_lower(Treatment)) %>%
+    mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
+    filter(nde) %>%
+    count(gt, gid, cond) %>% rename(n_nde = n) %>%
+    filter(n_nde == 2) %>% select(-n_nde) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>% summarise(gids=list(unique(gid))) %>% ungroup() %>%
+    mutate(ng = map_int(gids, length)) %>%
+    select(cond, ng, gids)
+#}}}
+
+#{{{ build module gene list pairs
+min_ng = 50
+ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
+make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
+make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
+md = top %>% inner_join(ton1, by=c('cond')) %>%
+    filter(ng >= min_ng) %>%
+    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
+    mutate(ts = map2(gids, gids_c, make_status_tibble))
+#}}}
+
+tag = 'dmodB'
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
@@ -387,7 +483,7 @@ saveRDS(md, fo)
 
 
 #{{{ fig2A - module eigengene, create module gene IDs
-tag = 'dmod'
+tag = 'dmodA'
 fi = glue("{dirw}/50_modules/{tag}.rds")
 md = readRDS(fi)
 
@@ -395,35 +491,33 @@ f_cfg = glue('{dirw}/config.xlsx')
 cfg = read_xlsx(f_cfg)
 md1 = md %>% inner_join(cfg %>% select(cid,idx), by='cid') %>%
     filter(!is.na(idx)) %>%
-    select(idx,cond,note, ng,me, gids) %>% arrange(idx)
-
-tp = md1 %>%
+    select(idx,cid,cond,note, ng,me, gids) %>% arrange(idx) %>%
     mutate(pnl = glue("{cond}: {note} ({ng})")) %>%
-    select(idx,pnl,me)
-ncol=2
+    mutate(pnl=as_factor(pnl))
+
+ti = md %>% select(cid,cond,gids)
+ti0 = ti %>% mutate(cond='control')
+ti = ti %>% bind_rows(ti0) %>% unnest(gids) %>% rename(gid=gids)
+tpa = extract_avg_expr(ti, tcr)
+
+conds3 = c('cold','heat','control')
+isum <- function(gids, sep="\n") {
     #{{{
-    tp = tp %>%
-        select(idx, pnl, me) %>% unnest(me) %>%
-        gather(x, val, -pnl, -idx) %>%
-        mutate(hr=as.double(str_replace(x, 'h', ''))/10)
-    tpx = tp %>% distinct(x, hr) %>% arrange(hr)
-    tpp = tp %>% distinct(pnl, idx) %>% arrange(idx)
-    tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
-    times = c(0,2,4,8,25)
-    p = ggplot(tp, aes(x=x, y=val, group=1)) +
-        geom_point(size=1.5) +
-        geom_line() +
-        #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
-        scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$hr, expand=expansion(mult=c(.05,.05))) +
-        scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
-        facet_wrap(pnl~., ncol=ncol, scale='free_y') +
-        #ggtitle(tit) +
-        otheme(panel.spacing=.1, strip.compact=F,
-               xtitle=T, xtext=T, xtick=T, margin=c(.3,.3,.3,.3)) +
-        theme(plot.title=element_text(hjust=.5, size=10))
+    x = tibble(gid=gids) %>% unnest(gid) %>%
+        separate(gid, c('gt','gid'), sep='_') %>%
+        count(gt) %>% mutate(txt = glue("{gt}: {n}"))
+    str_c(x$txt, collapse=sep)
     #}}}
+}
+tp = md1 %>%
+    mutate(txt = map_chr(gids, isum)) %>%
+    select(cid,pnl,txt) %>%
+    inner_join(tpa, by='cid') %>%
+    mutate(cond = factor(cond, levels=conds3))
+#
+pa = plot_avg_expr(tp, ncol=2, strip.compact=F)
 fo = glue("{dirw}/21.ME.pdf")
-ggsave(p, file=fo, width=4, height=7)
+ggsave(pa, file=fo, width=4, height=7)
 
 #}}}
 

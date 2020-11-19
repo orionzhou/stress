@@ -1,36 +1,55 @@
 source('functions.R')
 require(progress)
 dirw = glue('{dird}/41_ml')
+dirn = glue('{dird}/41_ml/00_nf')
+setwd(dirw)
 
 #{{{ prepare training input: gene lists + kmer lists
-fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
-r3 = readRDS(fi)
-tl = r3$tl; tc = r3$tc; tk = r3$tk
+fi = glue("{dird}/25_dreme/05.best.mtfs.rds")
+r5 = readRDS(fi)
+tk = r5$tk %>% filter(n_mtf >= 10)
 
-# gene lists
-tc %>% mutate(fo=glue("{dirw}/01_gene_lists/{cid}.tsv")) %>%
-    mutate(x = map2(ts, fo, write_tsv))
-
-t1 = tk %>% select(mid,fid,fname,known, lid,pval) %>%
-    inner_join(tl %>% select(lid, cid, bin, epi), by='lid')
-t2 = t1 %>% arrange(cid, pval) %>%
-    separate(bin,c('opt','bin'),sep=":", remove=F) %>%
-    arrange(cid, pval) %>%
-    group_by(cid, fid, fname) %>%
-    slice(1) %>% ungroup() %>%
-    arrange(cid, pval) %>%
-    group_by(cid) %>%
-    mutate(i = 1:n()) %>% ungroup() %>%
-    inner_join(tk %>% select(mid,kmer,kmers), by='mid') %>%
-    mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
-    select(cid, i, opt,bin,epi, pval,fid,fname,kmers)
-t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup()
-
-fo = glue("{dirw}/03.best.mtfs.rds")
-saveRDS(t3, fo)
-
-t3 %>% mutate(fo = glue("{dirw}/03_motif_lists/{cid}.tsv")) %>%
+diro = glue('{dirn}/03_motif_lists')
+if(!dir.exists(diro)) dir.create(diro)
+tk %>% mutate(fo = glue("{diro}/{cid}.tsv")) %>%
     mutate(l = map2(kmer, fo, write_tsv))
+
+tc1 = r5$tc %>% mutate(train='B') %>% select(train,everything())
+#{{{ BMW training
+f_cfg = glue('{dird}/25_dreme/config.xlsx')
+cfg = read_xlsx(f_cfg) %>% fill(tag, .direction='down') %>% select(tag,ocid,cid)
+#{{{ read in
+diri = glue("{dird}/25_dreme/00_nf")
+tag = 'degA'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc_1 = r$tc %>% mutate(tag = tag)
+#
+tag = 'dmod'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc_2 = r$tc %>% mutate(tag = tag)
+#}}}
+tc2 = tc_1 %>% bind_rows(tc_2) %>% rename(ocid=cid) %>%
+    inner_join(cfg, by=c('tag','ocid')) %>% arrange(cid) %>%
+    select(cid,cond,note, ng,ng_c,gids,gids_c,ts) %>%
+    mutate(train = 'BMW') %>% select(train, everything())
+#}}}
+
+trains = c('B','BMW')
+tc = tc1 %>% bind_rows(tc2) %>% filter(cid %in% tk$cid) %>%
+    mutate(train = factor(train, levels=trains)) %>%
+    arrange(train, cid) %>%
+    mutate(tid = str_c('t', str_pad(1:n(), width=2,pad='0'))) %>%
+    select(tid, everything())
+
+r6 = list(tk=tk, tc=tc)
+fo = glue("{dirw}/06.tk.tc.rds")
+saveRDS(r6,fo)
+
+diro = glue('{dirn}/05_gene_lists')
+if(!dir.exists(diro)) dir.create(diro)
+tc %>% mutate(fo = glue("{diro}/{tid}.tsv")) %>% mutate(j=map2(ts, fo, write_tsv))
 #}}}
 
 #{{{ motif meta plots
@@ -91,6 +110,34 @@ ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
     count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
     mutate(prop = nh/nt)
 
+x = ti3 %>% group_by(i,fid,fnote,mod) %>%
+    summarize(prop=max(prop)) %>% ungroup() %>%
+    filter(str_detect(fnote, 'TSS')) %>%
+    filter(str_detect(mod, 'bg'), prop < .3) %>% distinct(i) %>% pull(i)
+
+#{{{ look at some hand-picked motifs
+tz = tk %>% filter(cid=='c10', neg/ng_c < .1) %>%
+    arrange(fid, pval) %>% group_by(fid) %>% slice(1) %>% ungroup() %>%
+    arrange(pval) %>%
+    mutate(i=1:n(), opt='.', bin='.', epi='.') %>%
+    mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
+    select(i,opt,bin,epi,pval,fid,fname,kmers)
+fo = glue('{dirw}/c10.tsv')
+write_tsv(tz, fo)
+
+rb2 = tz %>%
+    mutate(cid='c10', fnote = glue("{i} {fid} ({fname})")) %>%
+    select(cid,i,fid,fnote)
+#
+ti2 = read_mtf_loc('t.tsv') %>% mutate(cid='c10', cond='cold',note='all') %>%
+    inner_join(rb2, by=c('cid','fid'))
+#
+ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
+    inner_join(ts2, by=c("gid")) %>%
+    count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
+    mutate(prop = nh/nt)
+#}}}
+
 # meta plot of selected TFBS motifs
 plot_tss_meta <- function(cid, i, tss, rb2, ti3, dirw) {
     #{{{
@@ -123,13 +170,11 @@ tibble(cid=!!cid, i=1:10) %>%
 #}}}
 
 #{{{ create ML training config
-fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
-r3 = readRDS(fi)
-tl = r3$tl; tc = r3$tc; tk = r3$tk
-fi = glue("{dirw}/03.best.mtfs.rds")
-tm = readRDS(fi)
+fi = glue("{dirw}/06.tk.tc.rds")
+r6 = readRDS(fi)
+tc = r6$tc; tk = r6$tk
 
-#{{{ b1: 4 modules * 14 bin * 2 epis * 2 nfeas * 2 mods = 448
+#{{{ b1
 bins = c(
          "TSS:-500","TSS:+500","TSS:-/+500",
          "TSS:-2k",'TSS:+2k','TSS:-/+2k',
@@ -147,28 +192,28 @@ nfeas1 = c('top100')
 mods1 = c('anr')
 
 ctag = 'b1'
-to1 = tc %>% select(cid) %>%
+tc1 = tc %>% filter(train == 'B')
+to1 = tc1 %>% select(tid,cid) %>%
   crossing(bin = bins, epi = epis1, nfea = nfeas1, mod = mods1)
-to2 = tc %>% select(cid) %>%
+to2 = tc1 %>% select(tid,cid) %>%
   crossing(bin = bins1, epi = epis, nfea = nfeas, mod = mods)
 to = to1 %>% bind_rows(to2) %>%
-    distinct(cid, bin, epi, nfea, mod) %>%
+    distinct(tid, cid, bin, epi, nfea, mod) %>%
     mutate(nfea = factor(nfea, levels=nfeas)) %>%
     mutate(bin = factor(bin, levels=bins)) %>%
     mutate(epi = factor(epi, levels=epis)) %>%
     mutate(mod = factor(mod, levels=mods)) %>%
-    arrange(cid, bin, epi, nfea, mod) %>%
+    arrange(tid, cid, bin, epi, nfea, mod) %>%
     mutate(did = sprintf("d%03d", 1:n())) %>%
-    mutate(gt = 'Zmays_B73') %>%
-    select(did, cid, bin, epi, nfea, mod, gt)
+    select(did, tid, cid, bin, epi, nfea, mod)
 
-fo = glue("{dirw}/10_models/{ctag}.cfg.rds")
+fo = glue("{dirn}/{ctag}.cfg.rds")
 saveRDS(to, fo)
-fo = glue("{dirw}/10_models/{ctag}.cfg.tsv")
+fo = glue("{dirn}/{ctag}.cfg.tsv")
 write_tsv(to, fo)
 #}}}
 
-#{{{ b2: 4 modules * 7 bin * 1 epis * 1 nfeas * 2 mods = 56
+#{{{ b2
 ctag = 'b2'
 to0 = tl %>% select(-ng0) %>% filter(gt == 'Zmays_B73') %>%
   inner_join(tm, by='cid') %>%
@@ -198,7 +243,7 @@ fo = glue("{dirw}/10_models/{ctag}.cfg.tsv")
 write_tsv(to, fo)
 #}}}
 #}}}
-# run pipeline to build B models
+# run pipeline to build models
 
 ######## MODEL EVALUATION ########
 #{{{ process trained models

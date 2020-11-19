@@ -1,45 +1,121 @@
 source('functions.R')
-dirw = file.path(dird, '31_promoter')
-get_coords <- function(tss, srd, opt) {
-    #{{{
-    offu=0; offd=0
-    if (opt == '-500') {
-        offu = 500; offd = 0
-    } else if (opt == '+/-500') {
-        offu = 500; offd = 500
-    } else if (opt == '-1k') {
-        offu = 1000; offd = 0
-    } else if (opt == '+/-1k') {
-        offu = 1000; offd = 1000
-    } else if (opt == '-2k') {
-        offu = 2000; offd = 0
-    } else if (opt == '+/-2k') {
-        offu = 2000; offd = 2000
-    } else if (opt == '-10k') {
-        offu = 10000; offd = 0
-    } else if (opt == '+/-10k') {
-        offu = 10000; offd = 10000
-    } else {
-        stop("unknown opt: ", opt)
-    }
-    start = tss; end = tss + 1
-    if (srd == '+') {
-        start = tss - offu; end = tss + offd
-    } else if (srd == '-') {
-        start = tss - offd; end = tss + offu
-    } else {
-        stop("unknown strand: ", srd)
-    }
-    list(start=start, end=end)
-    #}}}
-}
+dirw = glue('{dird}/31_promoter')
 xref = read_xref()
 
+tssB = get_tss_tts('Zmays_B73') %>% mutate(gt="B73")
+#{{{ M
+tssM = get_tss_tts('Zmays_Mo17')
+tssM = xref %>% filter(qry=='Mo17',tgt=='B73') %>%
+    select(gid1,gid2,type) %>%
+    inner_join(tssM, by=c('gid2'='gid')) %>%
+    select(gid=gid1,chrom,tss,tts,srd) %>%
+    mutate(gt="Mo17")
+#}}}
+#{{{ W
+tssW = get_tss_tts('Zmays_W22')
+tssW = xref %>% filter(qry=='W22',tgt=='B73') %>%
+    select(gid1,gid2,type) %>%
+    inner_join(tssW, by=c('gid2'='gid')) %>%
+    select(gid=gid1,chrom,tss,tts,srd) %>%
+    mutate(gt="W22")
+#}}}
+
+tss = rbind(tssB, tssM, tssW)
+
+#{{{ 
+chrom_size = read_tsv(glue('{dirw}/../21_seq/00.sizes'), col_names=c('chrom','size'))
+ti = tss %>% filter(gt=='B73') %>%
+    mutate(start = ifelse(srd == '-', tts, tss)) %>%
+    mutate(end = ifelse(srd == '-', tss, tts)) %>%
+    mutate(start = start - 2000, end = end + 2000) %>%
+    inner_join(chrom_size, by='chrom') %>%
+    mutate(start=pmax(0, start), end=pmin(end, size)) %>%
+    select(chrom, start, end, srd, tss, tts, gid) %>%
+    arrange(chrom,start,end)
+
+to = ti %>% select(chrom,start,end,gid)
+fo = glue('{dirw}/01.B.bed')
+write_tsv(to, fo, col_names=F)
+
+
+refine_indel <- function(ti, b1,e1,b2,e2) {
+    #{{{
+    if( is.null(ti) ) {
+        NULL
+    } else {
+    ti %>%
+        mutate(beg1 = pmax(beg1, b1)) %>%
+        mutate(beg2 = pmax(beg2, b2)) %>%
+        mutate(end1 = pmin(end1, e1)) %>%
+        mutate(end2 = pmin(end2, e2)) %>%
+        mutate(del=end1-beg1, ins=end2-beg2)
+    }
+    #}}}
+}
+sum_crossmap <- function(fm, fv) {
+    #{{{
+    #{{{ map
+    ti = read_tsv(fm, col_names=c('chrom1','beg1','end1','id','opt','chrom2','beg2','end2','id2')) %>%
+        mutate(size1 = end1-beg1, size2 = end2-beg2) %>%
+        select(-id2)
+    #
+    ti1 = ti %>% filter(opt %in% c("Unmap")) %>%
+        select(id,c1=chrom1,b1=beg1,e1=end1,size1)
+    ti2 = ti %>% filter(!opt %in% c("Unmap"))
+    #
+    tm = ti2 %>% mutate(size1=end1-beg1, aln=end2-beg2) %>%
+        group_by(id,chrom1,beg1,end1,size1,chrom2) %>%
+        summarise(beg2=min(beg2), end2=max(end2), aln=sum(aln)) %>%
+        ungroup() %>%
+        mutate(size2=end2-beg2) %>%
+        arrange(id, desc(aln)) %>%
+        group_by(id) %>% slice(1) %>% ungroup()
+    #}}}
+    #{{{
+    tv = read_tsv(fv, col_names=c('chrom0','beg0','end0','id',
+                                  'chrom1','beg1','end1','srd',
+                                  'chrom2','beg2','end2','cid','vtype',
+                                  'ref','alt','bp')) %>%
+        select(-chrom0,-beg0,-end0,-bp)
+    tvs = tv %>% filter(vtype=='snp') %>%
+        select(id,chrom1,pos1=end1,chrom2,pos2=end2,ref,alt) %>%
+        group_by(id,chrom1,chrom2) %>% nest() %>% rename(snp=data)
+    tvi = tv %>% filter(vtype=='indel') %>% select(-vtype) %>%
+        group_by(id,chrom1,chrom2) %>% nest() %>% rename(indel = data)
+    #}}}
+    isum1 <- function(x) ifelse(is.null(x), 0, sum(x$ins))
+    isum2 <- function(x) ifelse(is.null(x), 0, sum(x$del))
+    inrow <- function(x) ifelse(is.null(x), 0, nrow(x))
+    to = tm %>% left_join(tvs, by=c('id','chrom1','chrom2')) %>%
+        left_join(tvi, by=c('id','chrom1','chrom2')) %>%
+        mutate(indel=pmap(list(indel,beg1,end1,beg2,end2), refine_indel)) %>%
+        mutate(ins = map_dbl(indel, isum1)) %>%
+        mutate(del = map_dbl(indel, isum2)) %>%
+        mutate(n_snp = map_dbl(snp, inrow)) %>%
+        select(id,size1,size2,aln,ins,del,n_snp,
+               c1=chrom1,b1=beg1,e1=end1,c2=chrom2,b2=beg2,e2=end2,snp,indel)
+    to %>%# filter(c1!='B99') %>%
+        mutate(x = size1-del-aln, y =size2-ins-aln) %>%
+        select(size1,del,x, size2, ins,y) %>%
+        filter(x!=0 | y!=0) %>%
+        print(n=10)
+    to
+    #}}}
+}
+
+fm=glue("{dirw}/11.BtoM.map.bed")
+fv=glue("{dirw}/11.BtoM.vnt.bed")
+to = sum_crossmap(fm, fv)
+#}}}
+
+
+
+
+##### obsolete #####
+#{{{ prepare promoter db for B/M/W (individually)
 gt = 'Zmays_B73'
 gt = 'Zmays_Mo17'
 gt = 'Zmays_W22'
-
-#{{{ prepare promoter db for B/M/W/
 diro = file.path(dirw, gt)
 if(!dir.exists(diro)) system(sprintf("mkdir -p %s", diro))
 fi = glue("{dird}/21_seq/regions.xlsx")

@@ -201,20 +201,20 @@ make_raw_modules <- function(datExpr, dissTOM, tree,
     me = MEs %>% as_tibble() %>% mutate(cond=rownames(MEs)) %>%
         gather(col, val, -cond) %>% spread(cond, val) %>%
         mutate(col=str_replace(col, "^ME", "")) %>%
-        group_by(col) %>% nest() %>% rename(me = data) %>% ungroup() %>%
+        group_by(col) %>% nest() %>% dplyr::rename(me = data) %>% ungroup() %>%
         inner_join(tu, by=c('col')) %>%
         arrange(desc(n)) %>%
         mutate(cid = str_c(pre, str_pad(1:n(),2,pad='0'))) %>%
         #select(ctag, col, clu, me, n, gids)
         select(cid, n, me, gids)
     # make clu
-    clu = me %>% select(cid, gids) %>% unnest(gids) %>% rename(gid=gids)
+    clu = me %>% select(cid, gids) %>% unnest(gids) %>% dplyr::rename(gid=gids)
     clu = tibble(gid=colnames(datExpr)) %>% inner_join(clu,by='gid')
     #
     list(me=me, clu=clu)
     #}}}
 }
-merge_modules <- function(rc, datExpr, cutHeight=.2, pre='mc') {
+merge_modules <- function(rc, datExpr, pre='mc', cutHeight=.2, mms=c()) {
     #{{{
     tMEs = rc$me %>% select(cid, me) %>% unnest(me) %>%
         gather(cond, val, -cid) %>% spread(cid, val)
@@ -230,21 +230,35 @@ merge_modules <- function(rc, datExpr, cutHeight=.2, pre='mc') {
     #
     # Construct numerical labels corresponding to the colors
     tu = tibble(gid=colnames(datExpr), col=mergedColors) %>%
-        group_by(col) %>% summarise(n=n(), gids=list(gid)) %>% ungroup()
-    me = MEs2 %>% as_tibble() %>% mutate(cond=rownames(MEs2)) %>%
-        gather(col, val, -cond) %>% spread(cond, val) %>%
-        mutate(col=str_replace(col, "^ME", "")) %>%
-        group_by(col) %>% nest() %>% rename(me = data) %>% ungroup() %>%
-        inner_join(tu, by=c('col')) %>%
+        group_by(col) %>% summarise(n=n(), gids=list(gid)) %>% ungroup() %>%
         arrange(desc(n)) %>%
         mutate(cid = str_c(pre, str_pad(1:n(),2,pad='0'))) %>%
-        #select(ctag, col, clu, me, n, gids)
-        select(cid, n, me, gids)
+        select(cid, n, gids)
+    tu = tu %>% mutate(cid = ifelse(cid %in% names(mms), mms[cid], cid)) %>%
+        unnest(gids) %>%
+        group_by(cid) %>%
+        summarise(n = n(), gids = list(gids)) %>% ungroup()
+    cids = tu %>% select(-n) %>% unnest(gids) %>% rename(gid=gids) %>%
+        arrange(match(gid, colnames(datExpr))) %>% pull(cid)
+    r = moduleEigengenes(datExpr, cids)
+    me = r$eigengenes %>% as_tibble() %>%
+        mutate(cond=rownames(r$eigengenes)) %>%
+        gather(cid, val, -cond) %>% spread(cond, val) %>%
+        mutate(cid=str_replace(cid, "^ME", "")) %>%
+        group_by(cid) %>% nest() %>% dplyr::rename(me = data) %>% ungroup()
+    ae = r$averageExpr %>% as_tibble() %>%
+        mutate(cond=rownames(r$averageExpr)) %>%
+        gather(cid, val, -cond) %>% spread(cond, val) %>%
+        mutate(cid=str_replace(cid, "^AE", "")) %>%
+        group_by(cid) %>% nest() %>% dplyr::rename(ae = data) %>% ungroup()
+    tu = tu %>% inner_join(me, by='cid') %>%
+        inner_join(ae, by=c('cid')) %>%
+        arrange(cid)
+    tul = tu %>% select(cid, gids) %>% unnest(gids) %>%
+        dplyr::rename(gid=gids) %>%
+        arrange(match(gid, colnames(datExpr))) %>% select(gid,cid)
     #
-    clu = me %>% select(cid, gids) %>% unnest(gids) %>% rename(gid=gids)
-    clu = tibble(gid=colnames(datExpr)) %>% inner_join(clu,by='gid')
-    #
-    list(me=me, clu=clu)
+    list(tu=tu, tul=tul)
     #}}}
 }
 cut_merge_modules <- function(datExpr, dissTOM, tree,
@@ -326,6 +340,97 @@ plot_me <- function(me, ncol=3, tit='', strip.compact=T) {
         otheme(panel.spacing=.1, strip.compact=strip.compact,
                xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2)) +
         theme(plot.title=element_text(hjust=.5, size=10))
+    #}}}
+}
+extract_avg_expr <- function(ti, tcr) {
+    #{{{
+    ti2 = ti %>% inner_join(tcr, by=c('cond','gid')) %>%
+        gather(sid, val, -cond, -cid, -gid) %>%
+        group_by(gid, cid, cond) %>%
+        mutate(val = val/mean(val)) %>% ungroup() %>%
+        select(cond, cid, gid, sid, val) %>%
+        mutate(val = ifelse(is.na(val), 0, val))
+    #
+    ti3 = ti2 %>% group_by(cond, cid, sid) %>%
+        summarise(avg=mean(val), std=sd(val),
+                  y5=quantile(val,.05), y25=quantile(val,.25),
+                  y50=quantile(val,.5), y75=quantile(val,.75),
+                  y95=quantile(val,.95)) %>% ungroup()
+    tis = ti3 %>% filter(sid=='h000') %>% select(cond,cid,off=y50)
+    ti4 = ti3 %>% inner_join(tis, by=c('cond','cid')) %>%
+        mutate(avg=avg-off,y5=y5-off,y25=y25-off,y50=y50-off,
+               y75=y75-off,y95=y95-off) %>%
+        select(-off) %>% rename(x= sid) %>%
+        mutate(xn=as.double(str_replace(x, 'h', ''))/10) %>%
+        select(cid,cond,x,xn,everything())
+    ti4
+    #}}}
+}
+plot_avg_expr <- function(tp, ncol=3, tit='', strip.compact=T) {
+    #{{{
+    tpx = tp %>% distinct(x, xn) %>% arrange(xn)
+    #tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
+    #tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
+    times = c(0,2,4,8,25)
+    cols3 = pal_npg()(6)[c(2,1,4)]
+    tpl = tp %>% arrange(cid, desc(y75)) %>%
+        group_by(cid) %>% slice(1) %>% ungroup() %>%
+        mutate(x='h250') %>% select(cid,pnl,txt,x,y=y75)
+    p = ggplot(tp, aes(x=x)) +
+        geom_ribbon(aes(ymin=y25,ymax=y75,fill=cond,group=cond), alpha=.2) +
+        geom_line(aes(y=y50, color=cond, group=cond)) +
+        geom_text(data=tpl, aes(x=x,y=y, label=txt), size=2, hjust=1, vjust=1) +
+        #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
+        scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$xn, expand=expansion(mult=c(.05,.05))) +
+        scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
+        facet_wrap(pnl~., ncol=ncol, scale='free_y') +
+        scale_color_manual(values=cols3) +
+        scale_fill_manual(values=cols3) +
+        otheme(legend.pos='bottom.right', legend.dir='v',
+               panel.spacing=.1, strip.compact=strip.compact,
+               xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2))
+        #guides(color=F, fill=F)
+    if (tit != '') p = p + ggtitle(tit) +
+        theme(plot.title=element_text(hjust=.5, size=10))
+    p
+    #}}}
+}
+plot_cluster <- function(clu, tcr, ncol=3, tit='', strip.compact=T) {
+    #{{{
+    ti = tcr %>%# filter(cond %in% c(!!cond, 'control')) %>%
+        inner_join(clu, by='gid') %>%
+        gather(sid, val, -cond, -cid, -gid) %>%
+        group_by(gid, cid, cond) %>%
+        mutate(val = val/mean(val)) %>% ungroup() %>%
+        select(cond, cid, gid, sid, val) %>%
+        mutate(val = ifelse(is.na(val), 0, val))
+    #
+    tp = ti %>% group_by(cond, cid, sid) %>%
+        summarise(n=n(), avg=mean(val), std=sd(val), y25=quantile(val,.25),
+                  y50=quantile(val,.5), y75=quantile(val,.75)) %>% ungroup()
+    tps = tp %>% filter(sid=='h000') %>% select(cond,cid,off=y50)
+    tp = tp %>% inner_join(tps, by=c('cond','cid')) %>%
+        mutate(avg=avg-off,y25=y25-off,y50=y50-off,y75=y75-off) %>%
+        dplyr::rename(x=sid) %>%
+        mutate(pnl = glue("{cid} [{number(n,accuracy=1)}]")) %>%
+        mutate(hr=as.double(str_replace(x, 'h', ''))/10)
+    tpx = tp %>% distinct(x, hr) %>% arrange(hr)
+    tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
+    tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
+    times = c(0,2,4,8,25)
+    ggplot(tp, aes(x=x)) +
+        geom_ribbon(aes(ymin=y25,ymax=y75,fill=cond,group=cond), alpha=.5) +
+        geom_line(aes(y=y50, color=cond, group=cond)) +
+        #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
+        scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$hr, expand=expansion(mult=c(.05,.05))) +
+        scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
+        facet_wrap(pnl~., ncol=ncol, scale='free_y') +
+        scale_color_npg() +
+        ggtitle(tit) +
+        otheme(panel.spacing=.1, strip.compact=strip.compact,
+               xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2)) +
+        theme(plot.title=element_text(hjust=.5, size=10)) +
+        guides(color=F, fill=F)
     #}}}
 }
 plot_me0 <- function(me, cond) {
