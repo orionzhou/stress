@@ -25,7 +25,7 @@ fi = glue('{diri}/{tag}/08.tc.tl.rds')
 r = readRDS(fi)
 tc_1 = r$tc %>% mutate(tag = tag)
 #
-tag = 'dmod'
+tag = 'dmodA'
 fi = glue('{diri}/{tag}/08.tc.tl.rds')
 r = readRDS(fi)
 tc_2 = r$tc %>% mutate(tag = tag)
