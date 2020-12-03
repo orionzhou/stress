@@ -29,10 +29,10 @@ ggexport(filename="sf02.pdf", width=9, height=6)
 a = readRDS('f2a.rds') +
     theme(plot.margin = margin(.2,0,.2,.2, "lines"))
 b = image_read_pdf("Fig2B.pdf")
-ggarrange(a, as.grob(b), nrow=1, ncol=2,
+ggarrange(a, as.grob(b), ncol=2,
           labels = LETTERS[1:2],
-          widths=c(2,2), heights=c(2,2)) %>%
-ggexport(filename="f2.pdf", width=9, height=6)
+          widths=c(1.2,2), heights=c(1,1)) %>%
+ggexport(filename="f2.pdf", width=9, height=5)
 #}}}
 
 # Fig S3 is already done
@@ -64,9 +64,9 @@ ggexport(filename="f5.pdf", width=8, height=6)
 #}}}
 
 #{{{ Fig S11
-a = readRDS('sf.11a.rds') +
+a = readRDS('sf11a.rds') +
     theme(plot.margin = margin(.2,0,.2,.2, "lines"))
-b = readRDS('sf.11b.rds') +
+b = readRDS('sf11b.rds') +
     theme(plot.margin = margin(.2,0,.2,0, "lines"))
 ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
           widths=c(1.1,2), heights=c(2,2)) %>%

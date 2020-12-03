@@ -51,7 +51,7 @@ saveRDS(tc, fo)
 #run st.job.17.R
 
 #{{{ read DE, TC, config
-fi = file.path(dirw, '../15_de/05.rds')
+fi = glue('{dird}/15_de/05.rds')
 x =  readRDS(fi)
 deg48 = x$deg48; deg12 = x$deg12
 conds = c('cold','heat')
@@ -354,7 +354,113 @@ fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
 
-#{{{ WGCNA-based modules (all genes)
+#{{{ variable gene lists
+#{{{
+conds = c('cold','heat')
+drcs = c('up','down')
+deg0 = deg48 %>% filter(Genotype %in% gts3) %>%
+    select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
+    gather(drc, gids, -Treatment,-Genotype,-Timepoint,-cond2) %>%
+    spread(cond2, gids) %>%
+    dplyr::rename(gids0 = time0, gids1 = timeM) %>%
+    mutate(gids = map2(gids0, gids1, intersect)) %>%
+    select(gt=Genotype,cond=Treatment,Timepoint,drc, gids) %>%
+    unnest(gids) %>% dplyr::rename(gid=gids) %>%
+    mutate(cond = str_to_lower(cond)) %>%
+    mutate(cond = factor(cond, levels=conds)) %>%
+    mutate(drc = factor(drc, levels=drcs)) %>% rename(time=Timepoint)
+#}}}
+x0 = deg0 %>% mutate(cond=glue("{cond}_{time}h_{drc}")) %>%
+    select(gid,cond,gt)
+x1 = x0 %>%
+    count(cond, gid) %>% rename(n_de = n) %>%
+    filter(!str_detect(cond, 'cold_1h'), n_de < 3)
+xa = x1 %>% select(cond, gid) %>% crossing(gt = gts3) %>%
+    left_join(x0 %>% mutate(st = 1), by=c('cond','gid','gt')) %>%
+    replace_na(list(st=0))
+
+make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
+md = xa %>% mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>%
+    summarise(ng=sum(st==1), ng_c=sum(st==0),
+              gids=list(gid[st==1]), gids_c=list(gid[st==0])) %>%
+    ungroup() %>%
+    separate(cond, c('cond','note','drc'), sep='_', extra='merge') %>%
+    mutate(drc=factor(drc,levels=c('up','down'))) %>%
+    arrange(cond,note,drc) %>%
+    mutate(cid = c("c10",'c20','c30','c40','c30','c40')) %>%
+    mutate(note=glue("{note}_{drc}")) %>%
+    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
+    mutate(ts = map2(gids, gids_c, make_status_tibble))
+
+tag = 'var1'
+fo = glue("{dirw}/50_modules/{tag}.rds")
+saveRDS(md, fo)
+#}}}
+
+#{{{ variable gene lists 2
+fg = glue('{dird}/15_de/09.gene.status.rds')
+x = readRDS(fg)
+td1=x$td1; td2=x$td2
+
+#{{{ old way
+td3 = td2 %>% filter(st %in% c("dA+B=", "dA=B+", "dA-B=", 'dA=B-')) %>%
+    mutate(drc = ifelse(str_detect(st, '-'), 'down', 'up')) %>%
+    mutate(qgid = glue('{qry}_{gid}')) %>%
+    mutate(tgid = glue('{tgt}_{gid}')) %>%
+    mutate(gid1 = ifelse(str_detect(st,"A="), tgid, qgid)) %>%
+    mutate(gid0 = ifelse(str_detect(st,"A="), qgid, tgid))
+#
+td4 = td3 %>% distinct(cond,drc,gid0,gid1) %>%
+    gather(tag, gid, -cond,-drc) %>%
+    distinct(cond,drc,gid,tag)
+td4s = td4 %>%
+    count(cond,drc,gid) %>% filter(n<=1)
+td5 = td4 %>% inner_join(td4s, by=c("cond",'drc','gid')) %>%
+    group_by(cond,drc,tag) %>% summarise(gids = list(gid)) %>% ungroup() %>%
+    spread(tag, gids) %>%
+    rename(gids=gid1,gids_c=gid0) %>%
+    mutate(ng=map_int(gids, length)) %>%
+    mutate(ng_c=map_int(gids_c, length))
+#}}}
+
+#{{{ new way
+td3 = td2 %>% filter(st %in% c("dA+B=", "dA=B+", "dA-B=", 'dA=B-')) %>%
+    mutate(drc = ifelse(str_detect(st, '-'), 'down', 'up')) %>%
+    distinct(cond,drc,gid)
+td1s = td1 %>% arrange(cond,gt,gid,st) %>%
+    group_by(cond,gt,gid) %>% slice(1) %>% ungroup() %>% select(-time)
+td4 = td3 %>% crossing(gt = gts3) %>%
+    left_join(td1s, by = c('cond','gt','gid'))
+td4s = td4 %>% mutate(drc1=str_to_upper(str_sub(drc,1,1))) %>%
+    group_by(cond,drc,drc1,gid) %>%
+    summarise(nd=sum(st==drc1), nu=sum(st!=drc1)) %>% ungroup() %>%
+    filter(nd >0, nu>0) %>% select(cond,drc,drc1,gid)
+td5 = td4 %>% inner_join(td4s, by=c('cond','drc','gid')) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond,drc) %>%
+    summarise(gids = list(gid[st==drc1]), gids_c=list(gid[st!=drc1])) %>%
+    ungroup() %>%
+    mutate(ng=map_int(gids, length)) %>%
+    mutate(ng_c=map_int(gids_c, length))
+#}}}
+
+make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
+md = td5 %>% mutate(note = glue("{drc}-regulated")) %>%
+    mutate(drc = factor(drc, levels=c("up",'down'))) %>%
+    arrange(cond,drc) %>%
+    mutate(cid = c("c10",'c20','c30','c40')) %>%
+    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
+    mutate(ts = map2(gids, gids_c, make_status_tibble))
+
+tag = 'var2'
+fo = glue("{dirw}/50_modules/{tag}.rds")
+saveRDS(md, fo)
+#}}}
+
+
+
+#{{{ [obsolete] WGCNA-based modules (all genes)
 gt = 'B73'
 #{{{ check ovlp w. DEG sets  - prepare t_deg
 drcs = c('up','down')
@@ -518,7 +624,8 @@ tp = md1 %>%
 pa = plot_avg_expr(tp, ncol=2, strip.compact=F)
 fo = glue("{dirw}/21.ME.pdf")
 ggsave(pa, file=fo, width=4, height=7)
-
+fo = glue("{dirf}/f2a.rds")
+saveRDS(pa, fo)
 #}}}
 
 
@@ -1110,7 +1217,6 @@ md %>% mutate(fo=glue("{dirw}/{gt}/{bnid}.tsv")) %>%
     mutate(x = map2(ts, fo, write_tsv))
 #}}}
 #}}}
-
 #{{{ [obsolete] test plot members within individual module
 deg1 = deg$deg48 %>% filter(Genotype=='B73',Treatment=='Cold',cond2=='timeM') %>%
     select(Treatment,Timepoint,ds) %>% unnest(ds)

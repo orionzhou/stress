@@ -1,5 +1,6 @@
 #{{{ load & read
 require(devtools)
+require(GenomicFeatures)
 load_all('~/git/rmaize')
 require(progress)
 require(ape)

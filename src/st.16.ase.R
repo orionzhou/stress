@@ -1,5 +1,5 @@
 source('functions.R')
-dirw = file.path(dird, '16_ase')
+dirw = glue('{dird}/16_ase')
 regs = c('conserved','unexpected','cis','trans','cis+trans')
 conds = c("Control0",'Control1','Control25','Cold1','Cold25','Heat1','Heat25')
 crosses = c("B73xMo17",'W22xB73','W22xMo17')
@@ -236,10 +236,11 @@ ggsave(p, file = fp, width = 4.5, height = 6)
 #}}}
 #}}}
 
-#{{{ cis/trans for dDEGs
+#{{{ cis/trans for dDEGs - f5
 #{{{ read
-fi = file.path(dird, '15_de/08.de.rds')
-td = readRDS(fi)
+fi = file.path(dird, '15_de/05.rds')
+r = readRDS(fi)
+td = r$td
 tp1 = td %>% filter(ddrc != 0, deg != 'A=B=') %>%
     mutate(cond = str_c(stress,Timepoint, sep='')) %>%
     select(cond,qry,tgt,gid,deg,x)
@@ -263,7 +264,7 @@ tp2 = tr %>%
 ddeg = tp1 %>% inner_join(tp2, by=c("cond","qry",'tgt','gid'))
 ddeg %>% count(cond,qry,tgt,deg, reg) %>%
     spread(reg,n) %>% print(n=40)
-
+#
 limits = c(0,1)
 nconds = crossing(x=conds, y=crosses) %>%
     mutate(cond=str_c(x,y,sep='_')) %>%
@@ -294,11 +295,11 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
            legend.vjust = -.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
-fp = glue('{dirw}/13.modex.pdf')
-ggsave(p, file = fp, width = 5, height = 7)
 fo = glue('{dirf}/sf13a.rds')
 saveRDS(p, fo)
 #}}}
+fp = glue('{dirw}/13.modex.pdf')
+ggsave(p, file = fp, width = 5, height = 7)
 #{{{ bar plot showing counts - sf13b
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
@@ -314,11 +315,11 @@ p = ggplot(tp1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            legend.vjust = -.6, legend.box='h',
            xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
-fp = glue('{dirw}/13.modex.cnt.pdf')
-ggsave(p, file = fp, width = 4.5, height = 6)
 fo = glue('{dirf}/sf13b.rds')
 saveRDS(p, fo)
 #}}}
+fp = glue('{dirw}/13.modex.cnt.pdf')
+ggsave(p, file = fp, width = 4.5, height = 6)
 
 #{{{ scatter plot fig 5d
 tp1 = tp %>% filter(cond=='Cold25_B73xMo17')
@@ -330,13 +331,15 @@ p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
     scale_color_manual(name='Mode:', values=cols9) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=1) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -.6, legend.box='h',
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=F,
+           legend.vjust = -.3, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
-    guides(color=guide_legend(nrow=1))
+    guides(color=guide_legend(nrow=2))
 fo = glue('{dirf}/f5d.rds')
 saveRDS(p, fo)
 #}}}
+fp = glue("{dirw}/14.modex.1.pdf")
+ggsave(p, file = fp, width = 4, height = 4)
 #{{{ bar plot fig 5e
 tp1 = tp %>% count(cond, x, reg) %>%
     filter(cond=='Cold25_B73xMo17')
@@ -360,12 +363,12 @@ saveRDS(p, fo)
 #}}}
 
 res = list(ct_basic=ct_basic, ct_stress=ct_stress, ddeg=ddeg)
-fo = file.path(dirw, '20.rds')
+fo = glue('{dirw}/20.rds')
 saveRDS(res, fo)
 
 #{{{ showcase dDEG and cis/trans
 #{{{ read in
-fi = file.path(dirw, '20.rds')
+fi = glue('{dirw}/20.rds')
 res = readRDS(fi)
 ddeg = res$ddeg
 

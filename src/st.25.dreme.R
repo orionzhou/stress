@@ -10,6 +10,7 @@ tag = 'degA'
 tag = 'degB'
 tag = 'dmodA'
 tag = 'dmodB'
+tag = 'var2'
 fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
 md = readRDS(fi)
 tls = crossing(bin=bins, epi=epis) %>%
@@ -17,21 +18,21 @@ tls = crossing(bin=bins, epi=epis) %>%
     mutate(epi = factor(epi, levels=epis)) %>% arrange(bin, epi)
 
 tcp = md %>% select(cid, gids)
-tcn = md %>% select(cid=cond,gids=gids_c) %>% distinct(cid,gids)
-tcl = tcp %>% rbind(tcn)
+tcn = md %>% select(gids=gids_c) %>% distinct(gids) %>% mutate(cid=glue("cc{1:n()}"))
+tcl = tcp %>% bind_rows(tcn)
 tc = md
 #
 tlp = tcp %>% crossing(tls) %>%
     arrange(cid, bin, epi) %>%
     mutate(lid = sprintf("l%03d", 1:n())) %>%
-    select(lid,cid,bin,epi)
+    select(lid,cid,bin,epi,gids)
 tln = tcn %>% crossing(tls) %>%
     arrange(cid, bin, epi) %>%
     mutate(lid = sprintf("cl%03d", 1:n())) %>%
-    select(lid,cid,bin,epi)
-tl = tc %>% inner_join(tlp, by='cid') %>%
-    inner_join(tln %>% rename(clid=lid,cond=cid), by=c('cond','bin','epi')) %>%
-    select(lid,cid,cond,note,bin,epi,clid,ng,ng_c)
+    select(clid=lid,ccid=cid,bin,epi,gids_c=gids)
+tl = tc %>% inner_join(tlp, by=c('cid','gids')) %>%
+    inner_join(tln, by=c('bin','epi','gids_c')) %>%
+    select(lid,cid,cond,note,bin,epi,clid,ccid,ng,ng_c)
 #
 #{{{ write seq lists and fas
 diro = glue('{dirw}/00_nf/{tag}')
@@ -70,6 +71,7 @@ tag = 'degA'
 tag = 'degB'
 tag = 'dmodA'
 tag = 'dmodB'
+tag = 'var2'
 diri = glue("{dirw}/00_nf")
 fk = glue("{diri}/{tag}/23.kmer.tsv")
 fm = glue("{diri}/{tag}/23.kmer.motif.tsv")
@@ -90,7 +92,7 @@ rd = readRDS(fi)
 km = tl %>% select(lid, cid, ng,ng_c=ng_c) %>%
     inner_join(tk, by='lid') %>%
     inner_join(rd, by=c('lid','mid')) %>%
-    select(lid, cid, mid, kmer, kmers, pos, pos_c, neg, neg_c, ng, ng_c, pval, mtf)
+    select(lid,cid,mid,kmer,kmers,pos,pos_c,neg,neg_c,ng,ng_c,pval,mtf)
 
 fo = glue("{diri}/{tag}/25.rds")
 saveRDS(km, fo)
@@ -252,7 +254,7 @@ ggsave(pa, file=glue("{dirf}/sf07.pdf"), width=14, height=4.5)
 #{{{ selected motifs
 tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
     separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
-    filter(bin2=='+/-2k') %>% mutate(x = 1:n())
+    filter(bin2=='-/+2k') %>% mutate(x = 1:n())
 tpx1 = tpx %>% group_by(opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
 tpx2 = tpx %>% group_by(opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
 tp = tp0 %>% inner_join(tpx, by=c('bin','epi')) %>%
@@ -301,10 +303,16 @@ tp = r1 %>% arrange(cid, pval) %>%
     mutate(score = -log10(pval)) %>%
     mutate(lab = ifelse(known, fname, '')) %>%
     mutate(i = factor(i, levels=50:1))
+tps = tp %>% group_by(cid,fid) %>%
+    summarise(opts = str_c(sort(opt),collapse=',')) %>% ungroup() %>%
+    mutate(tts_only = opts=='TTS') %>% select(-opts)
+tp = tp %>% inner_join(tps, by=c('cid','fid')) %>%
+    mutate(lab = ifelse(tts_only, glue("{lab}*"), lab))
 tpx = tp %>% distinct(cid, cond, ng, note, opt) %>%
     mutate(xlab = glue("{cond}: {note} ({ng})"))
 tp1 = tibble(o=cumsum(c(11))+.5)
 
+#{{{ plot
 swit = (min(tp$score) + max(tp$score)) / 2
 p4 = ggplot(tp, aes(x=cid,y=i)) +
     geom_tile(aes(fill=score), na.rm = F, size=.5, color='white') +
@@ -323,6 +331,7 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     theme(axis.text.x = element_text(angle=25, hjust=0, vjust=.5, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
+#}}}
 p4 %>% ggexport(filename=glue("{dirw}/11.top.mtf.pdf"), width=10, height=10)
 p4 %>% ggexport(filename=glue("{dirf}/sf08.pdf"), width=10, height=7)
 #}}}
@@ -353,6 +362,39 @@ t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup() %>%
 r5 = list(tc=tc, tl=tl, tk=t3)
 fo = glue("{dirw}/05.best.mtfs.rds")
 saveRDS(r5, fo)
+#}}}
+
+
+### check enrichment of kmers in variable gene lists ###
+#{{{
+tag = 'var2'
+fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
+md = readRDS(fi)
+#
+fi = glue("{dird}/41_ml/06.tk.tc.rds")
+r6 = readRDS(fi)
+km = r6$tk %>% select(kmer) %>% unnest(kmer) %>% distinct(fid,fname)
+
+read_mtf_status <- function(fi) read_tsv(fi) %>% gather(fid,mcp,-gid,-status)
+ts = md %>% select(cid,cond,note) %>%
+    mutate(fi = glue("{dirw}/31_mtf_status/{cid}.tsv")) %>%
+    mutate(ts = map(fi, read_mtf_status)) %>%
+    unnest(ts) %>% select(-fi)
+
+ts2 = ts %>% mutate(status = ifelse(status==1, 'p', 'n')) %>%
+    mutate(m_status = ifelse(mcp>0, 1, 0)) %>%
+    mutate(st = str_c(status, m_status, sep='')) %>%
+    count(cid,cond,note,fid,st) %>%
+    spread(st, n)
+ts3 = ts2 %>%
+    separate(fid, c('fid','suf'), sep="_") %>% select(-suf) %>%
+    left_join(km, by='fid') %>%
+    mutate(rate.p = p1/(p0+p1), rate.n = n1/(n0+n1)) %>%
+    mutate(fc = rate.p / rate.n) %>%
+    mutate(pval = phyper(p1-1, n1+p1, n0+p0, p0+p1, lower.tail=F)) %>%
+    select(cid,cond,note,fname,n0,n1,p0,p1,rate.p,rate.n,pval) %>%
+    arrange(cid,pval) %>%
+    group_by(cid) %>% slice(1:10) %>% ungroup() %>% print(n=50)
 #}}}
 
 

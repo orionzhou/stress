@@ -2,13 +2,32 @@ source('functions.R')
 require(progress)
 dirw = glue('{dird}/41_ml')
 dirn = glue('{dird}/41_ml/00_nf')
-setwd(dirw)
+#setwd(dirw)
+#{{{ params
+bins = c(
+         "TSS:-500","TSS:+500","TSS:-/+500",
+         "TSS:-2k",'TSS:+2k','TSS:-/+2k',
+         "TTS:-500","TTS:+500","TTS:-/+500",
+         "TTS:-2k",'TTS:+2k','TTS:-/+2k',
+         "TSS:-/+2k,TTS:-500",
+         "TSS:-/+2k,TTS:-1k"
+)
+epis = c('raw','umr')
+nfeas = c('top30', 'top50', 'top100', 'top200')
+mods = c('zoops', 'anr')
+bins1 = c("TSS:-/+2k")
+epis1 = c('umr')
+nfeas1 = c('top100')
+mods1 = c('anr')
+#}}}
 
 #{{{ prepare training input: gene lists + kmer lists
 fi = glue("{dird}/25_dreme/05.best.mtfs.rds")
 r5 = readRDS(fi)
 tk = r5$tk %>% filter(n_mtf >= 10)
 
+fk = glue("{dirw}/05.tk.tsv")
+write_tsv(tk %>% select(cid, n_mtf), fk)
 diro = glue('{dirn}/03_motif_lists')
 if(!dir.exists(diro)) dir.create(diro)
 tk %>% mutate(fo = glue("{diro}/{cid}.tsv")) %>%
@@ -35,9 +54,12 @@ tc2 = tc_1 %>% bind_rows(tc_2) %>% rename(ocid=cid) %>%
     select(cid,cond,note, ng,ng_c,gids,gids_c,ts) %>%
     mutate(train = 'BMW') %>% select(train, everything())
 #}}}
+fi = glue("{dird}/17_cluster/50_modules/var1.rds")
+tc3 = readRDS(fi) %>%
+    mutate(train = 'var') %>% select(train, everything())
 
-trains = c('B','BMW')
-tc = tc1 %>% bind_rows(tc2) %>% filter(cid %in% tk$cid) %>%
+trains = c('B','BMW','var')
+tc = rbind(tc1,tc2,tc3) %>% filter(cid %in% tk$cid) %>%
     mutate(train = factor(train, levels=trains)) %>%
     arrange(train, cid) %>%
     mutate(tid = str_c('t', str_pad(1:n(), width=2,pad='0'))) %>%
@@ -53,24 +75,10 @@ tc %>% mutate(fo = glue("{diro}/{tid}.tsv")) %>% mutate(j=map2(ts, fo, write_tsv
 #}}}
 
 #{{{ motif meta plots
-fi = glue("{dird}/25_dreme/03.mtf.grp.rds")
-r3 = readRDS(fi)
-tl = r3$tl; tc = r3$tc; tk = r3$tk
-
-#{{{ prepare module genen lists to get  motif locations
-ts1 = tc %>% select(cid, cond, note, gids)
-ts2 = tc %>% distinct(cond, gids_c) %>% mutate(cid=c('c29','c49')) %>%
-    mutate(note='bg') %>% select(cid,cond,note,gids=gids_c)
-ts = ts1 %>% bind_rows(ts2) %>% arrange(cid) %>%
-    unnest(gids) %>% rename(gid=gids)
-
-fo = glue("{dirw}/51.mod.genes.rds")
-saveRDS(ts, fo)
-to = ts %>% distinct(gid) %>% mutate(status=1)
-fo = glue("{dirw}/51.mod.genes.tsv")
-write_tsv(to, fo, na='')
-#}}}
-
+fi = glue("{dirw}/06.tk.tc.rds")
+r6 = readRDS(fi)
+tc = r6$tc; tk = r6$tk
+#{{{ function
 read_mtf_loc <- function(fi) {
     #{{{
     itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
@@ -82,15 +90,29 @@ read_mtf_loc <- function(fi) {
     tp
     #}}}
 }
+#}}}
 
-fi = glue("{dirw}/03.best.mtfs.rds")
-rb = readRDS(fi)
-rb2 = rb %>% unnest(kmer) %>%
+#{{{ prepare module gene lists to get  motif locations
+tc0 = tc %>% filter(train=='BMW')
+ts1 = tc0 %>% select(cid, cond, note, gids)
+ts2 = tc0 %>% distinct(cond, gids_c) %>% mutate(cid=c('c29','c49')) %>%
+    mutate(note='bg') %>% select(cid,cond,note,gids=gids_c)
+ts = ts1 %>% bind_rows(ts2) %>% arrange(cid) %>%
+    unnest(gids) %>% rename(gid=gids)
+
+fo = glue("{dirw}/51.mod.genes.rds")
+saveRDS(ts, fo)
+to = ts %>% distinct(gid) %>% mutate(status=1)
+fo = glue("{dirw}/51.mod.genes.tsv")
+write_tsv(to, fo, na='')
+#}}}
+
+rb = tk %>% unnest(kmer) %>%
     mutate(fnote = glue("{cid}_{i} {fid} ({fname}): {opt} {bin} {epi}")) %>%
     select(cid,i,fid,fnote)
 
-ti = tc %>% select(cid,cond,note) %>%
-    mutate(fi = glue("{dirw}/52_mtf_loc/{cid}.tsv")) %>%
+ti = tc %>% filter(train=='BMW') %>% select(cid,cond,note) %>%
+    mutate(fi = glue("{dirw}/52_mtf_loc_umr/{cid}.tsv")) %>%
     mutate(x = map(fi, read_mtf_loc)) %>%
     select(-fi)
 
@@ -101,9 +123,9 @@ tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
     select(cid, nt, mod, fill)
 ts2 = ts %>% inner_join(tss, by='cid') %>% select(nt, gid, mod)
 
-cid = 'c10'
+cid = 'c30'
 ti2 = ti %>% filter(cid == !!cid) %>% unnest(x) %>%
-    inner_join(rb2, by=c('cid','fid'))
+    inner_join(rb, by=c('cid','fid'))
 #
 ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
     inner_join(ts2, by=c("gid")) %>%
@@ -139,10 +161,10 @@ ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
 #}}}
 
 # meta plot of selected TFBS motifs
-plot_tss_meta <- function(cid, i, tss, rb2, ti3, dirw) {
+plot_tss_meta <- function(cid, i, tss, rb, ti3, dirw) {
     #{{{
     tit1=tss %>% filter(cid==!!cid) %>% pull(mod)
-tit2 = rb2 %>% filter(cid == !!cid, i==!!i) %>% pull(fnote)
+tit2 = rb %>% filter(cid == !!cid, i==!!i) %>% pull(fnote)
 tit = glue("{tit1} | {tit2}")
 tp = ti3 %>% filter(cid == !!cid, i== !!i)
 tpx = tibble(x=c(.5,10.5,20.5,31.5,41.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
@@ -154,7 +176,7 @@ p = ggplot(tp, aes(x=bin,y=prop)) +
     scale_color_aaas(name='strand') +
     #scale_shape(labels=types) +
     #scale_linetype(labels=types) +
-    facet_wrap(~mod, scale='free_x', ncol=4) +
+    facet_wrap(~mod, scale='free_x', ncol=5) +
     ggtitle(tit) +
     otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
            strip.style='white',margin = c(.3,.3,.3,.3),
@@ -162,11 +184,11 @@ p = ggplot(tp, aes(x=bin,y=prop)) +
     theme(plot.title=element_text(hjust=.5, size=10)) +
     guides(fill=F)
 fo = glue("{dirw}/53_metaplots/{cid}_{i}.pdf")
-ggsave(p, file=fo, width = 8, height = 6)
+ggsave(p, file=fo, width = 10, height = 5)
     #}}}
 }
-tibble(cid=!!cid, i=1:10) %>%
-    mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb2=rb2,ti3=ti3,dirw=dirw))
+tibble(cid=!!cid, i=x) %>%
+    mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb=rb,ti3=ti3,dirw=dirw))
 #}}}
 
 #{{{ create ML training config
@@ -175,22 +197,6 @@ r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
 
 #{{{ b1
-bins = c(
-         "TSS:-500","TSS:+500","TSS:-/+500",
-         "TSS:-2k",'TSS:+2k','TSS:-/+2k',
-         "TTS:-500","TTS:+500","TTS:-/+500",
-         "TTS:-2k",'TTS:+2k','TTS:-/+2k',
-         "TSS:-/+2k,TTS:-500",
-         "TSS:-/+2k,TTS:-1k"
-)
-epis = c('raw','umr')
-nfeas = c('top30', 'top50', 'top100', 'top200')
-mods = c('zoops', 'anr')
-bins1 = c("TSS:-/+2k")
-epis1 = c('umr')
-nfeas1 = c('top100')
-mods1 = c('anr')
-
 ctag = 'b1'
 tc1 = tc %>% filter(train == 'B')
 to1 = tc1 %>% select(tid,cid) %>%
@@ -215,70 +221,101 @@ write_tsv(to, fo)
 
 #{{{ b2
 ctag = 'b2'
-to0 = tl %>% select(-ng0) %>% filter(gt == 'Zmays_B73') %>%
-  inner_join(tm, by='cid') %>%
-  mutate(n_mtf = map_int(kmer, nrow)) %>%
-  filter(n_mtf >= 20)
-#
-bins = c(
-         'TSS:-/+2k','TSS:-2k,TSS:+2k',
-         "TSS:-2k,TSS:+2k,TTS:-500", 'TSS:-/+2k,TTS:-500'
-)
-epis = c('umr')
-nfeas = c('top100')
-mods = c('anr')
-to = to0 %>%
-  crossing(bin = bins, epi = epis, nfea = nfeas, mod = mods) %>%
-  mutate(nfea = factor(nfea, levels=nfeas)) %>%
-  mutate(bin = factor(bin, levels=bins)) %>%
-  mutate(epi = factor(epi, levels=epis)) %>%
-  mutate(mod = factor(mod, levels=mods)) %>%
-  arrange(bnid, bin, epi, nfea, mod) %>%
-  mutate(did = sprintf("d%03d", 1:n())) %>%
-  select(did, bnid, bat, cond, drc, note, bin, epi, nfea, mod, gt)
-#
-fo = glue("{dirw}/10_models/{ctag}.cfg.rds")
+tc1 = tc %>% filter(train == 'BMW')
+to1 = tc1 %>% select(tid,cid) %>%
+  crossing(bin = bins, epi = epis1, nfea = nfeas1, mod = mods1)
+to2 = tc1 %>% select(tid,cid) %>%
+  crossing(bin = bins1, epi = epis, nfea = nfeas, mod = mods)
+to = to1 %>% bind_rows(to2) %>%
+    distinct(tid, cid, bin, epi, nfea, mod) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    mutate(mod = factor(mod, levels=mods)) %>%
+    arrange(tid, cid, bin, epi, nfea, mod) %>%
+    mutate(did = sprintf("d%03d", 1:n())) %>%
+    select(did, tid, cid, bin, epi, nfea, mod)
+
+fo = glue("{dirn}/{ctag}.cfg.rds")
 saveRDS(to, fo)
-fo = glue("{dirw}/10_models/{ctag}.cfg.tsv")
+fo = glue("{dirn}/{ctag}.cfg.tsv")
+write_tsv(to, fo)
+#}}}
+
+#{{{ b3
+ctag = 'b3'
+tc1 = tc %>% filter(train == 'var')
+to1 = tc1 %>% select(tid,cid) %>%
+  crossing(bin = bins, epi = epis1, nfea = nfeas1, mod = mods1)
+to2 = tc1 %>% select(tid,cid) %>%
+  crossing(bin = bins1, epi = epis, nfea = nfeas, mod = mods)
+to = to1 %>% bind_rows(to2) %>%
+    distinct(tid, cid, bin, epi, nfea, mod) %>%
+    mutate(nfea = factor(nfea, levels=nfeas)) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
+    mutate(epi = factor(epi, levels=epis)) %>%
+    mutate(mod = factor(mod, levels=mods)) %>%
+    arrange(tid, cid, bin, epi, nfea, mod) %>%
+    mutate(did = sprintf("d%03d", 1:n())) %>%
+    select(did, tid, cid, bin, epi, nfea, mod)
+
+fo = glue("{dirn}/{ctag}.cfg.rds")
+saveRDS(to, fo)
+fo = glue("{dirn}/{ctag}.cfg.tsv")
 write_tsv(to, fo)
 #}}}
 #}}}
 # run pipeline to build models
 
 ######## MODEL EVALUATION ########
+fi = glue("{dirw}/06.tk.tc.rds")
+r6 = readRDS(fi)
+tc = r6$tc; tk = r6$tk
+
 #{{{ process trained models
 collect_model_metrics <- function(tag, dirw) {
   #{{{
-  fi = glue("{dirw}/10_models/{tag}.cfg.rds")
+  fi = glue("{dirw}/00_nf/{tag}.cfg.rds")
   th = readRDS(fi)
-  fi = glue("{dirw}/10_models/{tag}.rds")
+  fi = glue("{dirw}/00_nf/{tag}.rds")
   ml = readRDS(fi)
   ml1 = ml %>% select(did=sid, perm, metric) %>%
     unnest(metric) %>% spread(metric, estimate) %>%
-    rename(f1=f_meas, auroc=roc_auc, auprc=pr_auc) %>%
+    dplyr::rename(f1=f_meas, auroc=roc_auc, auprc=pr_auc) %>%
     inner_join(th, by='did')
   ml1
   #}}}
 }
-get_model_fits <- function(tag, dirw) {
+get_best_model <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
+                           nfea='top100', mod='anr') {
   #{{{
-  fi = glue("{dirw}/01_models/{tag}.cfg.rds")
+  fi = glue("{dirw}/00_nf/{tag}.cfg.rds")
   th = readRDS(fi)
-  fi = glue("{dirw}/01_models/{tag}.rds")
+  fi = glue("{dirw}/00_nf/{tag}.rds")
   ml = readRDS(fi)
-  ml %>% filter(!is.na(fit)) %>% select(did=sid,perm,fit,metric) %>%
-    inner_join(th, by='did')
+  th %>% filter(bin==!!bin,epi==!!epi, nfea==!!nfea, mod==!!mod) %>%
+      inner_join(ml, by=c('did'='sid')) %>%
+      filter(!is.na(fit)) %>% select(did,tid,cid,fit,metric)
   #}}}
 }
+tags = c("b1",'b2')
+tags = c("b3")
 
-tags = c("b1")
 tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_model_metrics, dirw=dirw))
 fm = glue('{dirw}/11.model.metrics.rds')
 saveRDS(tm, fm)
+
+tb = tibble(tag = tags) %>%
+  mutate(x = map(tag, get_best_model, dirw=dirw)) %>%
+  unnest(x)
+fb = glue('{dirw}/12.best.models.rds')
+saveRDS(tb, fb)
+fb = glue('{dirw}/12.best.models.tsv')
+write_tsv(tb %>% select(tag,tid,cid), fb)
 #}}}
 
-#{{{ eval model performance in B
+#{{{ eval model performance in B - f4
 fm = glue('{dirw}/11.model.metrics.rds')
 tm = readRDS(fm)
 
@@ -294,7 +331,8 @@ bins = c(
 epis = c('raw','umr')
 nfeas = c('top30', 'top50', 'top100', 'top200')
 mods = c('zoops', 'anr')
-tc1 = tc %>% select(cid,cond,note) %>%
+tc1 = tc %>% filter(train=='B') %>%
+    select(cid,cond,note) %>%
     crossing(bin = bins, epi = epis, nfea = nfeas, mod = mods) %>%
     mutate(nfea = factor(nfea, levels=nfeas)) %>%
     mutate(bin = factor(bin, levels=bins)) %>%
@@ -311,7 +349,8 @@ tc1 = tc %>% select(cid,cond,note) %>%
     mutate(epi_nfea_mod = as_factor(str_c(epi, nfea, mod, sep=': '))) %>%
     mutate(bin_nfea_mod = as_factor(str_c(bin, nfea, mod, sep=': ')))
 #}}}
-tm1 = tm %>% filter(tag == 'b1') %>% unnest(x) %>%
+tm1 = tm %>% filter(tag == 'b3') %>%
+    unnest(x) %>%
     inner_join(tc1, by=c('cid','bin','epi','nfea','mod'))
 
 plot_model_heatmap <- function(ti, metric='auroc', x='cond_note', y='bin',
@@ -416,18 +455,21 @@ pc = plot_model_barplot(tpc, metric='auroc',, x='cond_note', fill="nfea",
   theme(legend.position = c(1,1), legend.justification = c(1,1))
 cids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(cid)
 tpd = tm1 %>% filter(cid %in% cids4, epi=='umr', nfea=='top100', mod=='anr')
+cols14 = c(brewer.pal(4,'Blues')[2:4],brewer.pal(4,'Greens')[2:4],
+    brewer.pal(4,'Purples')[2:4],brewer.pal(4,'Greys')[2:4],
+    brewer.pal(4,'Reds')[2:3])
 pd = plot_model_barplot(tpd, metric='auroc',, x='cond_note', fill="bin",
-                        pnl='epi_nfea_mod', x.rotate=F, cols=pal_igv()(14)) +
+                        pnl='epi_nfea_mod', x.rotate=F, cols=cols14) +
   theme(legend.position = c(.5,1), legend.justification = c(.5,-.2)) +
   theme(legend.direction='horizontal') +
   o_margin(2,.5,.2,.2)
 #
-fo = glue("{dirf}/f4.pdf")
 pbc = ggarrange(pb, pc, nrow=1, ncol=2, labels=LETTERS[2:3], widths=c(2,2))
-ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
-          labels = LETTERS[1:4], heights=c(1,1,1.3, 1.5)) %>%
-ggexport(filename=fo, width=6, height=9)
+p = ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
+          labels = LETTERS[1:4], heights=c(1,1,1.3, 1.5))
 #}}}
+fo = glue("{dirf}/f4.2.pdf")
+p %>% ggexport(filename=fo, width=6, height=9)
 
 #{{{ sf09 - barplot
 tpa = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='zoops')
@@ -484,162 +526,106 @@ ggexport(filename=fo, width=6, height=7)
 #}}}
 
 #{{{ gather & save model predictions for all B/M/W genes
-#{{{ functions
-get_ts_all <- function(gt, dird) {
-  #{{{
-  fp = file.path(dird, '31_promoter', gt, '01.bed')
-  tp = read_tsv(fp, col_names=c('chrom','start','end','gid','score','srd'))
-  ts = tp %>% select(gid) %>% mutate(status=1)
-  #}}}
-}
-model_pred <- function(mdl, ti) {
-  #{{{
-  pb$tick()
-  features = names(mdl$fit$variable.importance)
-  new.cols = features[!features %in% colnames(ti)]
-  if (length(new.cols) > 0) {
-    ti2 = matrix(0, nrow=nrow(ti), ncol=length(new.cols), dimnames=list(NULL, new.cols))
-    ti = ti %>% bind_cols(as.data.frame(ti2))
-  }
-  x1 = predict(mdl, ti, type='prob') %>% select(prob = .pred_1)
-  x2 = predict(mdl, ti, type='class') %>% select(pred=1)
-  tibble(gid=ti$gid, pred=x2$pred, prob=x1$prob)
-  #}}}
-}
+#{{{ write all gene list
+fi = glue('{dird}/15_de/05.rds')
+x =  readRDS(fi)
+deg48 = x$deg48; deg12 = x$deg12
+md = deg12 %>% pluck('ds',1) %>% select(gid) %>%
+    crossing(gt = gts3) %>% mutate(status = 1) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    select(gid, status)
+
+fo = glue("{dirw}/21.all.tsv")
+write_tsv(md, fo)
 #}}}
+# run j21 kmer.py prepare_ml
 
-gts = str_c("Zmays", gts3, sep="_")
-tt = tibble(gt=gts) %>%
-  mutate(ts = map(gt, get_ts_all, dird=dird)) %>%
-  mutate(floc = file.path(dird, '32_kmer', gt, '05.mtf.loc.rds')) %>%
-  mutate(mloc = map(floc, readRDS)) %>% select(-floc) %>%
-  unnest(mloc) %>%
-  filter(note == 'all') %>%
-  mutate(bin="+/-2k", epi='umr', nfea='top100', mod='anr')
+fb = glue('{dirw}/12.best.models.rds')
+tb = readRDS(fb)
 
-pb = progress_bar$new(total=nrow(tt))
-tt2 = tt %>%
-  mutate(to = pmap(list(tl,bin,epi,nfea,mod,ts), prepare_ti, keep_gid=T)) %>%
-  select(bat, note, bin, epi, nfea, mod, gt, to)
+# write models
+tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
+    mutate(map2(fit, fo, saveRDS))
+# run j21 ml_predict
 
-ti = tb %>% inner_join(tt2, by=c('bat','note','bin','epi','nfea','mod')) %>%
-  slice(1:50)
-pb = progress_bar$new(total=nrow(ti))
-r = ti %>%
-  mutate(pred = map2(fit, to, model_pred)) %>%
-  select(-fit,-to) %>%
-  unnest(pred) %>%
-  select(did,perm,bat,note,bin,epi,nfea,mod,gt,gid,pred,prob)
+to = tb %>% select(tag, tid, cid) %>%
+    mutate(fi = glue("{dirw}/24_ml_out/{tag}_{tid}.tsv")) %>%
+    mutate(pred = map(fi, read_tsv)) %>% select(-fi)
 
-fo = file.path(dirw, '10.model.pred.rds')
-saveRDS(r, fo)
+fo = glue('{dirw}/25.model.pred.rds')
+saveRDS(to, fo)
 #}}}
 
 #{{{ evaluate model performance for different gene categories
-fp = file.path(dirw, '10.model.pred.rds')
-pd = readRDS(fp) %>% mutate(gt=str_replace(gt,'Zmays_',''))
-pd2 = pd %>% select(bat,note,gt,gid,pred,prob) %>%
-  separate(bat, c('cond','drc'), sep='_', remove=F)
+fp = glue('{dirw}/25.model.pred.rds')
+pd = readRDS(fp) %>%
+    inner_join(tc %>% select(tid,train,cid,cond,note), by=c('tid','cid')) %>%
+    select(tag,train,tid,cid,cond,note,pred) %>% unnest(pred) %>%
+    separate(gid, c('gt','gid'), sep='_')
+#{{{ prepare variable response
+fg = glue('{dird}/15_de/09.gene.status.rds')
+x = readRDS(fg)
+td1=x$td1; td2=x$td2
+#
+fi = glue('{dird}/16_ase/20.rds')
+res = readRDS(fi)
+ddeg = res$ddeg
+ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
+    mutate(time=as.integer(str_sub(cond,5,6))) %>%
+    mutate(cond=str_to_lower(str_sub(cond,1,4))) %>%
+    mutate(st = glue("d{deg}")) %>%
+    mutate(st = factor(st, levels=levels(td2$st))) %>%
+    select(cond,time,qry,tgt,gid,st,reg)
+#}}}
 
-#{{{ overall performance
-make_truth <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0))
-xm = tibble(gt=gts3) %>%
-  mutate(fm=glue("{dird}/31_promoter/{gt2}/15.module.rds")) %>%
-  mutate(x = map(fm, readRDS)) %>%
-  unnest(x) %>% filter(ctag=='c2') %>% select(-fm,-ctag) %>%
-  mutate(truth = map2(tg, tg_c, make_truth)) %>%
-  select(-tg, -tg_c) %>% unnest(truth) %>%
-  mutate(status=factor(status, levels=c(1,0)))
-
+#{{{ overall performance - f6a
+xm = tc %>% filter(train=='BMW') %>% select(cid,ts) %>% unnest(ts) %>%
+    separate(gid, c('gt','gid'), sep='_')
+#
 perm=10
-x = pd2 %>% inner_join(xm, by=c('bat','cond','drc','note','gt','gid')) %>%
-  select(-bat_mid,-mid) %>%
-  group_by(bat,cond,drc,note,ng0,ng,ng_c, gt) %>% nest() %>% rename(pred=data) %>%
-  crossing(i = 1:perm) %>%
-  mutate(x = map2(pred, i, eval_pred, downsample=T)) %>%
-  select(-i) %>% unnest(x) %>%
-  group_by(bat,note,gt,metric) %>%
-  summarise(mean=mean(estimate), sd=sd(estimate)) %>% ungroup()
+x = pd %>% mutate(pred=factor(pred,levels=c(1,0))) %>%
+    inner_join(xm, by=c('cid','gt','gid')) %>%
+    select(-tag,-tid) %>%
+    group_by(train,cid,cond,note,gt) %>% nest() %>% rename(pred=data) %>%
+    crossing(i = 1:perm) %>%
+    mutate(x = map2(pred, i, eval_pred, downsample=T)) %>%
+    select(-i) %>% unnest(x) %>%
+    group_by(train,cid,cond,note,gt,metric) %>%
+    summarise(mean=mean(estimate), sd=sd(estimate)) %>% ungroup()
 
 #{{{ bar plot - f6a
-tp = x %>% filter(metric=='f_meas') %>% rename(score=mean) %>%
-  mutate(gt = factor(gt, levels=rev(gts3))) %>%
-  mutate(bat = factor(bat, levels=bats))
-pd = position_dodge(width=.9)
-ymax = .8
-p = ggplot(tp, aes(x=gt,y=score)) +
-  geom_col(aes(fill='0'), position=pd, width=.6, alpha=.8) +
-  geom_errorbar(aes(ymin=score-sd, ymax=score+sd), width=.2, size=.3, position=pd) +
-  scale_x_discrete(expand=expansion(mult=c(.2,.2))) +
+tp = x %>% filter(metric=='roc_auc') %>% rename(score=mean) %>%
+  #mutate(gt = factor(gt, levels=rev(gts3))) %>%
+  mutate(cond_note = str_c(cond,note,sep="\n"))
+tps = tp %>% distinct(cid,cond_note)
+pdg = position_dodge(width=.7)
+ymax = 1
+p = ggplot(tp, aes(x=cid,y=score)) +
+  geom_col(aes(fill=gt), position=pdg, width=.7, alpha=.8) +
+  geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=gt), width=.2, size=.3, position=pdg) +
+  scale_x_discrete(breaks=tps$cid, labels=tps$cond_note, expand=expansion(mult=c(.05,.05))) +
   scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,.05))) +
-  coord_flip(ylim= c(.5, ymax)) +
-  scale_fill_manual(name='', values=pal_npg()(2)[2]) +
-  scale_color_manual(values=c('black','black')) +
-  facet_wrap(bat ~ ., scale='free_y', ncol=1, strip.position='right') +
+  coord_cartesian(ylim=c(.5,ymax)) +
+  #coord_flip(ylim= c(.5, ymax)) +
+  scale_fill_manual(name='', values=pal_npg()(5)) +
+  scale_color_manual(name='', values=pal_npg()(5)) +
+  facet_wrap(train ~ ., scale='free_y', ncol=1, strip.position='top') +
   otheme(legend.pos='none', legend.dir='v', legend.box='v',legend.title=F,
          margin = c(.2,.2,.2,.2), xgrid=T,
          strip.style='white', strip.compact=F, panel.spacing=.2,
-         xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T) +
+         xtick=T, ytick=T, ytitle=T, xtext=T, ytext=T) +
+  theme(axis.text.x = element_text(angle=15,size=7, hjust=1,vjust=1)) +
   theme(strip.text.y = element_text(angle=0,size=8))
-ggsave(p, file=glue("{dirw}/09.bmw.auroc.pdf"), width=4.5, height=5)
-saveRDS(p, glue("{dirf}/f6a.rds"))
 #}}}
-#}}}
-
-# variable response
-fg = file.path(dird, '15_de/09.gene.status.rds')
-x = readRDS(fg)
-td1=x$td1; td2=x$td2
-
-#{{{ accuracy in predicting U/D/N at 1h/25h time points
-get_acc <- function(ti) {
-  #{{{
-  ti %>% group_by(st) %>%
-    summarise(n.tot = n(), n0=sum(pred==0), n1=sum(pred==1)) %>% ungroup() %>%
-    mutate(nc = ifelse(st %in% c("N",'zero'), n0, n1)) %>%
-    mutate(acc = nc/n.tot,
-           lab = glue("{number(acc,accuracy=.01)}\n{nc} / {n.tot}")) %>%
-    select(st, acc, lab)
-  #}}}
-}
-to1 = pd2 %>%
-  inner_join(td1, by=c('cond','gt','gid')) %>%
-  group_by(bat,cond,drc,note,gt,time) %>% nest() %>% rename(ti=data) %>%
-  mutate(acc = map(ti, get_acc)) %>%
-  select(-ti) %>% unnest(acc)
-
-#{{{ de acc plot
-tp = to1 %>% rename(score=acc) %>%
-  mutate(bat = factor(bat, levels=bats)) %>%
-  mutate(gt = as_factor(gt)) %>%
-  mutate(st = as_factor(st)) %>%
-  mutate(time = as_factor(time)) %>%
-  mutate(note = as_factor(note)) %>%
-  mutate(time_st = fct_cross(time, st, sep='_')) %>%
-  mutate(bat_note_gt = fct_cross(bat, note, gt, sep=":"))
-tp = tp %>% mutate(bat_note_gt = factor(bat_note_gt, levels=rev(levels(tp$bat_note_gt))))
-swit = (min(tp$score) + max(tp$score)) / 2
-p = ggplot(tp, aes(x=time_st,y=bat_note_gt)) +
-    geom_tile(aes(fill=score), na.rm = F) +
-    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2) +
-    #geom_vline(xintercept=tpy$x, color='blue') +
-    scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
-    scale_y_discrete(expand=c(0,0)) +
-    scale_fill_gradientn(name='Accuracy',colors=brewer_pal(type='seq',palette="Greens")(9)) +
-    scale_color_manual(values=c('black','white')) +
-    otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
-           margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
-           xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
-    theme(axis.text.x = element_text(angle=45, hjust=0, vjust=.5, size=7.5)) +
-    theme(axis.text.y = element_text(size=7)) +
-    #theme(axis.text.y = element_markdown(size=7.5)) +
-    guides(color=F)
-fo = sprintf("%s/12.de.acc.pdf", dirw)
-p %>% ggexport(filename=fo, width=6, height=6)
-#}}}
+fo = glue("{dirw}/32.auroc.pdf")
+ggsave(p, file=fo, width=8, height=6)
+fo = glue("{dirf}/f6a.pdf")
+ggsave(p, file=fo, width=8, height=6)
+#saveRDS(p, glue("{dirf}/f6a.rds"))
 #}}}
 
-#{{{ accuracy in predicting variable genotype response
+#{{{ accuracy in predicting variable genotype response - f6
+#{{{ prepare
 smap = c("+"=1,"-"=-1,"="=0)
 smap2 = c('1'='+','-1'="-",'0'="=")
 get_acc2 <- function(ti) {
@@ -653,18 +639,24 @@ get_acc2 <- function(ti) {
     select(st, acc, lab)
   #}}}
 }
-pd3 = pd2 %>% mutate(pred=as.integer(as.character(pred))) %>%
-  mutate(pred=ifelse(drc=='down' & pred==1, -1, pred))
+pd3 = pd %>% select(-tag) %>% filter(str_detect(note, "all")) %>%
+    mutate(drc = ifelse(str_detect(note, "all up"), "up", "down")) %>%
+    mutate(pred=ifelse(drc=='down' & pred==1, -1, pred))
 to2 = td2 %>%
+  left_join(ddeg2, by=c('cond','time','qry','tgt','gid','st')) %>%
+  #filter(!is.na(reg) & reg == 'cis') %>%
   inner_join(pd3, by=c('cond','qry'='gt','gid')) %>% rename(qPred=pred) %>%
-  inner_join(pd3, by=c('bat','cond','drc','note','tgt'='gt','gid')) %>% rename(tPred=pred) %>%
+  inner_join(pd3, by=c('train','cid','cond','drc','note','tgt'='gt','gid')) %>%
+  rename(tPred=pred) %>%
   #group_by(bat,cond,drc,note,qry,tgt,time) %>% nest() %>% ungroup() %>%
   mutate(pred1 = smap2[as.character(qPred)]) %>%
   mutate(pred2 = smap2[as.character(tPred)]) %>%
   mutate(pred = as.character(glue("A{pred1}B{pred2}"))) %>%
-  count(bat,cond,drc,note,qry,tgt,time, st, pred)
+  count(train,cid,cond,drc,note,qry,tgt,time, st, pred,reg)
+#}}}
 
-#{{{ dde acc bar plot
+#{{{ dde acc bar plot - f6b
+#{{{ prepare
 tp = to2 %>% filter(tgt=='B73') %>%
   filter((drc=='up' & st %in% c("dA+B+",'nA+B+','dA+B=','dA=B+')) |
          (drc=='down' & st %in% c('dA-B-','nA-B-','dA-B=', 'dA=B-'))) %>%
@@ -673,17 +665,20 @@ tp = to2 %>% filter(tgt=='B73') %>%
   mutate(st = ifelse(str_detect(st, 'A\\-B\\-'),'A-B-', st)) %>%
   mutate(st = str_replace(st, 'd', '')) %>%
   mutate(st = str_replace(st, 'n', '')) %>%
-  mutate(bat = factor(bat, levels=bats)) %>%
   mutate(time = as_factor(time)) %>%
   mutate(note = as_factor(note)) %>%
   mutate(pred = as_factor(pred)) %>%
-  group_by(bat,cond,drc,note,st,pred) %>% summarise(n=sum(n)) %>% ungroup() %>%
-  rename(tag1=st, tag2=pred, pnl=bat)
+  mutate(pnl = glue("{cond} {note}: {train}")) %>%
+  group_by(train,cid,cond,drc,note,st,pred,pnl) %>%
+  summarise(n=sum(n)) %>% ungroup() %>%
+  rename(tag1=st, tag2=pred)
+tps = tp %>% distinct(drc,cid, train, pnl) %>% arrange(cid,train,drc)
+tp = tp %>% mutate(pnl = factor(pnl,levels=tps$pnl))
 preds1 = c('A=B=',"A+B=","A=B+","A+B+")
 preds2 = c('A=B=',"A-B=","A=B-","A-B-")
 tp1 = tp %>% filter(drc == 'up') %>% mutate(tag2=factor(tag2,levels=preds1))
 tp2 = tp %>% filter(drc == 'down') %>% mutate(tag2=factor(tag2,levels=preds2))
-
+#}}}
 plot_dde_bar <- function(ti) {
 #{{{
 tags1 = levels(ti$tag1)
@@ -701,12 +696,14 @@ tp = ti %>%
     mutate(tag2 = factor(tag2, levels=tags2))
 tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
 fillcols = brewer.pal("Accent",n=4)[c(2,1,4,3)]
+tph = tp %>% filter(tag1==tag2)
 p = ggplot(tp) +
     geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
+    geom_tile(data=tph, aes(x=tag1,y=y,height=prop),width=.8,color='red',size=1,fill=NA) +
     geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
     geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
-    scale_x_discrete(name='Observed Status', expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Number of Genes', expand=expansion(mult=c(0,.05))) +
+    scale_x_discrete(name='Observed Status', expand=expansion(mult=c(.25,.25))) +
+    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
     scale_fill_manual(name="Prediction", values=fillcols) +
     facet_wrap(~pnl, nrow=1) +
     otheme(legend.pos='right',legend.dir='v',
@@ -719,10 +716,76 @@ p = ggplot(tp) +
 
 pa = plot_dde_bar(tp1) + theme(axis.title.x=element_blank()) + o_margin(.2,.2,0,.2)
 pb = plot_dde_bar(tp2) + o_margin(0,.2,.2,.2)
-p = ggarrange(pa, pb, nrow=2, ncol=1, labels = LETTERS[1:2], heights=c(1,1))
-ggsave(p, file=glue("{dirw}/13.dde.bar.pdf"), width=5, height=7)
+p = ggarrange(pa, pb, nrow=2, ncol=1, labels = '', heights=c(1,1))
+fo = glue("{dirw}/36.dde.bar.pdf")
+ggsave(p, file=fo, width=8, height=7)
+fo = glue("{dirf}/f6b.pdf")
+ggsave(p, file=fo, width=8, height=7)
 p = ggarrange(pa, pb, nrow=2, ncol=1, heights=c(1,1))
-saveRDS(p, glue("{dirf}/f6b.rds"))
+#saveRDS(p, glue("{dirf}/f6b.rds"))
+#}}}
+
+#{{{ dde cis/trans acc bar plot - f6c
+#{{{ prepare
+stmap = c("A=B="=0,"A+B+"=1,"A-B-"=1,"A+B="=2,"A-B="=2,"A=B+"=3,'A=B-'=3)
+regs = c("cis","cis+trans",'conserved','unexpected','trans')
+tp = to2 %>% filter(tgt=='B73') %>%
+  filter((drc=='up' & st %in% c('dA+B=','dA=B+')) |
+         (drc=='down' & st %in% c('dA-B=', 'dA=B-'))) %>%
+  mutate(st = as.character(st)) %>%
+  filter(!is.na(reg)) %>%
+  mutate(st = str_replace(st, 'd', '')) %>%
+  mutate(st = stmap[st]) %>%
+  mutate(tag = pred) %>%
+  mutate(pred = stmap[pred]) %>%
+  mutate(tag = ifelse(st==pred, 'correct',
+                      ifelse(pred > 1, 'opposite', tag))) %>%
+  mutate(pnl = train) %>%
+  mutate(reg = factor(reg, levels=regs)) %>%
+  mutate(tag = factor(tag)) %>%
+  group_by(pnl,tag,reg) %>% summarise(n=sum(n)) %>% ungroup() %>%
+  rename(tag1=tag, tag2=reg)
+#}}}
+plot_cis_bar <- function(ti) {
+#{{{
+fillcols = brewer.pal("Accent",n=4)[c(2,1,4,3)]
+fillcols = brewer.pal("Set3",n=5)[c(1,2,3,5,4)]
+tags1 = levels(ti$tag1)
+tags2 = levels(ti$tag2)
+sep = ifelse(T, " ", "\n")
+col1 = 'black'; col2 = 'black'
+tp = ti %>%
+    arrange(tag1, desc(tag2)) %>%
+    group_by(pnl, tag1) %>% mutate(n_tot = sum(n)) %>%
+    mutate(prop = n/n_tot) %>%
+    mutate(y = cumsum(prop)) %>%
+    mutate(y = y - prop/2) %>%
+    mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
+    ungroup() %>%
+    mutate(tag2 = factor(tag2, levels=tags2))
+tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
+p = ggplot(tp) +
+    geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
+    geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
+    geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
+    scale_x_discrete(name='Prediction', expand=expansion(mult=c(.25,.25))) +
+    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
+    scale_fill_manual(name="Mode", values=fillcols) +
+    facet_wrap(~pnl, nrow=1) +
+    otheme(legend.pos='right',legend.dir='v',
+           legend.title=T, legend.vjust=-.3, panel.spacing=.2,
+           strip.style='white',
+           xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
+           margin = c(.3, .3, .3, .3))
+#}}}
+}
+
+p = plot_cis_bar(tp) + o_margin(.2,.2,.2,.2)
+fo = glue("{dirw}/38.dde.cis.pdf")
+ggsave(p, file=fo, width=6, height=5)
+fo = glue("{dirf}/f6c.pdf")
+ggsave(p, file=fo, width=6, height=5)
+#saveRDS(p, glue("{dirf}/f6c.rds"))
 #}}}
 
 #{{{ dde acc plot
@@ -757,11 +820,58 @@ p = ggplot(tp, aes(x=time_st,y=bat_note_gt)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     annotate(geom='rect',xmin=tpr$xmin-.5,xmax=tpr$xmax+.5,ymin=tpr$ymin-.5,ymax=tpr$ymax+.5, alpha=0, color='red', size=.4) +
     guides(color=F)
-fo = sprintf("%s/13.dde.acc.pdf", dirw)
+fo = glue("{dirw}/36.dde.acc.pdf", dirw)
 p %>% ggexport(filename=fo, width=14, height=5)
 #}}}
 #}}}
 
+#{{{ [old] accuracy in predicting U/D/N at 1h/25h time points
+get_acc <- function(ti) {
+  #{{{
+  ti %>% group_by(st) %>%
+    summarise(n.tot = n(), n0=sum(pred==0), n1=sum(pred==1)) %>% ungroup() %>%
+    mutate(nc = ifelse(st %in% c("N",'zero'), n0, n1)) %>%
+    mutate(acc = nc/n.tot,
+           lab = glue("{number(acc,accuracy=.01)}\n{nc} / {n.tot}")) %>%
+    select(st, acc, lab)
+  #}}}
+}
+to1 = pd %>%
+  inner_join(td1, by=c('cond','gt','gid')) %>%
+  group_by(train,cid,cond,note,gt,time) %>% nest() %>% rename(ti=data) %>%
+  mutate(acc = map(ti, get_acc)) %>%
+  select(-ti) %>% unnest(acc)
+
+#{{{ de acc plot
+tp = to1 %>% rename(score=acc) %>%
+  mutate(cid = as_factor(cid)) %>%
+  mutate(gt = as_factor(gt)) %>%
+  mutate(st = as_factor(st)) %>%
+  mutate(time = as_factor(time)) %>%
+  mutate(time_st = fct_cross(time, st, sep='_')) %>%
+  mutate(cid_gt = fct_cross(cid, gt, sep=":"))
+tp = tp %>% mutate(cid_gt = factor(cid_gt, levels=rev(levels(tp$cid_gt))))
+swit = (min(tp$score) + max(tp$score)) / 2
+p = ggplot(tp, aes(x=time_st,y=cid_gt)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2) +
+    #geom_vline(xintercept=tpy$x, color='blue') +
+    scale_x_discrete(expand=expansion(mult=c(0,0)), position='top') +
+    scale_y_discrete(expand=c(0,0)) +
+    scale_fill_gradientn(name='Accuracy',colors=brewer_pal(type='seq',palette="Greens")(9)) +
+    scale_color_manual(values=c('black','white')) +
+    facet_wrap(~train, ncol=2) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F, panel.spacing=.1,
+           margin = c(.3,1.3,.3,.3), ygrid=T, strip.style='white',
+           xtick=T, ytick=T, xtitle=F, xtext=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=45, hjust=0, vjust=.5, size=7.5)) +
+    theme(axis.text.y = element_text(size=7)) +
+    #theme(axis.text.y = element_markdown(size=7.5)) +
+    guides(color=F)
+fo = glue("{dirw}/34.de.acc.pdf")
+ggsave(p, file=fo, width=10, height=8)
+#}}}
+#}}}
 #}}}
 
 ######## BELOW ARE DEPRECATED ########
