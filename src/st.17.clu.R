@@ -219,6 +219,7 @@ fo = glue("{dirw}/61.{cond}.pdf")
 ggarrange(pa, pb, pc, nrow=1, ncol=3, labels=LETTERS[1:3],
           widths=c(2,2,2), heights=c(2,2)) %>%
 ggexport(filename=fo, width=12, height=7)
+mc_cold = mc
 me_cold = mc$tu %>% mutate(cond = cond)
 #}}}
 
@@ -263,9 +264,13 @@ ggarrange(pa, pb, pc, nrow=1, ncol=3, labels=LETTERS[1:3],
           widths=c(2,2,2), heights=c(2,2)) %>%
 ggexport(filename=fo, width=12, height=7)
 me_heat = mc$tu %>% mutate(cond = cond)
+mc_heat = mc
 mc$tul %>% filter(str_replace(gid, '^.*_', '') %in% gids_tf)
 #}}}
 
+fo = glue("{dirw}/12.clustering.rds")
+r = list(cold=mc_cold, heat=mc_heat)
+saveRDS(r, fo)
 
 f_cfg = glue('{dirw}/config.xlsx')
 cfg = read_xlsx(f_cfg)
@@ -628,6 +633,51 @@ fo = glue("{dirf}/f2a.rds")
 saveRDS(pa, fo)
 #}}}
 
+#{{{ sf03 - module eigengene
+fi = glue("{dirw}/12.clustering.rds")
+r = readRDS(fi)
+r1 = rbind(r$cold$tul, r$heat$tul) %>%
+    group_by(cid) %>% summarise(ng=length(gid), gids=list(gid)) %>% ungroup()
+
+f_cfg = glue('{dirw}/config.xlsx')
+cfg = read_xlsx(f_cfg) %>% filter(!is.na(idx))
+md1 = r1 %>% left_join(cfg %>% select(cid,note,idx), by='cid') %>%
+    mutate(cond = ifelse(str_detect(cid,'^c'), 'cold','heat')) %>%
+    select(idx,cid,cond,note, ng, gids) %>% arrange(idx) %>%
+    mutate(note = ifelse(is.na(note), cid, note)) %>%
+    mutate(pnl = glue("{note}: {ng}")) %>%
+    mutate(pnl=as_factor(pnl))
+
+ti = r1 %>% left_join(md1 %>% select(-gids), by='cid') %>% select(cid,cond,gids)
+ti0 = ti %>% mutate(cond='control')
+ti = ti %>% bind_rows(ti0) %>% unnest(gids) %>% rename(gid=gids)
+tpa = extract_avg_expr(ti, tcr)
+
+conds3 = c('cold','heat','control')
+isum <- function(gids, sep="\n") {
+    #{{{
+    x = tibble(gid=gids) %>% unnest(gid) %>%
+        separate(gid, c('gt','gid'), sep='_') %>%
+        count(gt) %>% mutate(txt = glue("{gt}: {n}"))
+    str_c(x$txt, collapse=sep)
+    #}}}
+}
+tp = md1 %>%
+    mutate(txt = map_chr(gids, isum)) %>%
+    select(cid,pnl,txt) %>%
+    inner_join(tpa, by='cid') %>%
+    mutate(cond = factor(cond, levels=conds3))
+tp1 = tp %>% filter(str_detect(cid, 'c'))
+tp2 = tp %>% filter(str_detect(cid, 'h'))
+
+pa1 = plot_avg_expr(tp1, ncol=4, col.opt='c', tit='cold clusters', strip.compact=T)
+pa2 = plot_avg_expr(tp2, ncol=4, col.opt='h', tit='heat clusters', strip.compact=T)
+p = pa1 + pa2 + plot_layout(ncol=2, widths=c(1,1))
+fo = glue("{dirw}/22.all.expr.pdf")
+ggsave(p, file=fo, width=9.5, height=7)
+fo = glue("{dirf}/sf03.pdf")
+ggsave(p, file=fo, width=9.5, height=7)
+#}}}
 
 ######## obsolete ########
 #{{{ # [old] wgcna-based DEG clustering

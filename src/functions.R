@@ -367,13 +367,15 @@ extract_avg_expr <- function(ti, tcr) {
     ti4
     #}}}
 }
-plot_avg_expr <- function(tp, ncol=3, tit='', strip.compact=T) {
+plot_avg_expr <- function(tp, ncol=3, tit='', col.opt='', strip.compact=T) {
     #{{{
     tpx = tp %>% distinct(x, xn) %>% arrange(xn)
     #tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
     #tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
     times = c(0,2,4,8,25)
     cols3 = pal_npg()(6)[c(2,1,4)]
+    if(col.opt == 'c') cols3 = pal_npg()(6)[c(2,4)]
+    if(col.opt == 'h') cols3 = pal_npg()(6)[c(1,4)]
     tpl = tp %>% arrange(cid, desc(y75)) %>%
         group_by(cid) %>% slice(1) %>% ungroup() %>%
         mutate(x='h250') %>% select(cid,pnl,txt,x,y=y75)

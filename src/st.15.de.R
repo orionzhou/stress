@@ -610,19 +610,20 @@ fp = glue("{dirw}/15.ddeg.cnt.pdf")
 ggsave(p, file = fp, width = 6, height = 6)
 
 #{{{ scatter plot fig 5b
-tp1 = tp %>% filter(cond == "Cold_25h: Mo17 vs B73")
+tp1 = tp %>% filter(cond == "Cold_25h: Mo17 vs B73") %>%
+    mutate(cond = "Cold_25h: Mo17 (A) vs B73 (B)")
 p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
     geom_point(aes(color=deg, shape='k'), size=1.5) +
-    scale_x_continuous(name='Genotype (A) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Genotype (B) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name='Mo17 (A) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name='B73 (B) log2FoldChange', limits=c(-fmax,fmax),expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='DEG status:', values=cols9) +
     scale_shape_manual(name='Genotype Effect:', labels=c("negative","positive"), values=c(1,4)) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=F,
-           legend.vjust = -.2, legend.box='h',
+           legend.spacing.x=.05, legend.vjust=-.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2), shape=F)
 fo = glue("{dirf}/f5b.rds")
@@ -632,7 +633,8 @@ fp = glue("{dirw}/16.ddeg.1.pdf")
 ggsave(p, file = fp, width = 4, height = 4)
 #{{{ bar plot fig 5c
 tp1 = tp %>% count(cond, x, deg) %>%
-    filter(cond == "Cold_25h: Mo17 vs B73")
+    filter(cond == "Cold_25h: Mo17 vs B73") %>%
+    mutate(cond == "Cold_25h: Mo17 (A) vs B73 (B)")
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
 p = ggplot(tp1) +

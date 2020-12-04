@@ -76,16 +76,42 @@ system(glue("liftover.R {fi} {fo} --aln $wgc/data/raw/Zmays_{gt}-Zmays_B73/aln.b
 #}}}
 
 # variable response
-#{{{ read DEG status
-gt = 'W22'
-gt = 'Mo17'
-fi = glue('{dirw}/13.{gt}.rds')
-ti = readRDS(fi)
-#
+#{{{ read
+#{{{ DEG
 fg = file.path(dird, '15_de/09.gene.status.rds')
 x = readRDS(fg)
 td1=x$td1; td2=x$td2
 #
+td3 = td2 %>% filter(st %in% c("dA+B=", "dA=B+", "dA-B=", 'dA=B-')) %>%
+    mutate(drc = ifelse(str_detect(st, '-'), 'down', 'up')) %>%
+    distinct(cond,drc,gid)
+td1s = td1 %>% arrange(cond,gt,gid,st) %>%
+    group_by(cond,gt,gid) %>% slice(1) %>% ungroup() %>% select(-time)
+td4 = td3 %>% crossing(gt = gts3) %>%
+    left_join(td1s, by = c('cond','gt','gid'))
+td4s = td4 %>% mutate(drc1=str_to_upper(str_sub(drc,1,1))) %>%
+    group_by(cond,drc,drc1,gid) %>%
+    summarise(nd=sum(st==drc1), nu=sum(st!=drc1)) %>% ungroup() %>%
+    filter(nd >0, nu>0) %>% select(cond,drc,drc1,gid)
+td = td4 %>% inner_join(td4s, by=c('cond','drc','gid')) %>%
+    spread(gt,st) %>% mutate(st=glue('{B73}{Mo17}{W22}')) %>%
+    select(cond,drc,gid,st)
+#}}}
+#
+tpro = tibble(qry=gts[c(1,3)], tgt=gts[2]) %>%
+    mutate(fa = glue("{dirw}/13.{qry}.rds")) %>%
+    mutate(ta = map(fa, readRDS)) %>% select(-fa)
+tpro1 = tpro %>%
+    unnest(ta) %>% select(qry,gid=id,size) %>%
+    spread(qry,size) %>% rename(sizeM=Mo17,sizeW=W22)
+#
+fi = glue("{dird}/41_ml/06.tk.tc.rds")
+r6 = readRDS(fi)
+tc = r6$tc; tk = r6$tk
+tc1 = tc %>% filter(train=='B') %>% filter(str_detect(note,'all')) %>%
+    mutate(drc = ifelse(str_detect(note, 'up'), 'up', 'down')) %>%
+    select(cid,cond,drc)
+
 fi = glue('{dird}/16_ase/20.rds')
 res = readRDS(fi)
 ddeg = res$ddeg
@@ -130,46 +156,42 @@ ggsave(p, file=fo, width=10, height=6)
 #}}}
 
 ##### synteny plots #####
-#{{{ read kmer locations [long time]
-read_mtf_loc1 <- function(fi) {
-    #{{{
-    read_tsv(fi) %>%
-        mutate(pos = round((start+end)/2)) %>%
-        #separate(gid, c('gt','gid'), sep='_') %>%
-        distinct(fid,gid,pos)
-    #}}}
-}
-# save for promoter visulization
-km = tc %>% filter(train=='BMW', str_detect(note, '^all')) %>%
-    select(cid,cond,note) %>%
-    mutate(fi = glue("{dird}/41_ml/52_mtf_loc_umr/{cid}.tsv")) %>%
-    mutate(x = map(fi, read_mtf_loc1)) %>%
-    select(-fi)
-#}}}
 fi = glue('{dirw}/00.coord.tsv')
 tss = read_tsv(fi)
 #
 cmps = tibble(qry=gts[c(1,3)], tgt=gts[2]) %>%
     mutate(fa = glue("{dirw}/16.{qry}.rds")) %>%
     mutate(ta = map(fa, readRDS)) %>% select(-fa)
-x = td2 %>%
-    filter(qry== 'Mo17', st == 'dA=B+') %>%
+x = td %>% filter(st == 'UNN') %>%
     #left_join(ddeg2, by=c('cond','time','qry','tgt','gid','st')) %>%
     #filter(!is.na(reg) & reg == 'cis') %>%
-    inner_join(ti, by=c('gid'='id')) %>%
-    filter(size < 300, size > 0)
+    inner_join(tpro1, by='gid') %>%
+    inner_join(tc1, by=c('cond','drc')) %>%
+    arrange(sizeM) %>% print(n=50) #%>% filter(sizeM < 300, sizeM > 0)
 
 #{{{ functions
-plot_kmer <- function(ggid, srd, pb, pe, km1) {
+plot_kmer <- function(gt, gid, cid, srd, pb, pe) {
     #{{{
-    if(is.na(ggid) | !ggid %in% km1$gid) {
-        p = ggplot() +
-        otheme(panel.border=F, xtick=F,xtext=F,panel.spacing=0,margin=c(0,0,0,0))
-        return(p)
+    if(is.na(gid)) {
+        return(ggplot()+otheme(panel.border=F,xtick=F,xtext=F,panel.spacing=0,margin=c(0,0,0,0)))
     }
     #{{{ prepare
-    tp = km1 %>% filter(gid==!!ggid) %>% distinct(fid, pos)
+    ggid = glue("{gt}_{gid}")
+    ti = tibble(gid=ggid,st=1)
+    write_tsv(ti, 'tmp.tsv', col_names=F)
+    fm = glue("{dird}/41_ml/00_nf/03_motif_lists/{cid}.tsv")
+    cmd = glue("kmer.py prepare_ml tmp.tsv {fm} ",
+               "--bin 'TSS:-/+2k,TTS:-/+2k' ",
+               "--epi umr --nfea top100 --mod anr ",
+               "--fmt long out.tsv")
+    system(cmd)
+    tp = read_tsv('out.tsv')
+    if (nrow(tp)==0) 
+        return(ggplot()+otheme(panel.border=F,xtick=F,xtext=F,panel.spacing=0,margin=c(0,0,0,0)))
+    tp = tp %>% mutate(pos = round(start+end)) %>%
+        select(fid,pos,srd)
     if(srd == '-') tp = tp %>% mutate(pos = pe - pos)
+    system("rm tmp.tsv out.tsv")
     #}}}
     ggplot(tp) +
         #geom_dotplot(aes(x=pos), binwidth=(pe-pb)/100, fill="white", stroke=.1) +
@@ -241,13 +263,13 @@ plot_genes <- function(tg, pb, pe, n_arrows=10, ht.exon=.2, ht.cds=.4, x=T) {
                      color='white', size=.3, arrow=arrow21) +
         geom_segment(data=tga2,aes(x=b+1,xend=b+2,y=y,yend=y),
                      color='white', size=.3, arrow=arrow22) +
-        geom_text(data=tgr,aes(x=pos,y=y+ht.cds*1.1,label=tid), vjust=0, size=2.5) +
+        geom_text(data=tgr,aes(x=pos,y=y+ht.cds*1.1,label=tid), vjust=0, size=2) +
         scale_x_continuous(breaks=brks, labels=labs,
                            limits=c(pb,pe),expand=expansion(mult=c(.01,.01))) +
         #scale_y_continuous(expand=expansion(mult=c(.01,.01))) +
-        scale_y_continuous(expand=expansion(add=c(0,.2),mult=c(0,0))) +
+        scale_y_continuous(expand=expansion(add=c(0,.4),mult=c(0,0))) +
         otheme(panel.border=F, xtick=T,xtext=T,margin=c(0,0,0,0)) +
-        theme(axis.text.x = element_text(size=7))
+        theme(axis.text.x = element_text(size=6))
     #}}}
 }
 prepare_syn <- function(ta,qgid,tgid,qtss,ttss) {
@@ -302,12 +324,11 @@ plot_syn <- function(ta, srd, pb, pe, qtop=F,size=.2) {
         otheme(panel.border=F, xtick=F,xtext=F,panel.spacing=0,margin=c(0,0,0,0))
     #}}}
 }
-plot_combo <- function(gid,cond,st, tss, cmps, gts, km=km, off=2000) {
+plot_combo <- function(gid,cid,cond,drc,st,fo, tss, cmps, gts, off=2000) {
     #{{{
-    drc = ifelse(str_detect(st, "\\+"), "+", "-")
-    km1 = km %>% mutate(drc=ifelse(str_detect(note,'up'), '+', '-')) %>%
-        filter(cond==!!cond, drc==!!drc) %>% pluck('x', 1)
-    cat(gid,'\n')
+    #drc = ifelse(str_detect(st, "\\+"), "+", "-")
+    tit = glue("{gid} {cond} {drc} (B|M|W) {st}")
+    cat(tit,'\n')
     #tss %>% filter(gid==!!gid) %>% print(width=Inf)
     cfg = tibble(gt=gts) %>% mutate(gid=!!gid) %>%
         mutate(gt=factor(gt,levels=gts)) %>% arrange(gt) %>%
@@ -316,8 +337,7 @@ plot_combo <- function(gid,cond,st, tss, cmps, gts, km=km, off=2000) {
         mutate(pb=gb-tss-off, pe=ge-tss+off) %>%
         mutate(pb = min(pb,na.rm=T)) %>%
         mutate(pe = max(pe,na.rm=T)) %>%
-        mutate(ggid = glue("{gt}_{gid}")) %>%
-        mutate(pk = pmap(list(ggid,srd,pb,pe), plot_kmer, km=km1)) %>%
+        mutate(pk = pmap(list(gt,gid,cid,srd,pb,pe), plot_kmer)) %>%
         inner_join(txdbs, by='gt') %>%
         mutate(tg = pmap(list(txdb, gid2, tss), txdb_gene))
     #
@@ -332,20 +352,26 @@ plot_combo <- function(gid,cond,st, tss, cmps, gts, km=km, off=2000) {
         unnest(x) %>% mutate(qtop=c(T,F)) %>%
         mutate(pc = pmap(list(aln,srd,pb,pe,qtop), plot_syn, size=0))
     #
-    o$pg[[1]] + o$pk[[1]] +
+    p = o$pg[[1]] + o$pk[[1]] +
         oc$pc[[1]] +
     o$pg[[2]] + o$pk[[2]] +
         oc$pc[[2]] +
     o$pg[[3]] + o$pk[[3]] +
-        plot_layout(ncol=1, heights=c(1,.5, 1, 1,.5, 1, 1, .5))
+        plot_layout(ncol=1, heights=c(1,1,1.5, 1,1,1.5, 1,1)) +
+        plot_annotation(title=tit,theme=theme(plot.title=element_text(size=8)))
+    ggsave(p, filename=fo, width=5, height=3)
+    p
     #}}}
 }
 #}}}
-td2 %>% filter(gid==!!gid)
-j = x %>% slice(6:10) %>%
+x %>% print(n=50)
+i=53
+gid=x$gid[[i]];cid=x$cid[[i]];cond=x$cond[[i]];drc=x$drc[[i]];st=x$st[[i]]
+j = x %>% slice(31:52) %>%
     mutate(fo = glue("{dirw}/50_syn_plots/{str_sub(gid,10)}.pdf")) %>%
-    mutate(p = pmap(list(gid,cond,st), plot_combo, tss=tss, cmps=cmps, gts=gts, km=km, off=2000)) %>%
-    mutate(x = map2(p, fo, ~ggsave(.x,filename=.y, width=5, height=3)))
+    mutate(p = pmap(list(gid,cid,cond,drc,st,fo), plot_combo,
+                    tss=tss, cmps=cmps, gts=gts, off=2000))# %>%
+    #mutate(x = map2(p, fo, ~ggsave(.x,filename=.y, width=5, height=3)))
 
 to = x %>% filter(st=='dA=B+') %>% filter(size < 300, size>0) %>%
     select(cond,gid,qry,st,size,ins,del,n_snp) %>% print(width=Inf,n=30)
@@ -438,7 +464,6 @@ write_tsv(tb, '10.bed', col_names = F)
 system(glue("chain.py fromBed 10.bed $genome/data/{gt}/15_intervals/01.chrom.sizes 02.sizes > 10.reverse.chain"))
 system("chainSwap 10.reverse.chain 10.forward.chain")
 #}}}
-
 #{{{ # check liftover TSSs vs. ATGs in M and W
 fi = file.path(dirw, 'Zmays_B73/01.bed')
 ti = read_tsv(fi, col_names=c('chrom','start','end','gid','score','srd'))
@@ -479,9 +504,20 @@ tx2 = tx %>% inner_join(x1, by='gid1') %>%
 tx2 %>% count(type, opt)
 skim(tx2 %>% filter(opt=='good') %>% pull(dist))
 #}}}
-
-# many genes have 0-bp UTR5
-x = md1 %>% inner_join(utr5, by='gid') %>%
-    group_by(bat,note) %>% summarise(n_utr0=sum(size.utr5==0), nt=n()) %>%
-    ungroup() %>% mutate(pct=n_utr0/nt) %>% print(n=30)
+#{{{ read kmer locations [long time]
+read_mtf_loc1 <- function(fi) {
+    #{{{
+    read_tsv(fi) %>%
+        mutate(pos = round((start+end)/2)) %>%
+        #separate(gid, c('gt','gid'), sep='_') %>%
+        distinct(fid,gid,pos)
+    #}}}
+}
+# save for promoter visulization
+km = tc %>% filter(train=='BMW', str_detect(note, '^all')) %>%
+    select(cid,cond,note) %>%
+    mutate(fi = glue("{dird}/41_ml/52_mtf_loc_umr/{cid}.tsv")) %>%
+    mutate(x = map(fi, read_mtf_loc1)) %>%
+    select(-fi)
+#}}}
 

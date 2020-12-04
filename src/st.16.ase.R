@@ -332,7 +332,7 @@ p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=F,
-           legend.vjust = -.3, legend.box='h',
+           legend.spacing.x=.05, legend.vjust = -.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2))
 fo = glue('{dirf}/f5d.rds')

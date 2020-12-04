@@ -289,13 +289,14 @@ saveRDS(pb, glue("{dirf}/f3b.rds"))
 #}}}
 
 #{{{ top 40 motifs found in each module - fig S8
-r1 = tk %>% select(mid,fid,fname,known, lid,pval) %>%
-    inner_join(tl %>% select(lid,cid,bin,epi,ng), by='lid') %>%
+r1 = tk %>% select(mid,fid,fname,known, cid,lid,pval) %>%
+    inner_join(tl %>% select(lid,cid,bin,epi,ng), by=c('cid','lid')) %>%
     inner_join(tc %>% select(cid, cond, note), by='cid')
-tp = r1 %>% arrange(cid, pval) %>%
+tp = r1 %>%
     separate(bin,c('opt','bin'),sep=":") %>%
+    arrange(cid, opt, fid, pval) %>%
     group_by(cid, cond, note, ng, opt, fid, fname, known) %>%
-    summarise(pval = min(pval)) %>% ungroup() %>%
+    summarise(pval = pval[1]) %>% ungroup() %>%
     arrange(cid, opt, pval) %>%
     group_by(cid, cond, note, opt) %>%
     slice(1:40) %>%
@@ -318,22 +319,23 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     geom_tile(aes(fill=score), na.rm = F, size=.5, color='white') +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     geom_vline(xintercept=tp1$o, color='blue') +
-    scale_x_discrete(breaks=tpx$cid, labels=tpx$xlab, expand=c(0,0), position='top') +
+    scale_x_discrete(breaks=tpx$cid, labels=tpx$xlab, expand=c(0,0)) +
     scale_y_discrete(expand=expansion(mult=c(0,0))) +
     scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
-    facet_wrap(opt ~ ., nrow=2) +
-    otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
-           margin = c(.3,4.3,.3,.3), legend.vjust=-1.7,
+    facet_wrap(opt ~ ., nrow=1) +
+    otheme(legend.pos='bottom.left', legend.dir='v', legend.title=T,
+           margin = c(.3,.3,.3,5.3), legend.vjust=-1.7,
+           strip.compact=F, panel.spacing = .5,
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
-    theme(legend.position = c(1,0), legend.justification = c(0,0)) +
-    theme(axis.text.x = element_text(angle=25, hjust=0, vjust=.5, size=7.5)) +
+    theme(legend.position = c(0,0), legend.justification = c(1,0)) +
+    theme(axis.text.x = element_text(angle=25, hjust=1, vjust=1, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
 #}}}
-p4 %>% ggexport(filename=glue("{dirw}/11.top.mtf.pdf"), width=10, height=10)
-p4 %>% ggexport(filename=glue("{dirf}/sf08.pdf"), width=10, height=7)
+p4 %>% ggexport(filename=glue("{dirw}/11.top.mtf.pdf"), width=12, height=8)
+p4 %>% ggexport(filename=glue("{dirf}/sf08.pdf"), width=12, height=8)
 #}}}
 #}}}
 
@@ -362,6 +364,12 @@ t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup() %>%
 r5 = list(tc=tc, tl=tl, tk=t3)
 fo = glue("{dirw}/05.best.mtfs.rds")
 saveRDS(r5, fo)
+
+x = t3 %>% inner_join(tc %>% select(cid,cond,note), by='cid') %>%
+    unnest(kmer) %>%
+    select(cond,note,i,fid,fname,pval,kmers)
+fo = glue("{dirw}/05.best.motifs.tsv")
+write_tsv(x, fo)
 #}}}
 
 

@@ -65,12 +65,12 @@ Figure S2. Hierarchical (A) and t-SNE (B) clustering of all samples from the tim
 \pagebreak
 ![](plots/f2.pdf){width=100%}
 
-Figure 2. Co-expression modules of heat- or cold-responsive genes.  B73 genes that exhibit significant DE after 1 hour or 25 hours after stress treatment were used to perform WGCNA co-expression analysis based on their time-course expression pattern.  (A) The top 4 or 5 modules for each set of genes represent 50-80% of the DEGs in the corresponding group and represent early, late or transient changes in expression.  The normalized eigengene expression for the genes within each module is shown and the number of genes in each module is indicated. (B) For the set of all up-regulated genes under cold or heat conditions we determined the number of TFs and assessed GO enrichment.  The top two enriched GO terms (adjust p-value less than 0.05) are shown for each module and the significance level is indicated.
+Figure 2. Expression profile and GO enrichment of cold- and heat-responsive gene clusters.  B73, Mo17 and W22 genes that exhibit significant DE after 1 hour or 25 hours stress treatment were used to perform co-expression clustering based on their time-course expression pattern (see methods).  (A) Expression pattern for the most abundant co-expression clusters that represent early, late or transient changes upon cold or heat treatment.  The median expression level of control and stress conditions for the genes within each module is shown and the number of B73, Mo17 and W22 genes in each module is indicated. Ranges at each time point represent 25%-75% quantile expression levels. (B) For the set of all up-regulated genes under cold or heat conditions we determined the number of TFs and assessed GO enrichment.  Two highly enriched GO terms (with significance p < 0.01) are shown for each module, and the significance level is indicated.
 
 \pagebreak
+![](plots/sf03.pdf){width=100%}
 
-
-Figure S3. Co-expression modules for cold- and heat-responsive genes in W22 and Mo17.  The non-redundant set of Mo17 or W22 genes that exhibit significant DE after 1 hour and/or 25 hours of stress treatment were used to perform co-expression based clustering using the time-course data from each inbred.  The top 4 or 5 modules for each set of genes were identified and these represent 50-80% of the DEGs in that group; these include patterns of early, late or transient changes in expression.  The normalized eigengene expression for the genes within each module is shown and the number of genes in each module is indicated. 
+Figure S3. Expression profiles of cold- and heat-responsive gene clusters.  B73, Mo17 and W22 genes that exhibit significant DE after 1 hour or 25 hours stress treatment were used to perform co-expression clustering based on their time-course expression pattern (see methods). The median expression level of control and stress conditions for the genes within each module is shown and the number of B73, Mo17 and W22 genes in each module is indicated. Ranges at each time point represent 25%-75% quantile expression levels.
 
 \pagebreak
 ![](plots/sf04.pdf){width=80%}
@@ -90,22 +90,22 @@ Figure S6. Characterization of TFs that have previously been reported to play a 
 \pagebreak
 ![](plots/f3.pdf){width=60%}
 
-Figure 3. Identification of enriched motifs in cold- and heat-responsive genes. (A) Varying potential ‘promoter’ sequence spaces were utilized to search for motifs that are enriched in different sets of genes.  The schematic indicates a representative gene with the transcription start site (TSS) indicated.  The potential regions include different lengths of sequences upstream the promoter (-500, -1k, -2k) as well as sets of sequence that include both upstream and downstream sequence (i.e., +/-500).  In addition, for each of these potential regions we also subset the sequence to only include regions that are unmethylated (UMR - unmethylated regions) or that are classified as accessible based on ATAC analysis (ACR - accessible chromatin region) in leaf or ear tissue (Ricci et al., 2019).  (B) Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were used to search for enriched motifs (see Methods).  The number of enriched motifs found using +/- 2k promoter sequence as well as different epigenetic filters (i.e., UMRs, ACRs) were shown. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes using +/-2k promoter space as well as the other promoter spaces of different sizes (shown in Figure S6).
+Figure 3. Identification of enriched motifs in cold- and heat-responsive genes. (A) Varying potential ‘promoter’ sequence spaces were utilized to search for motifs that are enriched in different sets of genes.  The schematic indicates a representative gene with the transcription start site (TSS) indicated.  The potential regions include different lengths of sequences upstream the promoter (-500, -1k, -2k) as well as sets of sequence that include both upstream and downstream sequence (i.e., +/-500).  In addition, for each of these potential regions we also subset the sequence to only include regions that are unmethylated (UMR - unmethylated regions) or that are classified as accessible based on ATAC analysis (ACR - accessible chromatin region) in leaf or ear tissue (Ricci et al., 2019).  (B) Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were used to search for enriched motifs (see Methods).  The number of non-redundant motifs found using +/- 2k promoter sequence as well as different epigenetic filters (i.e., UMRs, ACRs) were shown. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes using +/-2k promoter space as well as the other promoter spaces of different sizes (shown in Figure S7).
 
 \pagebreak
 ![](plots/sf07.pdf){width=100%}
 
-Figure S7. Number of enriched motifs found using promoter spaces of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  The number of enriched motifs found using the full set of sequences (raw) in the specific region is shown as well as the number of motifs when only the unmethylated (umr) or accessible chromatin (acr) in this region was utilized. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes.
+Figure S7. Number of enriched motifs found using promoter spaces of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  Identified motifs were compared with known TF binding motifs (cis-BP) and clustered based on sequence similarity.  The number of non-redundant motifs found using the full set of sequences (raw) in the specific region is shown as well as the number of motifs when only the unmethylated (umr) or accessible chromatin (acr) in this region was utilized. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes after sequence clustering.
 
 \pagebreak
 ![](plots/sf08.pdf){width=100%}
 
-Figure S8. Enriched motifs include known transcription factor binding sites (TFBSs) as well as novel motifs.  For each set of DEGs up to the top 40 most enriched motifs are shown (p-value for enrichment is indicated by color).  Some sets of DEGs have less than 40 motifs and only the significant ones are shown.  If the enriched motif matched a previously characterized TFBS (Pearson correlation coefficient > 0.8) the name of the transcription factor is shown.  In each cases there are a mixture of previously characterized motifs and novel motifs.  
+Figure S8. Enriched motifs include known transcription factor binding sites (TFBSs) as well as novel motifs.  For each set of DEGs up to the top 40 most enriched motifs are shown (p-value for enrichment is indicated by color).  Some sets of DEGs have less than 40 motifs and only the significant ones are shown.  If the enriched motif matched a previously characterized TFBS (Pearson correlation coefficient > 0.8) the name of the transcription factor is shown.  In each cases there are a mixture of previously characterized motifs and novel motifs.  TTS motifs with a "*" sign represent motifs not present in the top40 TSS motifs identified in the same list of genes.
 
 \pagebreak
 ![](plots/f4.pdf){width=60%}
 
-Figure 4. Prediction of cold and heat responsive expression.  (A) Machine learning models were trained to predict expression responses to heat or cold.  The average AUROC (N=100 model runs) is shown for models trained using all cold or heat up- or down-regulated genes.  Models were run using different windows near the TSS and with all sequence (red) or UMR regions only (blue).  The standard deviation for model performance is shown for each category.  (B) Models were trained for specific up-regulated co-expression modules with at least 20 enriched motifs and compared to the performance of models trained using all up-regulated genes.
+Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 
 \pagebreak
@@ -116,7 +116,7 @@ Figure S9. Prediction of cold and heat responsive expression.  (A) Machine learn
 \pagebreak
 ![](plots/f5.pdf){width=100%}
 
-Figure 5. Characterization of genes with variable stress responsive patterns among inbreds.  (A) A Venn diagram is used to assess genes that are up-regulated in response to 25h of cold stress for B73, Mo17 and W22.  The overlap of DE genes at other time points is shown in Figure S11A.  (B) For genes that are classified as responding to 25h of cold in only B73 or Mo17 (but not both) we show the relative log2 fold-change (cold 25h / control 25h) for both inbreds. The classification of differential responses for other genotype contrasts and timepoints is provided in Figure S12.  A generalized model that incorparates XX was used to classify genes as having response in both genotypes (black symbols) or have response in only one of the two genotypes (other colors).  The number of genes in each category is shown in (C).  For each class the response in the two genotypes (A and B) is indicated as up-regulated (“+”), down-regulated (“-”) or not DE (=).  (D) For genes the subset of genes classified as having a response in only one of the two genotypes that also had SNPs we assessed allele-specific expression in the F1 hybrid.  The proportion of allele 1 (B73) change in stress vs control of the F1 was compared to the proportion of the change in expression in the parental genotypes.  A XX model was applied to classify cis- and trans- regulatory variation the colors indicate the classification.  (E) shows the number of genes classified into each type of regulatory variation for response to abiotic stress.  Similar analyses for other genotypes, stress and time points are shown in Figure S13.
+Figure 5. Characterization of genes with variable stress responsive patterns among inbreds.  (A) A Venn diagram is used to assess genes that are up-regulated in response to 25h of cold stress for B73, Mo17 and W22.  The overlap of DE genes at other time points is shown in Figure S11A.  (B) For genes that show significantly stronger (or weaker) response to cold at 25h in B73 compared to Mo17 we show the log2 fold-change (cold 25h / control 25h) for both inbreds. The classification of differential responses for other genotype contrasts and timepoints is provided in Figure S12.  Above the diagonal line are genes showing stronger cold response in Mo17 while those below the diagonal line represent genes showing stronger B73 response. Different colors indicate groups of genes with different DE status (e.g., red genes are ones up-regulated in both inbreds (but showing significantly different response), green are genes only up-regulated in Mo17).   The number of genes in each category is shown in (C). For each class the response in the two genotypes (A and B) is indicated as up-regulated (“+”), down-regulated (“-”) or not DE (=).  (D) For the subset of genes classified as having a response in only one of the two genotypes that also had SNPs we assessed allele-specific expression in the F1 hybrid.  The proportion of allele 1 (B73) change in stress vs control of the F1 (x-axis) was compared to the proportion of the change in expression in the parental genotypes (y-axis).  A maximum likelihood model was applied to classify cis- and trans- inheriance patterns and shown in different colors. The number of genes classified into each type of regulatory pattern for response to abiotic stress are shown in (E).  Similar analyses for other genotypes, stress and time points are shown in Figure S13.
 
 \pagebreak
 
@@ -131,29 +131,17 @@ Figure S11.  Comparison of heat- and cold-response gene expression in B73, Mo17 
 \pagebreak
 ![](plots/sf12.pdf){width=100%}
 
-Figure S12. Identification of genes showing significantly different response to cold/heat between B73 and Mo17/W22.
+Figure S12. Characterization of genes with variable stress responsive patterns among inbreds.  For each pair of genotypes we identified genes that show significantly stronger (or weaker) response to cold/heat at 1h or 25h time points using a generalized linear model (see methods). (A) Scatterplot showing the log2 fold-change (stress / control at a time point) for compared inbreds (A and B) in x- and y-axis.  Above the diagonal line are genes showing stronger cold response in genotype A while those below the diagonal line represent genes showing stronger genotype B response. Different colors indicate groups of genes with different DE status (e.g., red genes are ones up-regulated in both inbreds (but showing significantly different response), green are genes only up-regulated in genotype B).  (B) The number of genes in each category shown in (A). For each class the response in the two genotypes (A and B) is indicated as up-regulated (“+”), down-regulated (“-”) or not DE (=).  
 
 
 \pagebreak
 ![](plots/sf13.pdf){width=100%}
 
-Figure S13. Cis/trans analysis of genes showing different stress response between genotypes.
+Figure S13. Cis/trans characterization of genes showing different stress response among inbreds. For the subset of genes classified as showing significantly different response among inbreds that also had SNPs we assessed allele-specific expression in the F1 hybrid.  (A) For each pariwise genotype comparison the proportion of allele 1 change in stress vs control of the F1 (x-axis) was compared to the proportion of the change in expression in the parental genotypes (y-axis).  A maximum likelihood model was applied to classify cis- and trans- inheriance patterns and shown in different colors. (B) The number of genes classified into each type of regulatory pattern in each pariwise comparison.
 
 
 \pagebreak
-![](plots/f6a.pdf){width=100%}
 
-Figure 6A.
-
-\pagebreak
-![](plots/f6b.pdf){width=100%}
-
-Figure 6B.
-
-\pagebreak
-![](plots/f6c.pdf){width=60%}
-
-Figure 6C.
 
 
 
