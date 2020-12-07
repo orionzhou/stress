@@ -105,7 +105,7 @@ Figure S8. Enriched motifs include known transcription factor binding sites (TFB
 \pagebreak
 ![](plots/sf09.pdf){width=80%}
 
-Figure S09. TF meta plot
+Figure S9. Relative distribution of selected motifs in gene promoter/terminator.  The promoter/terminator (-/+2k:TSS,-/+2k:TTS) regions of different co-expression clusters (all heat up-regulated genes, heat early activation genes, or background gene set ('bg')) were cut into 40 bins.  The occurence of selected motifs in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
 
 \pagebreak
 ![](plots/f4.pdf){width=60%}
@@ -116,7 +116,7 @@ Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models p
 \pagebreak
 ![](plots/sf10.pdf){width=60%}
 
-Figure S10. Prediction of cold and heat responsive expression.  (A) Machine learning models were trained to predict expression responses to heat or cold.  The average F1 score (N=100 model runs) is shown for models trained using all cold or heat up- or down-regulated genes.  Models were run using different windows near the TSS and with all sequence (red) or UMR regions only (blue).  The standard deviation for model performance is shown for each category.  (B) Models were trained for specific up-regulated co-expression modules with at least 20 enriched motifs and compared to the performance of models trained using all up-regulated genes.
+Figure S10. Performance (F1 scores) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 \pagebreak
 ![](plots/f5.pdf){width=100%}
@@ -144,7 +144,8 @@ Figure S13. Cis/trans characterization of genes showing different stress respons
 \pagebreak
 ![](plots/f6.pdf){width=100%}
 
-Figure 6. 
+Figure 6. Cross-genotype performance of machine learning models predicting cold or heat responsive expression.  Models were trained only using B73 sequence and labels ("B model") or data from all three genotypes ("BMW model"). (A) Area Under ROC curve (AUROC) for models predicting stress responsive expression in B73, Mo17 and W22. (B) Model prediction accuracy for genes showing consistent ("Both respond") or variable ("Only B73/Mo17/W22 respond") response patterns among genotypes.  In each observed category the number and proportion of predictions were marked in the plot with the correct predictions highlighted with red boxes.  (C) Dissection of regulatory patterns for genes showing variable response patterns among genotypes.  Variable response genes were first grouped by whether model prediction agrees with observed status ("Correct" if the model correctly predicts one genotype responds but the other does not, "Incorrect" if the model predicts oppositely, "Both respond" and "Neither respond" if the model predicts both or neither genotypes respond - although in reality only one genotype responds). Then within each group the number of proportion of different regulatory patterns ("cis", "trans", etc) were marked.
+
 
 
 

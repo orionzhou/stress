@@ -74,7 +74,7 @@ if(!dir.exists(diro)) dir.create(diro)
 tc %>% mutate(fo = glue("{diro}/{tid}.tsv")) %>% mutate(j=map2(ts, fo, write_tsv))
 #}}}
 
-#{{{ motif meta plots - sf10
+#{{{ motif meta plots - sf09
 fi = glue("{dirw}/06.tk.tc.rds")
 r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
@@ -179,11 +179,10 @@ rb2 = rb1 %>% filter(cid=='c32') %>%
                     fg=fg, md=md, dirw=dirw))
 #}}}
 
-# sf10
 tp1 = rb1 %>% filter(cid=='c32', fid %in% c('f0013','f0736',"f0277")) %>%
     mutate(x = map(kmers, kmer_locate, fg=fg)) %>% unnest(x)
 
-    #{{{
+    #{{{ sf09
     mds = md %>% filter(cond=='heat', cid %in% c("c30",'c32','c49')) %>%
         count(cid,cond,note) %>% rename(nt=n) %>%
         mutate(mod = glue("{cond}: {note} ({nt})")) %>%
@@ -223,7 +222,7 @@ tp1 = rb1 %>% filter(cid=='c32', fid %in% c('f0013','f0736',"f0277")) %>%
     #}}}
 fo = glue("{dirw}/54.metaplot.pdf")
 ggsave(p, file=fo, width = 6, height = 4)
-fo = glue("{dirf}/sf10.pdf")
+fo = glue("{dirf}/sf09.pdf")
 ggsave(p, file=fo, width = 6, height = 4)
 #}}}
 
