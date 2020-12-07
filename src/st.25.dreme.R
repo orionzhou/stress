@@ -199,7 +199,7 @@ fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 tl = r3$tl; tc = r3$tc; tk = r3$tk
 
-#{{{ num. motifs found in each module
+#{{{ num. motifs found in each module - f3b
 tps = tk %>% group_by(cid) %>%
     summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
     inner_join(tc %>% select(cid,cond,note,ng), by='cid')
@@ -344,7 +344,7 @@ fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 tl = r3$tl; tc = r3$tc; tk = r3$tk
 
-t1 = tk %>% select(mid,fid,fname,known, cid,lid,pval) %>%
+t1 = tk %>% select(mid,fid,fname,known, cid,lid,pval,pos,pos_c,neg,neg_c) %>%
     inner_join(tl %>% select(lid, cid, bin, epi), by=c('cid','lid'))
 t2 = t1 %>% arrange(cid, pval) %>%
     separate(bin,c('opt','bin'),sep=":", remove=F) %>%
@@ -356,7 +356,7 @@ t2 = t1 %>% arrange(cid, pval) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     inner_join(tk %>% select(mid,kmer,kmers), by='mid') %>%
     mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
-    select(cid, i, opt,bin,epi, pval,fid,fname,kmers)
+    select(cid, i, opt,bin,epi, pval,fid,fname,kmers,pos,pos_c,neg,neg_c)
 t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup() %>%
     mutate(n_mtf = map_int(kmer, nrow)) %>%
     select(cid, n_mtf, kmer)

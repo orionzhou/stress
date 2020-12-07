@@ -74,11 +74,20 @@ if(!dir.exists(diro)) dir.create(diro)
 tc %>% mutate(fo = glue("{diro}/{tid}.tsv")) %>% mutate(j=map2(ts, fo, write_tsv))
 #}}}
 
-#{{{ motif meta plots
+#{{{ motif meta plots - sf10
 fi = glue("{dirw}/06.tk.tc.rds")
 r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
 #{{{ function
+kmer_locate <- function(kmers,fg) {
+    #{{{
+    cmd = glue("kmer.py locate --fg \"{fg}\" {kmers} tmp.tsv")
+    system(cmd)
+    ti = read_tsv('tmp.tsv')
+    system("rm tmp.tsv")
+    ti
+    #}}}
+}
 read_mtf_loc <- function(fi) {
     #{{{
     itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
@@ -93,7 +102,7 @@ read_mtf_loc <- function(fi) {
 #}}}
 
 #{{{ prepare module gene lists to get  motif locations
-tc0 = tc %>% filter(train=='BMW')
+tc0 = tc %>% filter(train=='B')
 ts1 = tc0 %>% select(cid, cond, note, gids)
 ts2 = tc0 %>% distinct(cond, gids_c) %>% mutate(cid=c('c29','c49')) %>%
     mutate(note='bg') %>% select(cid,cond,note,gids=gids_c)
@@ -107,88 +116,115 @@ fo = glue("{dirw}/51.mod.genes.tsv")
 write_tsv(to, fo, na='')
 #}}}
 
-rb = tk %>% unnest(kmer) %>%
+#{{{ read
+fg = normalizePath(glue("{dirw}/51.mod.genes.tsv"))
+fmd = glue("{dirw}/51.mod.genes.rds")
+md = readRDS(fmd)
+tc1 = tc %>% filter(train=='B') %>% select(cid,cond,note)
+rb = tk %>% inner_join(tc1, by='cid') %>%
+    unnest(kmer) %>%
+    mutate(rate=pos/pos_c, rate.c=neg/neg_c) %>%
     mutate(fnote = glue("{cid}_{i} {fid} ({fname}): {opt} {bin} {epi}")) %>%
-    select(cid,i,fid,fnote)
-
-ti = tc %>% filter(train=='BMW') %>% select(cid,cond,note) %>%
-    mutate(fi = glue("{dirw}/52_mtf_loc_umr/{cid}.tsv")) %>%
-    mutate(x = map(fi, read_mtf_loc)) %>%
-    select(-fi)
-
-tss = ts %>% count(cid, cond, note) %>% rename(nt=n) %>%
-    mutate(mod=glue("{cond}: {note} ({nt})")) %>%
-    mutate(mod = as_factor(mod)) %>%
-    mutate(fill = ifelse(note=='bg', 'grey', 'white')) %>%
-    select(cid, nt, mod, fill)
-ts2 = ts %>% inner_join(tss, by='cid') %>% select(nt, gid, mod)
-
-cid = 'c30'
-ti2 = ti %>% filter(cid == !!cid) %>% unnest(x) %>%
-    inner_join(rb, by=c('cid','fid'))
-#
-ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
-    inner_join(ts2, by=c("gid")) %>%
-    count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
-    mutate(prop = nh/nt)
-
-x = ti3 %>% group_by(i,fid,fnote,mod) %>%
-    summarize(prop=max(prop)) %>% ungroup() %>%
-    filter(str_detect(fnote, 'TSS')) %>%
-    filter(str_detect(mod, 'bg'), prop < .3) %>% distinct(i) %>% pull(i)
-
-#{{{ look at some hand-picked motifs
-tz = tk %>% filter(cid=='c10', neg/ng_c < .1) %>%
-    arrange(fid, pval) %>% group_by(fid) %>% slice(1) %>% ungroup() %>%
-    arrange(pval) %>%
-    mutate(i=1:n(), opt='.', bin='.', epi='.') %>%
-    mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
-    select(i,opt,bin,epi,pval,fid,fname,kmers)
-fo = glue('{dirw}/c10.tsv')
-write_tsv(tz, fo)
-
-rb2 = tz %>%
-    mutate(cid='c10', fnote = glue("{i} {fid} ({fname})")) %>%
-    select(cid,i,fid,fnote)
-#
-ti2 = read_mtf_loc('t.tsv') %>% mutate(cid='c10', cond='cold',note='all') %>%
-    inner_join(rb2, by=c('cid','fid'))
-#
-ti3 = ti2 %>% distinct(cid,cond,note, i,fid,fnote, gid, bin) %>%
-    inner_join(ts2, by=c("gid")) %>%
-    count(cid,cond,note, i,fid,fnote, mod,nt, bin) %>% rename(nh=n) %>%
-    mutate(prop = nh/nt)
+    select(cid,cond,note,i,pval,rate,rate.c,fid,fname,kmers,fnote)
+rb1 = rb %>% filter(rate.c < .2)
 #}}}
 
-# meta plot of selected TFBS motifs
-plot_tss_meta <- function(cid, i, tss, rb, ti3, dirw) {
+#{{{ explore
+plot_tss_meta <- function(kmers,cid,cond,note,fid,fnote,fg,md,dirw) {
     #{{{
-    tit1=tss %>% filter(cid==!!cid) %>% pull(mod)
-tit2 = rb %>% filter(cid == !!cid, i==!!i) %>% pull(fnote)
-tit = glue("{tit1} | {tit2}")
-tp = ti3 %>% filter(cid == !!cid, i== !!i)
-tpx = tibble(x=c(.5,10.5,20.5,31.5,41.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
-p = ggplot(tp, aes(x=bin,y=prop)) +
-    geom_line(aes(), size=.5, na.rm = F) +
-    geom_point(aes(), size=1, na.rm = F) +
-    scale_x_continuous(expand=expansion(mult=c(.05,.05)),breaks=tpx$x,labels=tpx$lab) +
-    scale_y_continuous(name="Proportion of TFBS", expand=expansion(mult=c(.05,.05))) +
-    scale_color_aaas(name='strand') +
-    #scale_shape(labels=types) +
-    #scale_linetype(labels=types) +
-    facet_wrap(~mod, scale='free_x', ncol=5) +
-    ggtitle(tit) +
-    otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
-           strip.style='white',margin = c(.3,.3,.3,.3),
-           xgrid=T, xtick=T, ytick=T, ytitle=T,xtext=T, ytext=T) +
-    theme(plot.title=element_text(hjust=.5, size=10)) +
-    guides(fill=F)
-fo = glue("{dirw}/53_metaplots/{cid}_{i}.pdf")
-ggsave(p, file=fo, width = 10, height = 5)
+    cmd = glue("kmer.py locate --fg \"{fg}\" {kmers} tmp.tsv")
+    system(cmd)
+    ti = read_tsv('tmp.tsv')
+    system("rm tmp.tsv")
+    #
+    mds = md %>% count(cid,cond,note) %>% rename(nt=n) %>%
+        mutate(mod = glue("{cond}: {note} ({nt})")) %>%
+        arrange(cid) %>% mutate(mod = as_factor(mod))
+    itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
+    tp = ti %>%
+        mutate(pos = (start+end)/2) %>%
+        mutate(bin = cut(pos, breaks=itvs, include.lowest=T)) %>%
+        mutate(bin = as.numeric(bin)) %>%
+        distinct(sid,bin) %>%
+        rename(gid = sid) %>% inner_join(md, by='gid') %>%
+        inner_join(mds,  by='cid') %>%
+        count(mod,nt, bin) %>% rename(nh=n) %>%
+        mutate(prop = nh/nt)
+    #
+    tit = glue("{cond} {note} | {fnote}")
+    tpx = tibble(x=c(.5,10.5,20.5,31.5,41.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
+    #{{{
+    p = ggplot(tp, aes(x=bin,y=prop)) +
+        geom_line(aes(), size=.5, na.rm = F) +
+        geom_point(aes(), size=1, na.rm = F) +
+        scale_x_continuous(expand=expansion(mult=c(.05,.05)),breaks=tpx$x,labels=tpx$lab) +
+        scale_y_continuous(name="Proportion of TFBS", expand=expansion(mult=c(.05,.05))) +
+        scale_color_aaas(name='strand') +
+        #scale_shape(labels=types) +
+        #scale_linetype(labels=types) +
+        facet_wrap(~mod, scale='free_x', ncol=5) +
+        ggtitle(tit) +
+        otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
+               strip.style='white',margin = c(.3,.3,.3,.3),
+               xgrid=T, xtick=T, ytick=T, ytitle=T,xtext=T, ytext=T) +
+        theme(plot.title=element_text(hjust=.5, size=10)) +
+        guides(fill=F)
+    #}}}
+    fo = glue("{dirw}/53_metaplots/{cid}_{fid}.pdf")
+    ggsave(p, file=fo, width = 10, height = 5)
     #}}}
 }
-tibble(cid=!!cid, i=x) %>%
-    mutate(l=map2(cid,i, plot_tss_meta, tss=tss,rb=rb,ti3=ti3,dirw=dirw))
+rb2 = rb1 %>% filter(cid=='c32') %>%
+    mutate(x = pmap(list(kmers,cid,cond,note,fid,fnote), plot_tss_meta,
+                    fg=fg, md=md, dirw=dirw))
+#}}}
+
+# sf10
+tp1 = rb1 %>% filter(cid=='c32', fid %in% c('f0013','f0736',"f0277")) %>%
+    mutate(x = map(kmers, kmer_locate, fg=fg)) %>% unnest(x)
+
+    #{{{
+    mds = md %>% filter(cond=='heat', cid %in% c("c30",'c32','c49')) %>%
+        count(cid,cond,note) %>% rename(nt=n) %>%
+        mutate(mod = glue("{cond}: {note} ({nt})")) %>%
+        arrange(cid) %>% mutate(mod = as_factor(mod)) %>%
+        mutate(modtype = ifelse(str_detect(cid,'9$'), 'bg','a'))
+    itvs = c(seq(0,4000,by=200), seq(4050,8050,by=200))
+    tps = tp1 %>% distinct(fid,fname)
+    tp = tp1 %>%
+        mutate(pos = (start+end)/2) %>%
+        mutate(bin = cut(pos, breaks=itvs, include.lowest=T)) %>%
+        mutate(bin = as.numeric(bin)) %>%
+        distinct(fname,sid,bin) %>%
+        mutate(fname = as_factor(fname)) %>%
+        rename(gid = sid) %>% inner_join(md, by='gid') %>%
+        inner_join(mds,  by='cid') %>%
+        count(fname,mod,modtype,nt, bin) %>% rename(nh=n) %>%
+        mutate(prop = nh/nt)
+    #
+    tpx = tibble(x=c(.5,10.5,20.5,31.5,41.5),lab=c('-2kb','TSS','+2kb/-2kb','TTS','+2kb'))
+    #{{{
+    cols6 = c(pal_npg()(2), 'black')
+    p = ggplot(tp, aes(x=bin,y=prop, color=mod, shape=mod, linetype=modtype)) +
+        geom_line(aes(), size=.5, na.rm = F) +
+        geom_point(aes(), size=1, na.rm = F) +
+        scale_x_continuous(expand=expansion(mult=c(.05,.05)),breaks=tpx$x,labels=tpx$lab) +
+        scale_y_continuous(name="Proportion of TFBS", expand=expansion(mult=c(.05,.05))) +
+        scale_color_manual(name='', values=cols6) +
+        scale_shape(name='') +
+        scale_linetype(name='') +
+        facet_wrap(~fname, scale='free_y', ncol=2) +
+        otheme(legend.pos='bottom.right', legend.dir='v', legend.title=T,
+               panel.spacing=.2, margin = c(.3,.3,.3,.3),
+               xgrid=T, xtick=T, ytick=T, ytitle=T,xtext=T, ytext=T) +
+        #theme(plot.title=element_text(hjust=.5, size=10)) +
+        guides(fill=F,linetype=F)
+    #}}}
+    #}}}
+fo = glue("{dirw}/54.metaplot.pdf")
+ggsave(p, file=fo, width = 6, height = 4)
+fo = glue("{dirf}/sf10.pdf")
+ggsave(p, file=fo, width = 6, height = 4)
 #}}}
 
 #{{{ create ML training config
@@ -351,7 +387,7 @@ tc1 = tc %>% filter(train=='B') %>%
     mutate(epi_nfea_mod = as_factor(str_c(epi, nfea, mod, sep=': '))) %>%
     mutate(bin_nfea_mod = as_factor(str_c(bin, nfea, mod, sep=': ')))
 #}}}
-tag = 'b2'
+tag = 'b1'
 tm1 = tm %>% filter(tag == !!tag) %>% unnest(x) %>%
     mutate(epi=epi_map[epi], mod=mod_map[mod]) %>%
     mutate(epi = factor(epi, levels=epis)) %>%
@@ -424,7 +460,8 @@ plot_model_barplot <- function(ti, metric='auroc', x='bin', fill='epi',
       scale_color_manual(values=rep('black',20)) +
       facet_wrap(pnl ~ ., scale='free_y', ncol=1) +
       otheme(legend.pos='none', legend.dir='v', legend.box='v',legend.title=F,
-             legend.spacing=.1, margin = c(.3,.3,.3,.3), ygrid=T,
+             legend.spacing.x=.1, legend.spacing.y=.1,
+             margin=c(.3,.3,.3,.3), ygrid=T,
              strip.style='white', strip.compact=F, panel.spacing=.1,
              xtick=T, ytick=T, ytitle=T, xtext=T, ytext=T) +
       theme(legend.position = c(.5,1), legend.justification = c(.5,1)) +
@@ -478,7 +515,7 @@ p = ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
 fo = glue("{dirw}/30.auroc.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=9)
 fo = glue("{dirf}/f4.pdf")
-#p %>% ggexport(filename=fo, width=6, height=9)
+p %>% ggexport(filename=fo, width=6, height=9)
 
 #{{{ sf09 - barplot
 metric = 'f1'
@@ -514,8 +551,8 @@ p = ggarrange(pa, pb, pc, pd, nrow=4, ncol=1,
 #}}}
 fo = glue("{dirw}/30.f1.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=9)
-fo = glue("{dirf}/sf09.pdf")
-#p %>% ggexport(filename=fo, width=6, height=9)
+fo = glue("{dirf}/sf10.pdf")
+p %>% ggexport(filename=fo, width=6, height=9)
 
 #{{{ [old] heatmap: sf09
 pa = plot_model_heatmap(tm1, metric='f1', pnl='bat_note') +
@@ -621,7 +658,7 @@ ymax = 1
 p = ggplot(tp, aes(x=train, y=score)) +
   geom_col(aes(fill=gt), position=pdg, width=.7, alpha=.6) +
   geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=gt), width=.2, size=.3, position=pdg) +
-  scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
+  scale_x_discrete(expand=expansion(mult=c(.05,.1))) +
   scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,0))) +
   #coord_cartesian(ylim=c(.5,ymax)) +
   coord_flip(ylim= c(.5, ymax)) +
@@ -684,19 +721,26 @@ tp = to2 %>% filter(tgt=='B73') %>%
   mutate(st = ifelse(str_detect(st, 'A\\-B\\-'),'A-B-', st)) %>%
   mutate(st = str_replace(st, 'd', '')) %>%
   mutate(st = str_replace(st, 'n', '')) %>%
+  mutate(st = str_replace_all(st, '[\\+\\-]', '*')) %>%
+  mutate(pred = str_replace_all(pred, '[\\+\\-]', '*')) %>%
   mutate(time = as_factor(time)) %>%
   mutate(note = as_factor(note)) %>%
-  mutate(pred = as_factor(pred)) %>%
-  mutate(pnl = glue("{cond} {note}: {train}")) %>%
-  group_by(train,cid,cond,drc,note,st,pred,pnl) %>%
+  #mutate(pred = as_factor(pred)) %>%
+  mutate(pnl = glue("{train} model")) %>%
+  #mutate(pnl = glue("{cond} {note}: {train}")) %>%
+  #group_by(train,cid,cond,drc,note,st,pred,pnl) %>%
+  group_by(pnl,st,pred) %>%
   summarise(n=sum(n)) %>% ungroup() %>%
   rename(tag1=st, tag2=pred)
-tps = tp %>% distinct(drc,cid, train, pnl) %>% arrange(cid,train,drc)
-tp = tp %>% mutate(pnl = factor(pnl,levels=tps$pnl))
-preds1 = c('A=B=',"A+B=","A=B+","A+B+")
-preds2 = c('A=B=',"A-B=","A=B-","A-B-")
-tp1 = tp %>% filter(drc == 'up') %>% mutate(tag2=factor(tag2,levels=preds1))
-tp2 = tp %>% filter(drc == 'down') %>% mutate(tag2=factor(tag2,levels=preds2))
+#tps = tp %>% distinct(drc,cid, train, pnl) %>% arrange(cid,train,drc)
+stm = c('A=B='='Neither respond',"A*B="="Only Mo17/W22 respond","A=B*"="Only B73 respond","A*B*"='Both respond')
+tp = tp %>% mutate(pnl = as_factor(pnl)) %>%
+    mutate(tag1 = factor(stm[tag1], levels=stm)) %>%
+    mutate(tag2 = factor(stm[tag2], levels=stm))
+#preds1 = c('A=B=',"A+B=","A=B+","A+B+")
+#preds2 = c('A=B=',"A-B=","A=B-","A-B-")
+#tp1 = tp %>% filter(drc == 'up') %>% mutate(tag2=factor(tag2,levels=preds1))
+#tp2 = tp %>% filter(drc == 'down') %>% mutate(tag2=factor(tag2,levels=preds2))
 #}}}
 plot_dde_bar <- function(ti) {
 #{{{
@@ -716,37 +760,42 @@ tp = ti %>%
 tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
 fillcols = brewer.pal("Accent",n=4)[c(2,1,4,3)]
 tph = tp %>% filter(tag1==tag2)
+tp = tp %>% mutate(tag1 = fct_rev(tag1))
 p = ggplot(tp) +
     geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
     geom_tile(data=tph, aes(x=tag1,y=y,height=prop),width=.8,color='red',size=1,fill=NA) +
     geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
     geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
-    scale_x_discrete(name='Observed Status', expand=expansion(mult=c(.25,.25))) +
+    scale_x_discrete(name='Observation', expand=expansion(mult=c(.25,.25))) +
     scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
     scale_fill_manual(name="Prediction", values=fillcols) +
-    facet_wrap(~pnl, nrow=1) +
-    otheme(legend.pos='right',legend.dir='v',
-           legend.title=T, legend.vjust=-.3, panel.spacing=.2,
-           strip.style='white',
+    facet_wrap(~pnl, nrow=2) +
+    otheme(legend.pos='top.center.out',legend.dir='v',
+           legend.title=T, legend.vjust=-.5, panel.spacing=.2,
+           legend.spacing.x=.05, legend.spacing.y=.05,
            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
-           margin = c(.3, .3, .3, .3))
+           margin = c(1.5, .3, .3, .3)) +
+    guides(fill=guide_legend(nrow=2,title.hjust=.5))
 #}}}
 }
 
-pa = plot_dde_bar(tp1) + theme(axis.title.x=element_blank()) + o_margin(.2,.2,0,.2)
-pb = plot_dde_bar(tp2) + o_margin(0,.2,.2,.2)
-p = ggarrange(pa, pb, nrow=2, ncol=1, labels = '', heights=c(1,1))
+#pa = plot_dde_bar(tp1) + theme(axis.title.x=element_blank()) + o_margin(.2,.2,0,.2)
+#pb = plot_dde_bar(tp2) + o_margin(0,.2,.2,.2)
+#p = ggarrange(pa, pb, nrow=2, ncol=1, labels = '', heights=c(1,1))
+p = plot_dde_bar(tp)
 fo = glue("{dirw}/36.dde.bar.pdf")
-ggsave(p, file=fo, width=8, height=7)
+ggsave(p, file=fo, width=4, height=7)
 fo = glue("{dirf}/f6b.pdf")
-ggsave(p, file=fo, width=8, height=7)
-p = ggarrange(pa, pb, nrow=2, ncol=1, heights=c(1,1))
-#saveRDS(p, glue("{dirf}/f6b.rds"))
+ggsave(p, file=fo, width=4, height=7)
+#p = ggarrange(pa, pb, nrow=2, ncol=1, heights=c(1,1))
+saveRDS(p, glue("{dirf}/f6b.rds"))
 #}}}
 
 #{{{ dde cis/trans acc bar plot - f6c
 #{{{ prepare
 stmap = c("A=B="=0,"A+B+"=1,"A-B-"=1,"A+B="=2,"A-B="=2,"A=B+"=3,'A=B-'=3)
+stm = c('A=B='='Neither respond',"A*B="="Only Mo17/W22 respond","A=B*"="Only B73 respond","A*B*"='Both respond')
+tags = c('Both respond','Neither respond','Correct','Incorrect')
 regs = c("cis","cis+trans",'conserved','unexpected','trans')
 tp = to2 %>% filter(tgt=='B73') %>%
   filter((drc=='up' & st %in% c('dA+B=','dA=B+')) |
@@ -754,14 +803,15 @@ tp = to2 %>% filter(tgt=='B73') %>%
   mutate(st = as.character(st)) %>%
   filter(!is.na(reg)) %>%
   mutate(st = str_replace(st, 'd', '')) %>%
-  mutate(st = stmap[st]) %>%
-  mutate(tag = pred) %>%
-  mutate(pred = stmap[pred]) %>%
-  mutate(tag = ifelse(st==pred, 'correct',
-                      ifelse(pred > 1, 'opposite', tag))) %>%
-  mutate(pnl = train) %>%
+  mutate(st = str_replace_all(st, '[\\+\\-]', '*')) %>%
+  mutate(pred = str_replace_all(pred, '[\\+\\-]', '*')) %>%
+  mutate(st = stm[st]) %>%
+  mutate(tag = stm[pred]) %>%
+  mutate(tag = ifelse(st==tag, 'Correct',
+                      ifelse(pred %in% c("A*B*",'A=B='),tag,'Incorrect'))) %>%
+  mutate(pnl = glue("{train} model")) %>%
   mutate(reg = factor(reg, levels=regs)) %>%
-  mutate(tag = factor(tag)) %>%
+  mutate(tag = factor(tag, levels=tags)) %>%
   group_by(pnl,tag,reg) %>% summarise(n=sum(n)) %>% ungroup() %>%
   rename(tag1=tag, tag2=reg)
 #}}}
@@ -787,24 +837,25 @@ p = ggplot(tp) +
     geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
     geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
     geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
-    scale_x_discrete(name='Prediction', expand=expansion(mult=c(.25,.25))) +
+    scale_x_discrete(name='Prediction of Variable Response Genes', expand=expansion(mult=c(.2,.2))) +
     scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
     scale_fill_manual(name="Mode", values=fillcols) +
-    facet_wrap(~pnl, nrow=1) +
-    otheme(legend.pos='right',legend.dir='v',
-           legend.title=T, legend.vjust=-.3, panel.spacing=.2,
-           strip.style='white',
+    facet_wrap(~pnl, nrow=2) +
+    otheme(legend.pos='top.center.out',legend.dir='h',
+           legend.title=T, legend.vjust=-.7, panel.spacing=.2,
+           legend.spacing.x=.05, legend.spacing.y=.05,
            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
-           margin = c(.3, .3, .3, .3))
+           margin = c(1, .3, .3, .3)) +
+    guides(fill=guide_legend(nrow=2))
 #}}}
 }
 
-p = plot_cis_bar(tp) + o_margin(.2,.2,.2,.2)
+p = plot_cis_bar(tp)
 fo = glue("{dirw}/38.dde.cis.pdf")
-ggsave(p, file=fo, width=6, height=5)
+ggsave(p, file=fo, width=4, height=7)
 fo = glue("{dirf}/f6c.pdf")
-ggsave(p, file=fo, width=6, height=5)
-#saveRDS(p, glue("{dirf}/f6c.rds"))
+ggsave(p, file=fo, width=4, height=7)
+saveRDS(p, glue("{dirf}/f6c.rds"))
 #}}}
 
 #{{{ dde acc plot

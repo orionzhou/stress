@@ -90,10 +90,16 @@ ggexport(filename="sf13.pdf", width=10, height=8)
 #}}}
 
 #{{{ Fig 6
-a = readRDS('f6a.rds')
-b = readRDS('f6b.rds')
-ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:2],
-          widths=c(2,2,2), heights=c(2,2)) %>%
+a = readRDS('f6a.rds') +
+    scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,.05)))
+b = readRDS('f6b.rds') +
+    theme(legend.title=element_text(size=8),legend.text=element_text(size=7)) +
+    theme(axis.text.x=element_text(size=7,angle=10,vjust=1,hjust=.7))
+c = readRDS('f6c.rds') +
+    theme(legend.title=element_text(size=7),legend.text=element_text(size=7)) +
+    theme(axis.text.x=element_text(size=7,angle=10,vjust=1,hjust=.7))
+ggarrange(a, b, c, nrow=1, ncol=3, labels=LETTERS[1:3],
+          widths=c(3,2,2), heights=c(2,2)) %>%
 ggexport(filename="f6.pdf", width=8, height=7)
 #}}}
 

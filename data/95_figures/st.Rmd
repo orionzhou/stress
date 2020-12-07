@@ -103,24 +103,25 @@ Figure S7. Number of enriched motifs found using promoter spaces of different si
 Figure S8. Enriched motifs include known transcription factor binding sites (TFBSs) as well as novel motifs.  For each set of DEGs up to the top 40 most enriched motifs are shown (p-value for enrichment is indicated by color).  Some sets of DEGs have less than 40 motifs and only the significant ones are shown.  If the enriched motif matched a previously characterized TFBS (Pearson correlation coefficient > 0.8) the name of the transcription factor is shown.  In each cases there are a mixture of previously characterized motifs and novel motifs.  TTS motifs with a "*" sign represent motifs not present in the top40 TSS motifs identified in the same list of genes.
 
 \pagebreak
+![](plots/sf09.pdf){width=80%}
+
+Figure S09. TF meta plot
+
+\pagebreak
 ![](plots/f4.pdf){width=60%}
 
 Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 
 \pagebreak
-![](plots/sf09.pdf){width=60%}
+![](plots/sf10.pdf){width=60%}
 
-Figure S9. Prediction of cold and heat responsive expression.  (A) Machine learning models were trained to predict expression responses to heat or cold.  The average F1 score (N=100 model runs) is shown for models trained using all cold or heat up- or down-regulated genes.  Models were run using different windows near the TSS and with all sequence (red) or UMR regions only (blue).  The standard deviation for model performance is shown for each category.  (B) Models were trained for specific up-regulated co-expression modules with at least 20 enriched motifs and compared to the performance of models trained using all up-regulated genes.
+Figure S10. Prediction of cold and heat responsive expression.  (A) Machine learning models were trained to predict expression responses to heat or cold.  The average F1 score (N=100 model runs) is shown for models trained using all cold or heat up- or down-regulated genes.  Models were run using different windows near the TSS and with all sequence (red) or UMR regions only (blue).  The standard deviation for model performance is shown for each category.  (B) Models were trained for specific up-regulated co-expression modules with at least 20 enriched motifs and compared to the performance of models trained using all up-regulated genes.
 
 \pagebreak
 ![](plots/f5.pdf){width=100%}
 
 Figure 5. Characterization of genes with variable stress responsive patterns among inbreds.  (A) A Venn diagram is used to assess genes that are up-regulated in response to 25h of cold stress for B73, Mo17 and W22.  The overlap of DE genes at other time points is shown in Figure S11A.  (B) For genes that show significantly stronger (or weaker) response to cold at 25h in B73 compared to Mo17 we show the log2 fold-change (cold 25h / control 25h) for both inbreds. The classification of differential responses for other genotype contrasts and timepoints is provided in Figure S12.  Above the diagonal line are genes showing stronger cold response in Mo17 while those below the diagonal line represent genes showing stronger B73 response. Different colors indicate groups of genes with different DE status (e.g., red genes are ones up-regulated in both inbreds (but showing significantly different response), green are genes only up-regulated in Mo17).   The number of genes in each category is shown in (C). For each class the response in the two genotypes (A and B) is indicated as up-regulated (“+”), down-regulated (“-”) or not DE (=).  (D) For the subset of genes classified as having a response in only one of the two genotypes that also had SNPs we assessed allele-specific expression in the F1 hybrid.  The proportion of allele 1 (B73) change in stress vs control of the F1 (x-axis) was compared to the proportion of the change in expression in the parental genotypes (y-axis).  A maximum likelihood model was applied to classify cis- and trans- inheriance patterns and shown in different colors. The number of genes classified into each type of regulatory pattern for response to abiotic stress are shown in (E).  Similar analyses for other genotypes, stress and time points are shown in Figure S13.
-
-\pagebreak
-
-Figure S10. TF meta plot
 
 \pagebreak
 ![](plots/sf11.pdf){width=100%}
@@ -141,7 +142,9 @@ Figure S13. Cis/trans characterization of genes showing different stress respons
 
 
 \pagebreak
+![](plots/f6.pdf){width=100%}
 
+Figure 6. 
 
 
 
