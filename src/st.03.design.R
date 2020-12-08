@@ -1,5 +1,5 @@
 source('functions.R')
-dirw = file.path(dird, '01_exp_design')
+dirw = glue('{dird}/01_exp_design')
 
 #{{{ create snk/nf sample list
 fo = file.path(dirw, '01.meta.tsv')
@@ -65,10 +65,11 @@ write_tsv(tp, fo)
 
 #{{{ read & plot temperature data
 fi = file.path(dird, '03_temp_button', 'temperature.tsv')
-tp = read_tsv(fi) %>% mutate(stress=factor(stress, levels=trs))
+tp = read_tsv(fi) %>% mutate(stress=factor(stress, levels=trs)) %>%
+    filter(ExpTxt == 'Experiment 1 (TC)')
 tpa = tp %>% arrange(ExpTxt, stress, -has) %>%
     group_by(ExpTxt, stress) %>% slice(1) %>% ungroup()
-tfa = tibble(stress=stresses,
+tfa = tibble(stress=trs,
   faw = c('\uf6c4','\uf2dc','\uf185'),
   fat = c('\uf2c9','\uf2cb','\uf2c7')) %>%
     mutate(fawt = str_c(faw,sep='')) %>% inner_join(tpa, by='stress')
@@ -80,10 +81,10 @@ p_temp = ggplot(tp, aes(has, temp)) +
     #geom_text(data=tfa, aes(x=25+.2, y=temp-.1, label=fawt),size=4,family='fas',vjust=1,hjust=0) +
     geom_text(data=tpa, aes(x=25+.3, y=temp+1, label=stress), hjust=.5, vjust=0, size=2.5) +
     facet_wrap(~ExpTxt, ncol=1) +
-    scale_x_continuous(name='Hours after Treatment', breaks=c(0,14,22,25), expand=expand_scale(mult=c(.02,.06))) +
-    scale_y_continuous(name='Temperature (C)', expand=expand_scale(mult=c(.02,.08))) +
+    scale_x_continuous(name='Hours after Treatment', breaks=c(0,14,22,25), expand=expansion(mult=c(.02,.06))) +
+    scale_y_continuous(name='Temperature (C)', expand=expansion(mult=c(.02,.08))) +
     scale_color_manual(values=cols3) +
-    otheme(legend.pos='none', margin=c(.1,.2,.1,.2),
+    otheme(legend.pos='none', margin=c(.1,.2,.1,.5),
            xtitle=T, ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, xgrid=T) +
     theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
 fo = file.path(dirw, 'tempature.pdf')
@@ -94,13 +95,13 @@ fo = file.path(dirw, 'tempature.pdf')
 tms = c(0,.5,1,1.5,2,3,4,8,25)
 ti1 = crossing(Genotype=gts3,Timepoint=tms) %>%
     filter(!(Genotype=='W22' & Timepoint %in% c(1.5,3,8))) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    mutate(Genotype=factor(Genotype, levels=gts3)) %>%
     mutate(y = -as.integer(Genotype)) %>%
     mutate(ExpID='TC')
 #
 tms = c(0,1,25)
 ti2 = crossing(Genotype=gts6,Timepoint=tms) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    mutate(Genotype=factor(Genotype, levels=gts3)) %>%
     mutate(y = -10-as.integer(Genotype)) %>%
     mutate(ExpID='HY')
 #
@@ -122,24 +123,28 @@ tpa = tp %>% filter(Genotype!='...')
 tpb = tp %>% filter(Genotype=='...')
 tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
 cols11 = c(pal_aaas()(10), pal_simpsons()(5))
+darkB = 6 + 6 * 4/17; darkE = 6 + 14 * 4/17
 p_dsn = ggplot(tpa, aes(x, y)) +
+    geom_rect(aes(xmin=darkB,xmax=darkE,ymin=-Inf,ymax=Inf), fill='#D3D3D3') +
     geom_point(aes(color=Genotype), size=5) +
     geom_text(data=tpb, aes(x,y, label='...'), size=3) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
-    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expand_scale(mult=c(.05,.05))) +
-    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expand_scale(mult=c(.15,.15))) +
+    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
     scale_color_manual(values=cols11) +
     facet_wrap(~ExpTxt, ncol=1, scale='free_y') +
-    otheme(legend.pos='none', margin=c(.1,.1,.1,.1),
+    otheme(legend.pos='none', margin=c(.1,.3,.3,.3),
            xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
     theme(axis.text.y = element_text(color='black')) +
     theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
 #}}}
+p = ggarrange(p_temp, p_dsn, labels=LETTERS[1:2],
+              ncol=1, heights=c(1,2.6), widths=c(1.3,1))
 
-fo = file.path(dirw, 'design.pdf')
-ggarrange(p_dsn, p_temp, common.legend = F,
-    nrow=1, ncol=2, widths=c(1.3,1)) %>%
-    ggexport(filename = fo, width=8, height=6)
+fo = glue('{dirw}/design.pdf')
+ggexport(p, filename=fo, width=5, height=8)
+fo = glue('{dirf}/sf01.pdf')
+ggexport(p, filename=fo, width=5, height=8)
 
 #{{{ #plot design [old]
 load_fonts()

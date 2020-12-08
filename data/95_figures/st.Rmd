@@ -47,9 +47,9 @@ dirf = '/home/springer/zhoux379/projects/stress/data/95_figures/plots'
 
 \hfill
 
-![]($st/data/01_exp_design/design.pdf){width=100%}
+![](plots/sf01.pdf){width=60%}
 
-Figure S1. Experimental design used for generation of RNA-Seq data.  Three different experiments were conducted to assess the changes in gene expression in response to cold or heat stress in 14 day maize seedlings.  In experiment 1 (time course - TC) one replicate for three inbreds was collected at each of the indicated time-points.  The panel on the right shows the temperature readings from a sensor that was with the plants throughout the experiment and shows the time of light / dark (gray shading indicates time without lights).  In experiment 2 (inbred - hybrid - HY, second row) three biological replicates were sampled from three maize inbreds and their F1 hybrids at time 0 and two time points during the stress. The final row shows experiment 3 in which a single biological replicate was sampled for a panel of 25 genotypes under control and cold conditions at two time points.
+Figure S1. Experimental design used for generation of RNA-Seq data. (A) Temperature readings from a sensor that was with the plants throughout the experiment and shows the time of light / dark (gray shading indicates time without lights). (B) Three different experiments were conducted to assess the changes in gene expression in response to cold or heat stress in 14 day maize seedlings.  In experiment 1 (time course - TC) one replicate for three inbreds was collected at each of the indicated time-points.  In experiment 2 (inbred - hybrid - HY, second row) three biological replicates were sampled from three maize inbreds and their F1 hybrids at time 0 and two time points during the stress.  In experiment 3 a single biological replicate was sampled for a panel of 25 genotypes under control and cold conditions at two time points.
 
 
 \pagebreak
@@ -105,7 +105,7 @@ Figure S8. Enriched motifs include known transcription factor binding sites (TFB
 \pagebreak
 ![](plots/sf09.pdf){width=80%}
 
-Figure S9. Relative distribution of selected motifs in gene promoter/terminator.  The promoter/terminator (-/+2k:TSS,-/+2k:TTS) regions of different co-expression clusters (all heat up-regulated genes, heat early activation genes, or background gene set ('bg')) were cut into 40 bins.  The occurence of selected motifs in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
+Figure S9. Relative distribution of selected motifs in gene promoters/terminators.  The promoter/terminator (-/+2k:TSS,-/+2k:TTS) regions of different co-expression clusters (all heat up-regulated, heat early activation, or background gene set ('bg')) were cut into 40 bins.  The occurrence of selected motifs in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
 
 \pagebreak
 ![](plots/f4.pdf){width=60%}

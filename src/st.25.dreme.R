@@ -10,7 +10,7 @@ tag = 'degA'
 tag = 'degB'
 tag = 'dmodA'
 tag = 'dmodB'
-tag = 'var2'
+#tag = 'var2'
 fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
 md = readRDS(fi)
 tls = crossing(bin=bins, epi=epis) %>%
@@ -68,10 +68,10 @@ tls = tls0 %>% filter(!epi %in% c('acrL','acrE'))
 
 #{{{ read DREME motifs/kmers and save
 tag = 'degA'
-tag = 'degB'
 tag = 'dmodA'
 tag = 'dmodB'
-tag = 'var2'
+tag = 'degB'
+#tag = 'var2'
 diri = glue("{dirw}/00_nf")
 fk = glue("{diri}/{tag}/23.kmer.tsv")
 fm = glue("{diri}/{tag}/23.kmer.motif.tsv")
