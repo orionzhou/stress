@@ -101,7 +101,7 @@ ti1 = crossing(Genotype=gts3,Timepoint=tms) %>%
 #
 tms = c(0,1,25)
 ti2 = crossing(Genotype=gts6,Timepoint=tms) %>%
-    mutate(Genotype=factor(Genotype, levels=gts3)) %>%
+    mutate(Genotype=factor(Genotype, levels=gts6)) %>%
     mutate(y = -10-as.integer(Genotype)) %>%
     mutate(ExpID='HY')
 #

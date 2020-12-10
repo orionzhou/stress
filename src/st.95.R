@@ -4,8 +4,7 @@ require(ggplotify)
 setwd(dirf)
 
 #{{{ Fig 1
-a = readRDS('f1a.rds') +
-    theme(plot.margin = margin(.2,0,.2,.4, "lines")) +
+a = readRDS('f1a.rds') + o_margin(.2,0,.2,.4) +
     theme(legend.position = c(1,1), legend.justification = c(1,1))
 b = readRDS('f1b.rds')
 ggarrange(a, b, nrow=1, ncol=2,

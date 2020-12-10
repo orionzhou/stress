@@ -1,5 +1,5 @@
 source('functions.R')
-dirw = file.path(dird, '10_qc')
+dirw = glue('{dird}/10_qc')
 
 yid = 'rn20a'
 res = rnaseq_cpm(yid)
@@ -7,7 +7,6 @@ th = res$th
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
-#{{{ sample clustering
 #{{{ TC
 ex = 'TC'
 th1 = th %>% filter(Experiment==ex) %>%
@@ -25,18 +24,21 @@ tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=6, height=8)
-saveRDS(p1a, file.path(dirf, 'sf.2a.rds'))
+fo = glue('{dirf}/sf02a.rds')
+saveRDS(p1a, fo)
 
 p1b = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.s.pdf",dirw,ex), p1b, width=6, height=8)
 
-p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=4,iter=1000, seed=12,
+p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=3,iter=1000, seed=12,
     var.shape='Treatment',var.col='Genotype',var.lab='has',#var.ellipse='grp',
     legend.pos='top.center.out', legend.dir='h', legend.box='h',legend.title=F,
     shapes=c(0,1,2), pal.col='aaas')
-ggsave(sprintf("%s/22.tsne.%s.pdf", dirw, ex), p2, width=6, height=6)
-saveRDS(p2, file.path(dirf, 'sf.2b.rds'))
+fo = glue("{dirw}/22.tsne.{ex}.pdf")
+ggsave(fo, p2, width=5, height=5)
+fo = file.path(dirf, 'sf02b.rds')
+saveRDS(p2, fo)
 
 th2 = th1 %>% filter(Genotype=='B73')
 tm2 = tm1 %>% filter(SampleID %in% th2$SampleID)
@@ -88,16 +90,19 @@ ggsave(sprintf("%s/21.hclust.%s.s.pdf",dirw,ex), p1b, width=8, height=10)
 p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=6,iter=800, seed=12,
     var.shape='Genotype',var.col='Genotype',var.lab='clab',var.ellipse='grp',
     legend.pos='top.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(0:3,5,6), pal.col='aaas')
-ggsave(sprintf("%s/22.tsne.%s.pdf", dirw, ex), p2, width=6, height=6)
-saveRDS(p2, file.path(dirf, 'f.1a.rds'))
+    shapes=c(0:2,3,4,8), pal.col='aaas')
+fo = glue("{dirw}/22.tsne.{ex}.pdf")
+ggsave(fo, p2, width=6, height=6)
+fo = glue('{dirf}/f1a.rds')
+saveRDS(p2, fo)
 
 th2 = th1 %>% filter(Genotype %in% gts3)
 p2 = plot_tsne(tm1,th2,pct.exp=.7,perp=4,iter=1000, seed=12,
     var.shape='Genotype',var.col='Genotype',var.lab='clab',var.ellipse='grp',
     legend.pos='top.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(0:3,5,6), pal.col='aaas')
-ggsave(sprintf("%s/22.tsne.%s.inbreds.pdf", dirw, ex), p2, width=6, height=6)
+    shapes=c(0:2,3,4,8), pal.col='aaas')
+fo = glue("{dirw}/22.tsne.{ex}.inbreds.pdf")
+ggsave(fo, p2, width=5, height=5)
 #}}}
 
 #{{{ NM
@@ -116,20 +121,20 @@ tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
 
 p1 = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Treatment',
     expand.x=.25)
-ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1, width=6, height=10)
+fo = glue("{dirw}/21.hclust.{ex}.p.pdf")
+ggsave(fo, p1, width=6, height=10)
 
 p1 = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Treatment',
     expand.x=.25)
-ggsave(sprintf("%s/21.hclust.%s.s.pdf",dirw,ex), p1, width=6, height=10)
+fo = glue("{dirw}/21.hclust.{ex}.s.pdf")
+ggsave(fo, p1, width=6, height=10)
 
 p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=4,iter=1200, seed=12,
     var.shape='cond',var.col='cond',var.lab='Genotype',#var.ellipse='Genotype',
     legend.pos='top.center.out', legend.dir='h', legend.box='h',legend.title=F,
     shapes=c(0:1,15:16), pal.col='aaas')
-ggsave(sprintf("%s/22.tsne.%s.pdf", dirw, ex), p2, width=6, height=6)
+fo = glue("{dirw}/22.tsne.{ex}.pdf")
+ggsave(fo, p2, width=6, height=6)
 #}}}
-#}}}
-
-
 
 
