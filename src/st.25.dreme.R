@@ -67,6 +67,53 @@ tls = tls0 %>% filter(!epi %in% c('acrL','acrE'))
 
 
 #{{{ read DREME motifs/kmers and save
+tag = 'dmodA'
+tag = 'dmodB'
+tag = 'degB'
+tag = 'degA'
+#tag = 'var2'
+diri = glue("{dirw}/00_nf")
+#
+fi = glue("{diri}/{tag}/20.nseq.txt")
+tn = read_delim(fi, delim=':', col_names=c('fn','n')) %>%
+    mutate(lid = str_replace_all(fn,'\\..*','')) %>% select(lid,n)
+#
+fi = glue("{diri}/{tag}/23.dreme.rds")
+rd = readRDS(fi)
+#
+fl = glue('{diri}/{tag}/08.tc.tl.rds')
+r8 = readRDS(fl)
+tc=r8$tc
+tl=r8$tl %>% rename(ng0=ng,ng0_c=ng_c) %>%
+    inner_join(tn, by='lid') %>% rename(ng=n) %>%
+    inner_join(tn, by=c('clid'='lid')) %>% rename(ng_c=n)
+#
+fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
+md = readRDS(fi)
+#
+fi = glue("{diri}/{tag}/23.fimo.rds")
+fm = readRDS(fi) %>% unnest(loc) %>% distinct(lid,mid,gid)
+#
+md2 = md %>% select(cid,ts) %>% unnest(ts)
+fm2 = fm %>%
+    inner_join(tl %>% select(lid,cid), by='lid') %>%
+    inner_join(md2, by=c('cid','gid')) %>%
+    count(lid,mid,status) %>%
+    spread(status,n) %>% rename(pos=`1`,neg=`0`) %>%
+    replace_na(list(pos=0,neg=0))
+#
+tm = fm2 %>% inner_join(tl, by='lid') %>%
+    arrange(lid) %>%
+    select(cid,lid,mid,pos,ng,neg,ng_c,ng0,ng0_c) %>%
+    mutate(pval = phyper(pos-1, pos+neg, ng+ng_c-pos-neg, ng, lower.tail=F)) %>%
+    inner_join(rd, by=c('lid','mid')) %>%
+    print(n=20)
+
+fo = glue("{diri}/{tag}/25.rds")
+saveRDS(tm, fo)
+#}}}
+
+#{{{ read DREME motifs/kmers and save [old]
 tag = 'degA'
 tag = 'dmodA'
 tag = 'dmodB'
@@ -155,7 +202,8 @@ tm1 = rk %>% select(ctag, mid, name, mtf=pwm)
 #
 fi = glue("{dirw}/02.rds")
 r = readRDS(fi)
-tm2 = r$tk %>% mutate(ctag='dreme',name=map_chr(mtf,'consensus')) %>%
+tm2 = r$tk %>% filter(pval < .05) %>%
+    mutate(ctag='dreme',name=map_chr(mtf,'consensus')) %>%
     select(ctag,mid,name,mtf)
 tm = tm1 %>% bind_rows(tm2) %>% mutate(conseq=map_chr(mtf,'consensus'))
 
@@ -194,7 +242,7 @@ saveRDS(r3, fo)
 #}}}
 
 
-#{{{ summerize kmers found in each module/searching parameter
+#{{{ summerize motifs found in each module/searching parameter
 fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 tl = r3$tl; tc = r3$tc; tk = r3$tk
@@ -344,7 +392,7 @@ fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 tl = r3$tl; tc = r3$tc; tk = r3$tk
 
-t1 = tk %>% select(mid,fid,fname,known, cid,lid,pval,pos,pos_c,neg,neg_c) %>%
+t1 = tk %>% select(mid,fid,fname,known, cid,lid,pval,pos,ng,neg,ng_c) %>%
     inner_join(tl %>% select(lid, cid, bin, epi), by=c('cid','lid'))
 t2 = t1 %>% arrange(cid, pval) %>%
     separate(bin,c('opt','bin'),sep=":", remove=F) %>%
@@ -354,12 +402,11 @@ t2 = t1 %>% arrange(cid, pval) %>%
     arrange(cid, pval) %>%
     group_by(cid) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
-    inner_join(tk %>% select(mid,kmer,kmers), by='mid') %>%
-    mutate(kmers = map_chr(kmers, str_c, collapse=',')) %>%
-    select(cid, i, opt,bin,epi, pval,fid,fname,kmers,pos,pos_c,neg,neg_c)
-t3 = t2 %>% group_by(cid) %>% nest() %>% rename(kmer=data) %>% ungroup() %>%
-    mutate(n_mtf = map_int(kmer, nrow)) %>%
-    select(cid, n_mtf, kmer)
+    inner_join(tk %>% select(mid,mtf), by='mid') %>%
+    select(cid, i, opt,bin,epi, pval,mid,fid,fname,mtf,pos,ng,neg,ng_c)
+t3 = t2 %>% group_by(cid) %>% nest() %>% rename(mtfs=data) %>% ungroup() %>%
+    mutate(n_mtf = map_int(mtfs, nrow)) %>%
+    select(cid, n_mtf, mtfs)
 
 r5 = list(tc=tc, tl=tl, tk=t3)
 fo = glue("{dirw}/05.best.mtfs.rds")
@@ -367,7 +414,7 @@ saveRDS(r5, fo)
 
 x = t3 %>% inner_join(tc %>% select(cid,cond,note), by='cid') %>%
     unnest(kmer) %>%
-    select(cond,note,i,fid,fname,pval,kmers)
+    select(cond,note,i,fid,fname,pval,mtf)
 fo = glue("{dirw}/05.best.motifs.tsv")
 write_tsv(x, fo)
 #}}}

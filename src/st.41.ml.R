@@ -2,7 +2,6 @@ source('functions.R')
 require(progress)
 dirw = glue('{dird}/41_ml')
 dirn = glue('{dird}/41_ml/00_nf')
-#setwd(dirw)
 #{{{ params
 bins = c(
          "TSS:-500","TSS:+500","TSS:-/+500",
@@ -30,8 +29,9 @@ fk = glue("{dirw}/05.tk.tsv")
 write_tsv(tk %>% select(cid, n_mtf), fk)
 diro = glue('{dirn}/03_motif_lists')
 if(!dir.exists(diro)) dir.create(diro)
-tk %>% mutate(fo = glue("{diro}/{cid}.tsv")) %>%
-    mutate(l = map2(kmer, fo, write_tsv))
+tk %>% mutate(mtfs = map(mtfs, 'mtf')) %>%
+    mutate(fo = glue("{diro}/{cid}.meme")) %>%
+    mutate(l = map2(mtfs, fo, write_meme, overwrite=T))
 
 tc1 = r5$tc %>% mutate(train='B') %>% select(train,everything())
 #{{{ BMW training
@@ -79,6 +79,15 @@ fi = glue("{dirw}/06.tk.tc.rds")
 r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
 #{{{ function
+fimo_locate <- function(mid,fm,fg) {
+    #{{{
+    cmd = glue("fimo.py prepare {fg} {fm} tmp.bed --epi umr --nfea {mid} --fmt long")
+    system(cmd)
+    ti = read_tsv('tmp.bed', col_names=c("gid",'start','end','mid'))
+    system("rm tmp.bed")
+    ti
+    #}}}
+}
 kmer_locate <- function(kmers,fg) {
     #{{{
     cmd = glue("kmer.py locate --fg \"{fg}\" {kmers} tmp.tsv")
@@ -122,20 +131,20 @@ fmd = glue("{dirw}/51.mod.genes.rds")
 md = readRDS(fmd)
 tc1 = tc %>% filter(train=='B') %>% select(cid,cond,note)
 rb = tk %>% inner_join(tc1, by='cid') %>%
-    unnest(kmer) %>%
-    mutate(rate=pos/pos_c, rate.c=neg/neg_c) %>%
+    unnest(mtfs) %>%
+    mutate(rate=pos/ng, rate.c=neg/ng_c) %>%
     mutate(fnote = glue("{cid}_{i} {fid} ({fname}): {opt} {bin} {epi}")) %>%
-    select(cid,cond,note,i,pval,rate,rate.c,fid,fname,kmers,fnote)
+    select(cid,cond,note,i,pval,rate,rate.c,mid,fid,fname,fnote)
 rb1 = rb %>% filter(rate.c < .2)
 #}}}
 
 #{{{ explore
-plot_tss_meta <- function(kmers,cid,cond,note,fid,fnote,fg,md,dirw) {
+plot_tss_meta <- function(mid,fm,cid,cond,note,fid,fnote,fg,md,dirw) {
     #{{{
-    cmd = glue("kmer.py locate --fg \"{fg}\" {kmers} tmp.tsv")
+    cmd = glue("fimo.py prepare_ml {fg} {fm} tmp.bed --epi umr --nfea {mid} --fmt long")
     system(cmd)
-    ti = read_tsv('tmp.tsv')
-    system("rm tmp.tsv")
+    ti = read_tsv('tmp.bed', col_names=c("gid",'start','end','mid'))
+    system("rm tmp.bed")
     #
     mds = md %>% count(cid,cond,note) %>% rename(nt=n) %>%
         mutate(mod = glue("{cond}: {note} ({nt})")) %>%
@@ -145,8 +154,8 @@ plot_tss_meta <- function(kmers,cid,cond,note,fid,fnote,fg,md,dirw) {
         mutate(pos = (start+end)/2) %>%
         mutate(bin = cut(pos, breaks=itvs, include.lowest=T)) %>%
         mutate(bin = as.numeric(bin)) %>%
-        distinct(sid,bin) %>%
-        rename(gid = sid) %>% inner_join(md, by='gid') %>%
+        distinct(gid,bin) %>%
+        inner_join(md, by='gid') %>%
         inner_join(mds,  by='cid') %>%
         count(mod,nt, bin) %>% rename(nh=n) %>%
         mutate(prop = nh/nt)
@@ -174,8 +183,9 @@ plot_tss_meta <- function(kmers,cid,cond,note,fid,fnote,fg,md,dirw) {
     ggsave(p, file=fo, width = 10, height = 5)
     #}}}
 }
-rb2 = rb1 %>% filter(cid=='c32') %>%
-    mutate(x = pmap(list(kmers,cid,cond,note,fid,fnote), plot_tss_meta,
+rb2 = rb1 %>% filter(cid=='c10') %>%
+    mutate(fm = glue("{dirn}/03_motif_lists/{cid}.meme")) %>%
+    mutate(x = pmap(list(mid,fm,cid,cond,note,fid,fnote), plot_tss_meta,
                     fg=fg, md=md, dirw=dirw))
 #}}}
 

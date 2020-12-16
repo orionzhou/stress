@@ -73,7 +73,9 @@ tfa = tibble(stress=trs,
   faw = c('\uf6c4','\uf2dc','\uf185'),
   fat = c('\uf2c9','\uf2cb','\uf2c7')) %>%
     mutate(fawt = str_c(faw,sep='')) %>% inner_join(tpa, by='stress')
+col0='corn silk'; colc='light sky blue'; colh='dark orange'
 cols3 = pal_npg()(5)[c(3,2,1)]
+cols3 = c('black',colc,colh)
 p_temp = ggplot(tp, aes(has, temp)) +
     geom_rect(aes(xmin=14,xmax=22,ymin=-Inf,ymax=Inf), fill='#D3D3D3') +
     geom_line(aes(color=stress)) +
@@ -113,6 +115,156 @@ ti3 = crossing(Genotype=gts,Timepoint=tms) %>%
     mutate(ExpID='NM')
 tp0 = rbind(ti1,ti2,ti3) %>% inner_join(tx, by='ExpID')
 #}}}
+ti = ti1 %>% inner_join(tx, by='ExpID')
+#{{{ plot design
+tpx = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
+    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
+    mutate(x=ifelse(Timepoint==25, 10, x))
+tpy = ti %>% distinct(y, Genotype)
+tp = ti %>% inner_join(tpx, by='Timepoint')
+tpa = tp %>% filter(Genotype!='...')
+tpb = tp %>% filter(Genotype=='...')
+tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
+darkB = 6 + 6 * 4/17; darkE = 6 + 14 * 4/17
+#
+p = ggplot(tpa, aes(x, y)) +
+    geom_rect(aes(xmin=darkB,xmax=darkE,ymin=-Inf,ymax=Inf), fill=alpha('#D3D3D3',.1)) +
+    geom_point(aes(color=Genotype), size=5) +
+    #geom_text(data=tpb, aes(x,y, label='...'), size=3) +
+    geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
+    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.35,.35))) +
+    scale_color_manual(values=cols11) +
+    otheme(legend.pos='none', margin=c(0,.3,0,.3),
+           xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
+    theme(axis.text.y = element_text(color='black')) +
+    theme(plot.background=element_rect(fill=NA, color=NA))
+#}}}
+#{{{ overlay plot
+col0='corn silk'; colc='light sky blue'; colh='dark orange'
+p0 = p +
+    ggtitle('Heat') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.x=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(colh,.8),color=NA))
+p1 = p +
+    ggtitle('Cold') + theme(plot.title=element_text(size=9, margin=margin(0,0,00,0))) +
+    theme(axis.text.x=element_text(color=NA)) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(colc,.8),color=NA))
+p2 = p +
+    ggtitle('Control') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
+#
+p = ggdraw() +
+    draw_plot(p0, 0,.1,.9,.9)+
+    draw_plot(p1,.05,.05,.9,.9)+
+    draw_plot(p2,.1,0,.9,.9)
+#}}}
+pa=p
+ti = ti2 %>% inner_join(tx, by='ExpID')
+#{{{ plot design
+tpx = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
+    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
+    mutate(x=ifelse(Timepoint==25, 10, x))
+tpy = ti %>% distinct(y, Genotype)
+tp = ti %>% inner_join(tpx, by='Timepoint')
+tpa = tp %>% filter(Genotype!='...')
+tpb = tp %>% filter(Genotype=='...')
+tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
+darkB = 6 + 6 * 4/17; darkE = 6 + 14 * 4/17
+#
+p = ggplot(tpa, aes(x, y)) +
+    geom_rect(aes(xmin=darkB,xmax=darkE,ymin=-Inf,ymax=Inf), fill=alpha('#D3D3D3',.1)) +
+    geom_point(aes(color=Genotype), size=5) +
+    #geom_text(data=tpb, aes(x,y, label='...'), size=3) +
+    geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
+    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
+    scale_color_manual(values=cols11) +
+    otheme(legend.pos='none', margin=c(0,.3,0,.3),
+           xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
+    theme(axis.text.y = element_text(color='black')) +
+    theme(plot.background=element_rect(fill=NA, color=NA))
+#}}}
+#{{{ overlay plot
+col0='corn silk'; colc='light sky blue'; colh='dark orange'
+p0 = p +
+    ggtitle('Heat') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.x=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(colh,.8),color=NA))
+p1 = p +
+    ggtitle('Cold') + theme(plot.title=element_text(size=9, margin=margin(0,0,00,0))) +
+    theme(axis.text.x=element_text(color=NA)) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(colc,.8),color=NA))
+p2 = p +
+    ggtitle('Control') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(axis.title.x=element_blank()) +
+    theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
+#
+p = ggdraw() +
+    draw_plot(p0, 0,.1,.9,.9)+
+    draw_plot(p1,.05,.05,.9,.9)+
+    draw_plot(p2,.1,0,.9,.9)
+#}}}
+pb=p
+ti = ti3 %>% inner_join(tx, by='ExpID')
+#{{{ plot design
+tpx = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
+    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
+    mutate(x=ifelse(Timepoint==25, 10, x))
+tpy = ti %>% distinct(y, Genotype)
+tp = ti %>% inner_join(tpx, by='Timepoint')
+tpa = tp %>% filter(Genotype!='...')
+tpb = tp %>% filter(Genotype=='...')
+tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
+darkB = 6 + 6 * 4/17; darkE = 6 + 14 * 4/17
+#
+p = ggplot(tpa, aes(x, y)) +
+    geom_rect(aes(xmin=darkB,xmax=darkE,ymin=-Inf,ymax=Inf), fill=alpha('#D3D3D3',.1)) +
+    geom_point(aes(color=Genotype), size=5) +
+    geom_text(data=tpb, aes(x,y, label='...'), size=3) +
+    geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
+    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
+    scale_color_manual(values=cols11) +
+    otheme(legend.pos='none', margin=c(0,.3,0,.3),
+           xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
+    theme(axis.text.y = element_text(color='black')) +
+    theme(plot.background=element_rect(fill=NA, color=NA))
+#}}}
+#{{{ overlay plot
+col0='corn silk'; colc='light sky blue'; colh='dark orange'
+p1 = p +
+    ggtitle('Cold') + theme(plot.title=element_text(size=9, margin=margin(0,0,00,0))) +
+    theme(axis.text.x=element_text(color=NA)) +
+    theme(axis.title.x=element_text(color=NA)) +
+    theme(panel.background=element_rect(fill=alpha(colc,.8),color=NA))
+p2 = p +
+    ggtitle('Control') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
+#
+p = ggdraw() +
+    draw_plot(p1, 0,.1,.9,.9)+
+    draw_plot(p2,.05,.05,.9,.9)
+#}}}
+pc=p
+p = ggarrange(p_temp, pa, pb, pc, labels=LETTERS[1:4],
+              ncol=1, heights=c(1,.7,.9,1), widths=c(1.3,1))
+
+fo = glue('{dirw}/design.pdf')
+ggexport(p, filename=fo, width=5, height=7)
+fo = glue('{dirf}/sf01.pdf')
+ggexport(p, filename=fo, width=5, height=8)
+
 #{{{ plot design
 tpx = tp0 %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
     mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
@@ -138,14 +290,6 @@ p_dsn = ggplot(tpa, aes(x, y)) +
     theme(axis.text.y = element_text(color='black')) +
     theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
 #}}}
-p = ggarrange(p_temp, p_dsn, labels=LETTERS[1:2],
-              ncol=1, heights=c(1,2.6), widths=c(1.3,1))
-
-fo = glue('{dirw}/design.pdf')
-ggexport(p, filename=fo, width=5, height=8)
-fo = glue('{dirf}/sf01.pdf')
-ggexport(p, filename=fo, width=5, height=8)
-
 #{{{ #plot design [old]
 load_fonts()
 dirw = dird
@@ -286,5 +430,11 @@ ggarrange(p1, p2, p3, common.legend = F,
     labels=c("Experiment 1",'Experiment 2','Experiment 3'), label.x=-.075) %>%
     ggexport(filename = fo, width=8, height=8)
 #}}}
+
+
+fo = glue('{dirw}/t.pdf')
+ggexport(p, filename=fo, width=5, height=4)
+
+
 
 

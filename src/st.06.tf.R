@@ -33,3 +33,16 @@ fo = file.path(dirw, '10.stress.tf.tsv')
 write_tsv(to, fo, na='')
 #}}}
 
+fi = '~/projects/grn/data/08_y1h/tf45.xlsx'
+ti = read_xlsx(fi)
+tf45 = ti %>% select(tf=1,gid=3) %>% distinct(tf,gid)
+
+tag = 'degB'
+fd = glue("{dird}/17_cluster//50_modules/{tag}.rds")
+md = readRDS(fd)
+tmd = md %>% select(cid, cond,note, gids) %>%
+    unnest(gids) %>% rename(gid=gids) %>%
+    separate(gid, c("gt",'gid'), sep='_') %>% select(-gt)
+
+to = tmd %>% inner_join(tf45, by='gid') %>%
+    select(cond,note,gid,tf)

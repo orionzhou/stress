@@ -162,7 +162,7 @@ tss = read_tsv(fi)
 cmps = tibble(qry=gts[c(1,3)], tgt=gts[2]) %>%
     mutate(fa = glue("{dirw}/16.{qry}.rds")) %>%
     mutate(ta = map(fa, readRDS)) %>% select(-fa)
-x = td %>% filter(st == 'UNN') %>%
+x = td %>%# filter(st == 'UNN') %>%
     #left_join(ddeg2, by=c('cond','time','qry','tgt','gid','st')) %>%
     #filter(!is.na(reg) & reg == 'cis') %>%
     inner_join(tpro1, by='gid') %>%
@@ -365,9 +365,9 @@ plot_combo <- function(gid,cid,cond,drc,st,fo, tss, cmps, gts, off=2000) {
 }
 #}}}
 x %>% print(n=50)
-i=53
+i = which(x$gid == gid)
 gid=x$gid[[i]];cid=x$cid[[i]];cond=x$cond[[i]];drc=x$drc[[i]];st=x$st[[i]]
-j = x %>% slice(31:52) %>%
+j = x %>% slice(i) %>%
     mutate(fo = glue("{dirw}/50_syn_plots/{str_sub(gid,10)}.pdf")) %>%
     mutate(p = pmap(list(gid,cid,cond,drc,st,fo), plot_combo,
                     tss=tss, cmps=cmps, gts=gts, off=2000))# %>%
