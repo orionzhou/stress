@@ -67,10 +67,10 @@ tls = tls0 %>% filter(!epi %in% c('acrL','acrE'))
 
 
 #{{{ read DREME motifs/kmers and save
+tag = 'degA'
+tag = 'degB'
 tag = 'dmodA'
 tag = 'dmodB'
-tag = 'degB'
-tag = 'degA'
 #tag = 'var2'
 diri = glue("{dirw}/00_nf")
 #
@@ -108,45 +108,13 @@ tm = fm2 %>% inner_join(tl, by='lid') %>%
     mutate(pval = phyper(pos-1, pos+neg, ng+ng_c-pos-neg, ng, lower.tail=F)) %>%
     inner_join(rd, by=c('lid','mid')) %>%
     print(n=20)
-
+#
 fo = glue("{diri}/{tag}/25.rds")
 saveRDS(tm, fo)
 #}}}
 
-#{{{ read DREME motifs/kmers and save [old]
-tag = 'degA'
-tag = 'dmodA'
-tag = 'dmodB'
-tag = 'degB'
-#tag = 'var2'
-diri = glue("{dirw}/00_nf")
-fk = glue("{diri}/{tag}/23.kmer.tsv")
-fm = glue("{diri}/{tag}/23.kmer.motif.tsv")
-tkk = read_tsv(fk) %>% select(-seq_rc) %>% rename(kmer=seq)
-tkm = read_tsv(fm) %>% select(-seq_rc) %>% rename(kmer=seq)
-make_kmer_motif <- function(kmer) create_motif(kmer, name=kmer, type='PPM', alphabet='DNA')
-kmers = tkk %>% distinct(kmer) %>% mutate(mtf = map(kmer, make_kmer_motif))
-tk0 = tkk %>% group_by(mid) %>% summarise(kmers = list(kmer)) %>% ungroup()
-tk = tkm %>% inner_join(tk0, by='mid')
-#
-fl = glue('{diri}/{tag}/08.tc.tl.rds')
-r8 = readRDS(fl)
-tc=r8$tc; tl=r8$tl
-#
-fi = glue("{diri}/{tag}/23.dreme.rds")
-rd = readRDS(fi)
-#
-km = tl %>% select(lid, cid, ng,ng_c=ng_c) %>%
-    inner_join(tk, by='lid') %>%
-    inner_join(rd, by=c('lid','mid')) %>%
-    select(lid,cid,mid,kmer,kmers,pos,pos_c,neg,neg_c,ng,ng_c,pval,mtf)
-
-fo = glue("{diri}/{tag}/25.rds")
-saveRDS(km, fo)
-#}}}
-
 #{{{ merge clusters, lists, modules
-#{{{ read in
+#{{{ read in B
 diri = glue("{dirw}/00_nf")
 tag = 'degB'
 fi = glue('{diri}/{tag}/08.tc.tl.rds')
@@ -163,28 +131,69 @@ tc2 = r$tc %>% mutate(tag = tag)
 tl2 = r$tl %>% mutate(tag = tag)
 fi = glue("{diri}/{tag}/25.rds")
 tk2 = readRDS(fi) %>% mutate(tag = tag)
+#
+scope = 'B'
+B_tc = tc1 %>% bind_rows(tc2) %>% mutate(scope=scope)
+B_tl = tl1 %>% bind_rows(tl2) %>% mutate(scope=scope)
+B_tk = tk1 %>% bind_rows(tk2) %>% mutate(scope=scope)
+#}}}
+#{{{ read in BMW
+diri = glue("{dirw}/00_nf")
+tag = 'degA'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc1 = r$tc %>% mutate(tag = tag)
+tl1 = r$tl %>% mutate(tag = tag)
+fi = glue("{diri}/{tag}/25.rds")
+tk1 = readRDS(fi) %>% mutate(tag = tag)
+#
+tag = 'dmodA'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc2 = r$tc %>% mutate(tag = tag)
+tl2 = r$tl %>% mutate(tag = tag)
+fi = glue("{diri}/{tag}/25.rds")
+tk2 = readRDS(fi) %>% mutate(tag = tag)
+#
+scope = 'BMW'
+BMW_tc = tc1 %>% bind_rows(tc2) %>% mutate(scope=scope) %>% select(-me)
+BMW_tl = tl1 %>% bind_rows(tl2) %>% mutate(scope=scope)
+BMW_tk = tk1 %>% bind_rows(tk2) %>% mutate(scope=scope)
 #}}}
 
+#{{{ merge B and BMW
 f_cfg = glue('{dirw}/config.xlsx')
 cfg = read_xlsx(f_cfg) %>% fill(tag, .direction='down') %>% select(tag,ocid,cid)
-
-tc = tc1 %>% bind_rows(tc2) %>% rename(ocid=cid) %>%
-    inner_join(cfg, by=c('tag','ocid')) %>% arrange(cid) %>%
-    select(cid,cond,note, ng,ng_c,gids,gids_c,ts)
-tl = tl1 %>% bind_rows(tl2) %>% rename(ocid=cid) %>%
-    inner_join(cfg, by=c('tag','ocid')) %>% arrange(cid, lid) %>%
-    select(-ocid,-tag) %>% select(cid, everything())
-tk = tk1 %>% bind_rows(tk2) %>% rename(ocid=cid) %>%
-    inner_join(cfg, by=c('tag','ocid')) %>% arrange(cid, lid) %>%
-    select(-ocid,-tag) %>% mutate(mid = glue("{cid}_{mid}")) %>%
+#
+scopes = c('B','BMW')
+tc = rbind(B_tc, BMW_tc) %>% rename(ocid=cid) %>%
+    inner_join(cfg, by=c('tag','ocid')) %>%
+    mutate(scope = factor(scope, levels=scopes)) %>%
+    arrange(scope, cid) %>%
+    mutate(bid = str_c('b', str_pad(1:n(), width=2,pad='0'))) %>%
+    select(bid, everything()) %>%
+    select(bid,scope,cid,cond,note, ng,ng_c,gids,gids_c,ts)
+tl = rbind(B_tl, BMW_tl) %>% rename(ocid=cid) %>%
+    inner_join(cfg, by=c('tag','ocid')) %>%
+    inner_join(tc %>% select(bid,scope,cid), by=c('scope','cid')) %>%
+    arrange(bid, lid) %>%
+    select(-ocid,-tag,-scope,-cid) %>% select(bid, everything())
+tk = rbind(B_tk, BMW_tk) %>% rename(ocid=cid) %>%
+    inner_join(cfg, by=c('tag','ocid')) %>%
+    inner_join(tc %>% select(bid,scope,cid), by=c('scope','cid')) %>%
+    arrange(bid, lid, mid) %>%
+    select(-ocid,-tag,-scope,-cid) %>%
+    mutate(mid = glue("{bid}_{mid}")) %>%
     mutate(mtf = map2(mtf, mid, rename_mtf)) %>%
-    select(lid, cid, everything())
+    select(bid, everything())
+#}}}
 
 fo = glue("{dirw}/02.rds")
 r = list(tc=tc, tl=tl, tk=tk)
 saveRDS(r, fo)
 
-to = tc %>% select(cid, cond, note, gids) %>% unnest(gids) %>%
+to = tc %>% filter(scope=='BMW') %>%
+    select(cid, cond, note, gids) %>% unnest(gids) %>%
     filter(str_detect(gids, '^B73_')) %>%
     mutate(gids=str_replace(gids, 'B73_','')) %>%
     group_by(cid, cond, note) %>%
@@ -202,12 +211,25 @@ tm1 = rk %>% select(ctag, mid, name, mtf=pwm)
 #
 fi = glue("{dirw}/02.rds")
 r = readRDS(fi)
-tm2 = r$tk %>% filter(pval < .05) %>%
+tl = r$tl %>% filter(str_detect(bin, "^TSS"))
+tm2 = r$tk %>% inner_join(tl %>% select(bid,lid), by=c('bid','lid')) %>%
+    filter(pval < .05) %>%
     mutate(ctag='dreme',name=map_chr(mtf,'consensus')) %>%
     select(ctag,mid,name,mtf)
 tm = tm1 %>% bind_rows(tm2) %>% mutate(conseq=map_chr(mtf,'consensus'))
 
 x = cluster_motifs(tm, cutHeight1=.1, cutHeight2=.1)
+
+#{{{ tmp hack
+x1 = x %>% filter(str_detect(mid,'^B')) %>%
+    separate(mid,c('scope','cid','lid','idx'),sep="_", remove=F) %>%
+    inner_join(tc %>% select(bid,scope,cid), by=c('scope','cid')) %>%
+    mutate(mid1 = str_c(bid,lid,idx, sep='_')) %>%
+    select(mid,mid1)
+x2 = x %>% left_join(x1, by='mid') %>%
+    mutate(mid = ifelse(is.na(mid1), mid, mid1)) %>%
+    select(-mid1)
+#}}}
 
 ctags = c('maize','cisbp','dreme')
 mtf = tm %>% inner_join(x, by='mid') %>%
@@ -235,7 +257,7 @@ grp %>% filter(n_known==0) %>% count(n_dreme)
 
 tk = r$tk %>% inner_join(mtf %>% select(mid,fid), by='mid') %>%
     inner_join(grp %>% select(fid,fname,known), by='fid')
-tl = r$tl; tc = r$tc
+tc = r$tc
 fo = glue("{dirw}/03.mtf.grp.rds")
 r3 = list(tc=tc, tl=tl, tk=tk)
 saveRDS(r3, fo)
@@ -245,9 +267,143 @@ saveRDS(r3, fo)
 #{{{ summerize motifs found in each module/searching parameter
 fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
-tl = r3$tl; tc = r3$tc; tk = r3$tk
 
-#{{{ num. motifs found in each module - f3b
+#{{{ num. motifs found in each module - f3b & sf07
+#{{{ f3b & sf07
+tc = r3$tc %>% mutate(scope = glue("{scope} model"))
+tc1 = tc %>% select(bid,cid,scope)
+tl = r3$tl %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+tk = r3$tk %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+#{{{ full plot - prepare plot data
+tps = tk %>% group_by(bid,scope,cid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
+    inner_join(tc %>% select(bid,cond,note,ng), by='bid')
+tk1 = tk %>% group_by(bid,lid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup()
+tp0 = tl %>% select(scope,lid,bid,cid, bin, epi, ng) %>%
+    inner_join(tk1, by=c('bid','lid')) %>% rename(score = n_grp) %>%
+    mutate(lab = score)
+tpy = tps %>%
+    mutate(cond_note = glue("{cond}: {note}")) %>%
+    mutate(ylab = glue("{cond}: {note} ({ng})")) %>%
+    mutate(ylab1 = glue("({ng})")) %>%
+    mutate(ylab2 = glue("({n_grp})")) %>%
+    arrange(desc(bid)) %>% mutate(i=1:n())
+tpp = tpy %>% group_by(scope) %>% summarise(ymin=min(i), ymax=max(i)) %>% ungroup()
+tpy_l = tibble(o=c(0,2,5,8,11)) %>% crossing(tpp) %>% mutate(o=o+ymin)
+#
+tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
+    separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    mutate(x = 1:n()) %>% crossing(tpp)
+xmax = max(tpx$x)
+tpx1 = tpx %>% group_by(scope,ymax,opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tpx2 = tpx %>% group_by(scope,ymax,opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tp = tp0 %>% inner_join(tpx, by=c('scope','bin','epi')) %>%
+    inner_join(tpy %>% select(bid,i), by='bid')
+tpx_l = tibble(o=seq(0,to=4*length(unique(tp$bin)),by=4)+.5) %>%
+    crossing(tpp)
+swit = (min(tp$score) + max(tp$score)) / 2
+#}}}
+#{{{ full plot - pf
+pf = ggplot(tp, aes(x=x,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    geom_segment(data=tpx_l,aes(x=o, xend=o,y=ymin-.5,yend=ymax+.5),color='blue',size=.5)+
+    geom_segment(data=tpy_l,aes(x=.5,xend=xmax+.5,y=o-.5,yend=o-.5),color='blue',size=.5)+
+    geom_text(data=tpx,aes(x=x,y=ymax+.7,label=epi),size=2.5,vjust=0,angle=30,hjust=0) +
+    geom_segment(data=tpx1,aes(x=xmin,xend=xmax,y=ymax+1.5,yend=ymax+1.5),size=.5) +
+    geom_text(data=tpx1,aes(x=x,y=ymax+2,label=bin2),size=3,vjust=0) +
+    #geom_segment(data=tpx2,aes(x=xmin,xend=xmax,y=ymax+2.8,yend=ymax+2.8),size=.5) +
+    #geom_text(data=tpx2,aes(x=x,y=ymax+3,label=opt),size=3,vjust=0) +
+    geom_text(data=tpy,aes(x=.3,y=i,label=ylab),size=2.5,hjust=1) +
+    geom_text(data=tpy,aes(x=xmax+.7,y=i,label=ylab2),size=2.5,hjust=0) +
+    scale_x_continuous(expand=expansion(mult=c(.001,.001),add=c(10,2))) +
+    scale_y_continuous(expand=expansion(mult=c(.001,.001),add=c(0,.5))) +
+    scale_fill_gradientn(name='# hits',colors=cols100v) +
+    scale_color_manual(values=c('black','white')) +
+    facet_wrap(scope~., scale='free_y', ncol=1) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F,
+           margin = c(.3,.3,.3,.3), panel.border=F,
+           xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F)
+#}}}
+
+fo = glue("{dirw}/10.n.mtf.pdf")
+ggexport(pf, filename=fo, width=7, height=7)
+fo = glue("{dirf}/sf07.pdf")
+ggexport(pf, filename=fo, width=7, height=7)
+
+tc = r3$tc %>% mutate(scope = glue("{scope} model"))
+tc1 = tc %>% select(bid,cid,scope)
+tl = r3$tl %>% filter(epi=='raw', !str_detect(bin,'1k')) %>% inner_join(tc1,by='bid')
+tk = r3$tk %>% filter(lid %in% tl$lid) %>% inner_join(tc1,by='bid')
+#{{{ select plot - prepare plot data
+tps = tk %>% group_by(bid,scope,cid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
+    inner_join(tc %>% select(bid,cond,note,ng), by='bid')
+tk1 = tk %>% group_by(bid,lid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup()
+tp0 = tl %>% select(scope,lid,bid,cid, bin, epi, ng) %>%
+    inner_join(tk1, by=c('bid','lid')) %>% rename(score = n_grp) %>%
+    mutate(lab = score)
+tpy = tps %>%
+    mutate(cond_note = glue("{cond}: {note}")) %>%
+    mutate(ylab = glue("{cond}: {note} ({ng})")) %>%
+    mutate(ylab1 = glue("({ng})")) %>%
+    mutate(ylab2 = glue("({n_grp})")) %>%
+    arrange(desc(bid)) %>% mutate(i=1:n())
+tpp = tpy %>% group_by(scope) %>% summarise(ymin=min(i), ymax=max(i)) %>% ungroup()
+tpy_l = tibble(o=c(0,2,5,8,11)) %>% crossing(tpp) %>% mutate(o=o+ymin)
+#
+tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
+    separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    mutate(x = 1:n()) %>% crossing(tpp)
+xmax = max(tpx$x)
+tpx1 = tpx %>% group_by(scope,ymax,opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tpx2 = tpx %>% group_by(scope,ymax,opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tp = tp0 %>% inner_join(tpx, by=c('scope','bin','epi')) %>%
+    inner_join(tpy %>% select(bid,i), by='bid')
+tpx_l = tibble(o=seq(0,to=6, by=3)+.5) %>%
+    crossing(tpp)
+swit = (min(tp$score) + max(tp$score)) / 2
+#}}}
+#{{{ select plot - ps
+ps = ggplot(tp, aes(x=x,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    geom_segment(data=tpx_l,aes(x=o,xend=o,y=ymin-.5,yend=ymax+.5),color='blue',size=.5)+
+    geom_segment(data=tpy_l,aes(x=.5,xend=xmax+.5,y=o-.5,yend=o-.5),color='blue',size=.5)+
+    geom_text(data=tpx,aes(x=x,y=ymax+.6,label=bin2),size=2.5,vjust=0,angle=30,hjust=.2) +
+    #geom_segment(data=tpx1,aes(x=xmin,xend=xmax,y=ymax+1.5,yend=ymax+1.5),size=.5) +
+    #geom_text(data=tpx1,aes(x=x,y=ymax+2,label=bin2),size=3,vjust=0) +
+    geom_text(data=tpy,aes(x=.3,y=i,label=ylab1),size=2.5,hjust=1) +
+    geom_text(data=tpy,aes(x=xmax+.7,y=i,label=ylab2),size=2.5,hjust=0) +
+    geom_text(data=tpy,aes(x=xmax+5,y=i,label=cond_note),size=2.8,hjust=.5) +
+    scale_x_continuous(expand=expansion(mult=c(.001,.001),add=c(1.5,2.5))) +
+    scale_y_continuous(expand=expansion(mult=c(.001,.001),add=c(.1,.5))) +
+    scale_fill_gradientn(name='# hits',colors=cols100v) +
+    scale_color_manual(values=c('black','white')) +
+    facet_wrap(scope~., scale='free_y', ncol=2) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F,
+           margin = c(.3,-6,.3,.3), panel.border=F,
+           xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F) +
+    theme(strip.text.x=element_text(hjust=.3,size=10,face='bold'))
+#}}}
+
+fo = glue("{dirw}/11.n.mtf.s.pdf")
+ggexport(ps, filename=fo, width=6, height=5)
+saveRDS(ps, glue("{dirf}/f3b.rds"))
+#}}}
+
+#{{{ ## below are old
+scopes = c('B','BMW')
+scope=scopes[1]
+#{{{ scope B: pf1 * ps1
+tc = r3$tc %>% filter(scope==!!scope)
+tc1 = tc %>% select(bid,cid)
+tl = r3$tl %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+tk = r3$tk %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+#{{{ full plot: pf1
+#{{{
 tps = tk %>% group_by(cid) %>%
     summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
     inner_join(tc %>% select(cid,cond,note,ng), by='cid')
@@ -262,8 +418,7 @@ tpy = tps %>%
 tpy_l = tibble(o=cumsum(c(0,11))+.5)
 tpy_l2 = tibble(o=c(2,5,8)+.5)
 ymax = max(tpy$i)
-
-#{{{ all motifs
+#
 tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
     separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
     mutate(x = 1:n())
@@ -271,9 +426,11 @@ tpx1 = tpx %>% group_by(opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xm
 tpx2 = tpx %>% group_by(opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
 tp = tp0 %>% inner_join(tpx, by=c('bin','epi')) %>%
     inner_join(tpy %>% select(cid,i), by='cid')
-tpx_l = tibble(o=seq(0,to=72,by=4)+.5)
+tpx_l = tibble(o=seq(0,to=4*length(unique(tp$bin)),by=4)+.5)
 swit = (min(tp$score) + max(tp$score)) / 2
-pa = ggplot(tp, aes(x=x,y=i)) +
+#}}}
+#{{{ plot
+pf1 = ggplot(tp, aes(x=x,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     #scale_x_continuous(breaks=tpx$x, labels=tpx$epi, expand=expansion(mult=c(0,0)), position='top') +
@@ -296,10 +453,8 @@ pa = ggplot(tp, aes(x=x,y=i)) +
     annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l2$o,yend=tpy_l2$o, color='black', size=.3) +
     annotate(geom='segment',x=tpx_l$o, xend=tpx_l$o,y=.5,yend=ymax+.5, color='blue', size=.5)
 #}}}
-ggsave(pa, file=glue("{dirw}/10.n.mtf.pdf"), width=14, height=4.5)
-ggsave(pa, file=glue("{dirf}/sf07.pdf"), width=14, height=4.5)
-
-#{{{ selected motifs
+#}}}
+#{{{ selected motifs - ps1
 tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
     separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
     filter(bin2=='-/+2k') %>% mutate(x = 1:n())
@@ -307,9 +462,9 @@ tpx1 = tpx %>% group_by(opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xm
 tpx2 = tpx %>% group_by(opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
 tp = tp0 %>% inner_join(tpx, by=c('bin','epi')) %>%
     inner_join(tpy %>% select(cid,i), by='cid')
-tpx_l = tibble(o=seq(0,to=8,by=4)+.5)
+tpx_l = tibble(o=seq(0,to=4,by=4)+.5)
 swit = (min(tp$score) + max(tp$score)) / 2
-pb = ggplot(tp, aes(x=x,y=i)) +
+ps1 = ggplot(tp, aes(x=x,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
     geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
     #scale_x_continuous(breaks=tpx$x, labels=tpx$epi, expand=expansion(mult=c(0,0)), position='top') +
@@ -332,35 +487,128 @@ pb = ggplot(tp, aes(x=x,y=i)) +
     annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l2$o,yend=tpy_l2$o, color='black', size=.3) +
     annotate(geom='segment',x=tpx_l$o, xend=tpx_l$o,y=.5,yend=ymax+.5, color='blue', size=.5)
 #}}}
-ggsave(pb, file=glue("{dirw}/10.n.mtf.2.pdf"), width=4.5, height=4.5)
-saveRDS(pb, glue("{dirf}/f3b.rds"))
+#}}}
+scope=scopes[2]
+#{{{ scope BMW: pf2 & ps2
+tc = r3$tc %>% filter(scope==!!scope)
+tc1 = tc %>% select(bid,cid)
+tl = r3$tl %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+tk = r3$tk %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
+#{{{ full plot: pf2
+#{{{
+tps = tk %>% group_by(cid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
+    inner_join(tc %>% select(cid,cond,note,ng), by='cid')
+tk1 = tk %>% group_by(cid,lid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup()
+tp0 = tl %>% select(lid,cid, bin, epi, ng) %>%
+    inner_join(tk1, by=c('cid','lid')) %>% rename(score = n_grp) %>%
+    mutate(lab = score)
+tpy = tps %>%
+    mutate(ylab = glue("{cond}: {note} ({ng})")) %>%
+    arrange(desc(cid)) %>% mutate(i=1:n())
+tpy_l = tibble(o=cumsum(c(0,11))+.5)
+tpy_l2 = tibble(o=c(2,5,8)+.5)
+ymax = max(tpy$i)
+#
+tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
+    separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    mutate(x = 1:n())
+tpx1 = tpx %>% group_by(opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tpx2 = tpx %>% group_by(opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tp = tp0 %>% inner_join(tpx, by=c('bin','epi')) %>%
+    inner_join(tpy %>% select(cid,i), by='cid')
+tpx_l = tibble(o=seq(0,to=4*length(unique(tp$bin)),by=4)+.5)
+swit = (min(tp$score) + max(tp$score)) / 2
+#}}}
+#{{{ plot
+pf2 = ggplot(tp, aes(x=x,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    #scale_x_continuous(breaks=tpx$x, labels=tpx$epi, expand=expansion(mult=c(0,0)), position='top') +
+    scale_x_continuous(expand=expansion(mult=c(.001,.005))) +
+    scale_y_continuous(breaks=tpy$i, labels=tpy$ylab,
+                       expand=c(0,0), limits=c(.4,ymax+3.5),
+            sec.axis=sec_axis(~., breaks=as.numeric(tpy$i), labels=tpy$n_grp)) +
+    scale_fill_gradientn(name='# hits',colors=cols100v) +
+    #scale_fill_viridis(name='normalized eigengene value') +
+    scale_color_manual(values=c('black','white')) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F,
+           margin = c(.3,.6,.3,.3), panel.border=F,
+           xtick=F, ytick=F, xtitle=F, xtext=F, ytext=T) +
+    annotate(geom='text',x=tpx$x,y=ymax+.7,label=tpx$epi,size=2.5,vjust=0,angle=30,hjust=0) +
+    annotate(geom='segment',x=tpx1$xmin,xend=tpx1$xmax,y=ymax+1.5,yend=ymax+1.5,size=.5) +
+    annotate(geom='text',x=tpx1$x,y=ymax+2,label=tpx1$bin2,size=3,vjust=0) +
+    annotate(geom='segment',x=tpx2$xmin,xend=tpx2$xmax,y=ymax+2.8,yend=ymax+2.8,size=.5) +
+    annotate(geom='text',x=tpx2$x,y=ymax+3,label=tpx2$opt,size=3,vjust=0) +
+    annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l$o,yend=tpy_l$o, color='blue', size=.5) +
+    annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l2$o,yend=tpy_l2$o, color='black', size=.3) +
+    annotate(geom='segment',x=tpx_l$o, xend=tpx_l$o,y=.5,yend=ymax+.5, color='blue', size=.5)
+#}}}
+#}}}
+#{{{ selected motifs - ps2
+tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
+    separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    filter(bin2=='-/+2k') %>% mutate(x = 1:n())
+tpx1 = tpx %>% group_by(opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tpx2 = tpx %>% group_by(opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tp = tp0 %>% inner_join(tpx, by=c('bin','epi')) %>%
+    inner_join(tpy %>% select(cid,i), by='cid')
+tpx_l = tibble(o=seq(0,to=4,by=4)+.5)
+swit = (min(tp$score) + max(tp$score)) / 2
+ps2 = ggplot(tp, aes(x=x,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    #scale_x_continuous(breaks=tpx$x, labels=tpx$epi, expand=expansion(mult=c(0,0)), position='top') +
+    scale_x_continuous(expand=expansion(mult=c(.001,.005))) +
+    scale_y_continuous(breaks=tpy$i, labels=tpy$ylab,
+                       expand=c(0,0), limits=c(.4,ymax+3.5),
+            sec.axis=sec_axis(~., breaks=as.numeric(tpy$i), labels=tpy$n_grp)) +
+    scale_fill_gradientn(name='# hits',colors=cols100v) +
+    #scale_fill_viridis(name='normalized eigengene value') +
+    scale_color_manual(values=c('black','white')) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=F,
+           margin = c(.3,.6,.3,.3), panel.border=F,
+           xtick=F, ytick=F, xtitle=F, xtext=F, ytext=T) +
+    annotate(geom='text',x=tpx$x,y=ymax+.7,label=tpx$epi,size=2.5,vjust=0,angle=30,hjust=0) +
+    annotate(geom='segment',x=tpx1$xmin,xend=tpx1$xmax,y=ymax+1.5,yend=ymax+1.5,size=.5) +
+    annotate(geom='text',x=tpx1$x,y=ymax+2,label=tpx1$bin2,size=3,vjust=0) +
+    annotate(geom='segment',x=tpx2$xmin,xend=tpx2$xmax,y=ymax+2.8,yend=ymax+2.8,size=.5) +
+    annotate(geom='text',x=tpx2$x,y=ymax+3,label=tpx2$opt,size=3,vjust=0) +
+    annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l$o,yend=tpy_l$o, color='blue', size=.5) +
+    annotate(geom='segment',x=.5,xend=max(tp$x)+.5,y=tpy_l2$o,yend=tpy_l2$o, color='black', size=.3) +
+    annotate(geom='segment',x=tpx_l$o, xend=tpx_l$o,y=.5,yend=ymax+.5, color='blue', size=.5)
+#}}}
+#}}}
+#}}}
 #}}}
 
-#{{{ top 40 motifs found in each module - fig S8
-r1 = tk %>% select(mid,fid,fname,known, cid,lid,pval) %>%
-    inner_join(tl %>% select(lid,cid,bin,epi,ng), by=c('cid','lid')) %>%
-    inner_join(tc %>% select(cid, cond, note), by='cid')
+#{{{ top 40 motifs found in each module - sf08
+tc=r3$tc; tl=r3$tl; tk=r3$tk
+r1 = tk %>% select(mid,fid,fname,known, bid,lid,pval) %>%
+    inner_join(tl %>% select(lid,bid,bin,epi,ng), by=c('bid','lid')) %>%
+    inner_join(tc %>% select(bid,scope,cid,cond,note), by='bid')
 tp = r1 %>%
     separate(bin,c('opt','bin'),sep=":") %>%
-    arrange(cid, opt, fid, pval) %>%
-    group_by(cid, cond, note, ng, opt, fid, fname, known) %>%
+    arrange(bid,cid, opt, fid, pval) %>%
+    group_by(bid,scope,cid, cond, note, ng, opt, fid, fname, known) %>%
     summarise(pval = pval[1]) %>% ungroup() %>%
-    arrange(cid, opt, pval) %>%
-    group_by(cid, cond, note, opt) %>%
-    slice(1:40) %>%
+    arrange(bid,cid, opt, pval) %>%
+    group_by(bid,scope,cid, cond, note, opt) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     mutate(score = -log10(pval)) %>%
-    mutate(lab = ifelse(known, fname, '')) %>%
-    mutate(i = factor(i, levels=50:1))
+    mutate(lab = ifelse(known, fname, ''))
 tps = tp %>% group_by(cid,fid) %>%
-    summarise(opts = str_c(sort(opt),collapse=',')) %>% ungroup() %>%
-    mutate(tts_only = opts=='TTS') %>% select(-opts)
+    summarise(scopes = str_c(sort(scope),collapse=',')) %>% ungroup() %>%
+    mutate(bmw_only = scopes=='BMW') %>% select(-scopes)
 tp = tp %>% inner_join(tps, by=c('cid','fid')) %>%
-    mutate(lab = ifelse(tts_only, glue("{lab}*"), lab))
-tpx = tp %>% distinct(cid, cond, ng, note, opt) %>%
+    mutate(lab = ifelse(bmw_only, glue("{lab}*"), lab)) %>%
+    filter(i <= 40) %>%
+    mutate(i = factor(i, levels=50:1))
+tpx = tp %>% distinct(bid,scope,cid, cond, ng, note, opt) %>%
     mutate(xlab = glue("{cond}: {note} ({ng})"))
 tp1 = tibble(o=cumsum(c(11))+.5)
-
+#}}}
 #{{{ plot
 swit = (min(tp$score) + max(tp$score)) / 2
 p4 = ggplot(tp, aes(x=cid,y=i)) +
@@ -372,7 +620,7 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
     #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
-    facet_wrap(opt ~ ., nrow=1) +
+    facet_wrap(scope ~ ., nrow=1) +
     otheme(legend.pos='bottom.left', legend.dir='v', legend.title=T,
            margin = c(.3,.3,.3,5.3), legend.vjust=-1.7,
            strip.compact=F, panel.spacing = .5,
@@ -382,9 +630,11 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
 #}}}
-p4 %>% ggexport(filename=glue("{dirw}/11.top.mtf.pdf"), width=12, height=8)
-p4 %>% ggexport(filename=glue("{dirf}/sf08.pdf"), width=12, height=8)
-#}}}
+#
+fo = glue("{dirw}/12.top.mtf.pdf")
+p4 %>% ggexport(filename=fo, width=12, height=8)
+fo = glue("{dirf}/sf08.pdf")
+p4 %>% ggexport(filename=fo, width=12, height=8)
 #}}}
 
 #{{{ pick best motifs for each gene list
@@ -392,31 +642,25 @@ fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 tl = r3$tl; tc = r3$tc; tk = r3$tk
 
-t1 = tk %>% select(mid,fid,fname,known, cid,lid,pval,pos,ng,neg,ng_c) %>%
-    inner_join(tl %>% select(lid, cid, bin, epi), by=c('cid','lid'))
-t2 = t1 %>% arrange(cid, pval) %>%
+t1 = tk %>% select(mid,fid,fname,known, bid,lid,pval,pos,ng,neg,ng_c) %>%
+    inner_join(tl %>% select(lid, bid, bin, epi), by=c('bid','lid'))
+t2 = t1 %>% arrange(bid, pval) %>%
     separate(bin,c('opt','bin'),sep=":", remove=F) %>%
-    arrange(cid, pval) %>%
-    group_by(cid, fid, fname) %>%
+    arrange(bid, pval) %>%
+    group_by(bid, fid, fname) %>%
     slice(1) %>% ungroup() %>%
-    arrange(cid, pval) %>%
-    group_by(cid) %>%
+    arrange(bid, pval) %>%
+    group_by(bid) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     inner_join(tk %>% select(mid,mtf), by='mid') %>%
-    select(cid, i, opt,bin,epi, pval,mid,fid,fname,mtf,pos,ng,neg,ng_c)
-t3 = t2 %>% group_by(cid) %>% nest() %>% rename(mtfs=data) %>% ungroup() %>%
+    select(bid, i, opt,bin,epi, pval,mid,fid,fname,mtf,pos,ng,neg,ng_c)
+t3 = t2 %>% group_by(bid) %>% nest() %>% rename(mtfs=data) %>% ungroup() %>%
     mutate(n_mtf = map_int(mtfs, nrow)) %>%
-    select(cid, n_mtf, mtfs)
+    select(bid, n_mtf, mtfs) %>% print(n=30)
 
 r5 = list(tc=tc, tl=tl, tk=t3)
 fo = glue("{dirw}/05.best.mtfs.rds")
 saveRDS(r5, fo)
-
-x = t3 %>% inner_join(tc %>% select(cid,cond,note), by='cid') %>%
-    unnest(kmer) %>%
-    select(cond,note,i,fid,fname,pval,mtf)
-fo = glue("{dirw}/05.best.motifs.tsv")
-write_tsv(x, fo)
 #}}}
 
 
@@ -453,4 +697,35 @@ ts3 = ts2 %>%
 #}}}
 
 
+#{{{ read DREME motifs/kmers and save [old]
+tag = 'degA'
+tag = 'dmodA'
+tag = 'dmodB'
+tag = 'degB'
+#tag = 'var2'
+diri = glue("{dirw}/00_nf")
+fk = glue("{diri}/{tag}/23.kmer.tsv")
+fm = glue("{diri}/{tag}/23.kmer.motif.tsv")
+tkk = read_tsv(fk) %>% select(-seq_rc) %>% rename(kmer=seq)
+tkm = read_tsv(fm) %>% select(-seq_rc) %>% rename(kmer=seq)
+make_kmer_motif <- function(kmer) create_motif(kmer, name=kmer, type='PPM', alphabet='DNA')
+kmers = tkk %>% distinct(kmer) %>% mutate(mtf = map(kmer, make_kmer_motif))
+tk0 = tkk %>% group_by(mid) %>% summarise(kmers = list(kmer)) %>% ungroup()
+tk = tkm %>% inner_join(tk0, by='mid')
+#
+fl = glue('{diri}/{tag}/08.tc.tl.rds')
+r8 = readRDS(fl)
+tc=r8$tc; tl=r8$tl
+#
+fi = glue("{diri}/{tag}/23.dreme.rds")
+rd = readRDS(fi)
+#
+km = tl %>% select(lid, cid, ng,ng_c=ng_c) %>%
+    inner_join(tk, by='lid') %>%
+    inner_join(rd, by=c('lid','mid')) %>%
+    select(lid,cid,mid,kmer,kmers,pos,pos_c,neg,neg_c,ng,ng_c,pval,mtf)
+
+fo = glue("{diri}/{tag}/25.rds")
+saveRDS(km, fo)
+#}}}
 

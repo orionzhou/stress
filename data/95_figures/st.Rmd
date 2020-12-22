@@ -75,7 +75,7 @@ Figure S3. Expression profiles of cold- and heat-responsive gene clusters.  B73,
 \pagebreak
 ![](plots/sf04.pdf){width=80%}
 
-Fig S4. Transcription Factor Family Enrichment in Select DEG Modules. The TFs present in the overall set of up-regulated genes for cold or heat as well as TFs that are present in specific modules were assessed for potential enrichment of specific TF families. Numbers in parentheses indicate total group size, while numbers in tiles indicate how many DEGs of specific TF families were identified in each module.  For modules including at least 3 TF members in a TF family, enrichment was assessed through hypergeometric test (p < 0.05). Transcription factor family assignments were pulled from Grassius TFDB (Yilmaz et al., 2009).
+Fig S4. Transcription Factor Family Enrichment in Select DEG Modules. The TFs present in the overall set of up-regulated genes for cold (A) or heat (B) as well as TFs that are present in specific modules were assessed for potential enrichment of specific TF families. Numbers in parentheses indicate total group size, while numbers in tiles indicate how many DEGs of specific TF families were identified in each module.  For modules including at least 3 TF members in a TF family, enrichment was assessed through hypergeometric test (p < 0.05). Transcription factor family assignments were pulled from Grassius TFDB (Yilmaz et al., 2009).
 
 \pagebreak
 ![](plots/sf05.pdf){width=80%}
@@ -88,35 +88,35 @@ Figure S5. Characterization of maize Heat Shock Factors (HSF) response to heat s
 Figure S6. Characterization of TFs that have previously been reported to play a role in maize response to cold. Out of 235 previously reported cold stress-related TFs, 109 TFs were expressed with ≥ 5 CPM for at least one sample (treatment x time point), while 43 were differentially expressed in response to cold stress and assigned into cold up-regulated modules including: (A) late activation, (B) early activation, (C) differentially expressed (DE). DE cold up-regulated genes were identified in the hybrid experiment (3 replicates, 1h and 25h after stress) and TF gene response to cold stress in the time-series (1 replicate, 9 time points) may not depict cold up-regulation for each DE gene.
 
 \pagebreak
-![](plots/f3.pdf){width=60%}
+![](plots/f3.pdf){width=70%}
 
 Figure 3. Identification of enriched motifs in cold- and heat-responsive genes. (A) Varying potential ‘promoter’ sequence spaces were utilized to search for motifs that are enriched in different sets of genes.  The schematic indicates a representative gene with the transcription start site (TSS) indicated.  The potential regions include different lengths of sequences upstream the promoter (-500, -1k, -2k) as well as sets of sequence that include both upstream and downstream sequence (i.e., +/-500).  In addition, for each of these potential regions we also subset the sequence to only include regions that are unmethylated (UMR - unmethylated regions) or that are classified as accessible based on ATAC analysis (ACR - accessible chromatin region) in leaf or ear tissue (Ricci et al., 2019).  (B) Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were used to search for enriched motifs (see Methods).  The number of non-redundant motifs found using +/- 2k promoter sequence as well as different epigenetic filters (i.e., UMRs, ACRs) were shown. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes using +/-2k promoter space as well as the other promoter spaces of different sizes (shown in Figure S7).
 
 \pagebreak
 ![](plots/sf07.pdf){width=100%}
 
-Figure S7. Number of enriched motifs found using promoter spaces of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  Identified motifs were compared with known TF binding motifs (cis-BP) and clustered based on sequence similarity.  The number of non-redundant motifs found using the full set of sequences (raw) in the specific region is shown as well as the number of motifs when only the unmethylated (umr) or accessible chromatin (acr) in this region was utilized. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes after sequence clustering.
+Figure S7. Number of enriched motifs found using B73 promoter spaces (“B model”) or B73/Mo17/W22 promoter spaces (“BMW model”) of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  Identified motifs were compared with known TF binding motifs (cis-BP) and clustered based on sequence similarity.  The number of non-redundant motifs found using the full set of sequences (raw) in the specific region is shown as well as the number of motifs when only the unmethylated (umr) or accessible chromatin (acr) in this region was utilized. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes after sequence clustering.
 
 \pagebreak
 ![](plots/sf08.pdf){width=100%}
 
-Figure S8. Enriched motifs include known transcription factor binding sites (TFBSs) as well as novel motifs.  For each set of DEGs up to the top 40 most enriched motifs are shown (p-value for enrichment is indicated by color).  Some sets of DEGs have less than 40 motifs and only the significant ones are shown.  If the enriched motif matched a previously characterized TFBS (Pearson correlation coefficient > 0.8) the name of the transcription factor is shown.  In each cases there are a mixture of previously characterized motifs and novel motifs.  TTS motifs with a "*" sign represent motifs not present in the top40 TSS motifs identified in the same list of genes.
+Figure S8. Enriched motifs include known transcription factor binding sites (TFBSs) as well as novel motifs.  For each set of DEGs up to the top 40 most enriched motifs found using B73 promoter space ("B model") or B73/Mo17/W22 promoter sequences ("BMW model") are shown (p-value for enrichment is indicated by color).  Some sets of DEGs have less than 40 motifs and only the significant ones are shown.  If the enriched motif matched a previously characterized TFBS (Pearson correlation coefficient > 0.8) the name of the transcription factor is shown.  In each cases there are a mixture of previously characterized motifs and novel motifs.  TTS motifs with a "*" sign represent motifs not present in the top40 TSS motifs identified in the same list of genes.
 
 \pagebreak
 ![](plots/sf09.pdf){width=80%}
 
-Figure S9. Relative distribution of selected motifs in gene promoters/terminators.  The promoter/terminator (-/+2k:TSS,-/+2k:TTS) regions of different co-expression clusters (all heat up-regulated, heat early activation, or background gene set ('bg')) were cut into 40 bins.  The occurrence of selected motifs in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
+Figure S9. Meta plots of selected stress-responsive motifs in gene promoters.  Two to four motifs from each of the seven co-expression clusters (cold early activation, cold late activation, etc.) with their relative locations in the TSS:-/+2k region cut into 40 bins.  The occurrence of each motif in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
 
 \pagebreak
 ![](plots/f4.pdf){width=60%}
 
-Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
+Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue) and (C) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 
 \pagebreak
 ![](plots/sf10.pdf){width=60%}
 
-Figure S10. Performance (F1 scores) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
+Figure S10. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue) and (C) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 \pagebreak
 ![](plots/f5.pdf){width=100%}

@@ -304,9 +304,10 @@ ggsave(p, file = fp, width = 5, height = 7)
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
+ymax = 120
 p = ggplot(tp1) +
     geom_bar(aes(x=x, y=n, fill=reg), width=.7, stat='identity') +
-    geom_text(data=tp1s,aes(x=5.6,y=250,label=lab), size=2.5, vjust=.5,hjust=1) +
+    geom_text(data=tp1s,aes(x=5.6,y=ymax,label=lab), size=2.5, vjust=.5,hjust=1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
     scale_x_continuous(breaks=tpx$x, labels=tpx$reg, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +

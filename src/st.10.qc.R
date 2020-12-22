@@ -79,6 +79,7 @@ th1 = th %>% filter(Experiment==ex) %>%
 tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
     mutate(value=asinh(CPM))
 
+#{{{ f1a
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Treatment',
     expand.x=.2)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=8, height=10)
@@ -103,6 +104,31 @@ p2 = plot_tsne(tm1,th2,pct.exp=.7,perp=4,iter=1000, seed=12,
     shapes=c(0:2,3,4,8), pal.col='aaas')
 fo = glue("{dirw}/22.tsne.{ex}.inbreds.pdf")
 ggsave(fo, p2, width=5, height=5)
+#}}}
+
+gt = 'B73'
+gt = 'Mo17'
+gt = 'W22'
+#{{{ f1a - indi
+th2 = th1 %>% filter(Genotype %in% gt)
+p2 = plot_tsne(tm1,th2,pct.exp=.7,perp=2.5,iter=1000, seed=12,
+    var.shape='Treatment',var.col='Treatment',var.lab='clab',var.ellipse='grp',
+    legend.pos='top.right', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(0:2), pal.col='aaas')
+fo = glue("{dirw}/22.tsne.{ex}.{gt}.pdf")
+ggsave(fo, p2, width=4, height=4)
+fo = glue("{dirf}/f1a.{gt}.rds")
+saveRDS(p2, fo)
+#}}}
+
+a = readRDS('f1a.B73.rds') + o_margin(.2,0,0,.2)
+b = readRDS('f1a.Mo17.rds') + o_margin(.2,.2,0,0)
+c = readRDS('f1a.W22.rds') + o_margin(0,0,.2,.2)
+fo = glue("{dirw}/22.tsne.{ex}.BMW.pdf")
+ggarrange(a, b, c, nrow=2, ncol=2,
+          labels = c("B73","Mo17", "W22"),
+          widths=c(2,2), heights=c(2,2)) %>%
+ggexport(filename=fo, width=6, height=6)
 #}}}
 
 #{{{ NM

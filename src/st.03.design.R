@@ -83,7 +83,7 @@ p_temp = ggplot(tp, aes(has, temp)) +
     #geom_text(data=tfa, aes(x=25+.2, y=temp-.1, label=fawt),size=4,family='fas',vjust=1,hjust=0) +
     geom_text(data=tpa, aes(x=25+.3, y=temp+1, label=stress), hjust=.5, vjust=0, size=2.5) +
     facet_wrap(~ExpTxt, ncol=1) +
-    scale_x_continuous(name='Hours after Treatment', breaks=c(0,14,22,25), expand=expansion(mult=c(.02,.06))) +
+    scale_x_continuous(name='Hours after Treatment', breaks=c(0,1,14,22,25), expand=expansion(mult=c(.02,.06))) +
     scale_y_continuous(name='Temperature (C)', expand=expansion(mult=c(.02,.08))) +
     scale_color_manual(values=cols3) +
     otheme(legend.pos='none', margin=c(.1,.2,.1,.5),
@@ -134,7 +134,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
     scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.35,.35))) +
-    scale_color_manual(values=cols11) +
+    scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),
            xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
     theme(axis.text.y = element_text(color='black')) +
@@ -184,7 +184,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
     scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
-    scale_color_manual(values=cols11) +
+    scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),
            xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
     theme(axis.text.y = element_text(color='black')) +
@@ -234,7 +234,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
     scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
-    scale_color_manual(values=cols11) +
+    scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),
            xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
     theme(axis.text.y = element_text(color='black')) +

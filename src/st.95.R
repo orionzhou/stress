@@ -30,8 +30,8 @@ a = readRDS('f2a.rds') +
 b = image_read_pdf("Fig2B.pdf")
 ggarrange(a, as.grob(b), ncol=2,
           labels = LETTERS[1:2],
-          widths=c(1.2,2), heights=c(1,1)) %>%
-ggexport(filename="f2.pdf", width=9, height=5)
+          widths=c(1,1.4), heights=c(1,1)) %>%
+ggexport(filename="f2.pdf", width=7, height=5)
 #}}}
 
 # Fig S3 is already done
@@ -40,11 +40,11 @@ ggexport(filename="f2.pdf", width=9, height=5)
 
 #{{{ Fig 3
 a = image_read_pdf("regions.pdf")
-b = readRDS('f3b.rds') + o_margin(.2,.2,0,.2)
+b = readRDS('f3b.rds')
 ggarrange(as.grob(a), b, nrow=2, ncol=1,
           labels = LETTERS[1:2],
           widths=c(2,2), heights=c(2,3)) %>%
-ggexport(filename="f3.pdf", width=5, height=7)
+ggexport(filename="f3.pdf", width=6, height=7)
 #}}}
 
 # Fig S6 is done
