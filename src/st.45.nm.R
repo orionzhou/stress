@@ -1,6 +1,9 @@
 source('functions.R')
 dirw = glue('{dird}/45_nam')
-tgl = gcfg$gene %>% select(gid,chrom,start,end)
+setwd(dirw)
+tgl = gcfg$gene %>% select(gid,chrom,start,end,srd)
+tga = read_loci() %>% select(gid,symbol,note)
+txdb = load_txdb('Zmays_B73', primary=T)
 #{{{ functions
 read_vnt <- function(chrom,beg,end,
                      fv='~/projects/wgc/data/05_maize_merged/08.vcf.gz',
@@ -19,6 +22,20 @@ read_vnt <- function(chrom,beg,end,
     tv
     #}}}
 }
+tstat <- function(x, drc) {
+    #{{{
+    thresh = ifelse(drc == 'down', -1, 1)
+    xs = x %>% mutate(clu=ifelse(log2fc < thresh, 0, 1)) %>%
+        group_by(clu) %>% summarise(vals=list(log2fc)) %>% ungroup() %>% pull(vals)
+    if (length(xs) <= 1) {
+        0
+    } else if( min(length(xs[[1]]), length(xs[[2]])) <= 1) {
+        0
+    } else {
+        abs(t.test(xs[[1]], xs[[2]])$statistic[[1]])
+    }
+    #}}}
+}
 #}}}
 
 #{{{ read variable DEG
@@ -28,44 +45,48 @@ td1=x$td1; td2=x$td2
 #
 td3 = td2 %>% filter(st %in% c("dA+B=", "dA=B+", "dA-B=", 'dA=B-')) %>%
     mutate(drc = ifelse(str_detect(st, '-'), 'down', 'up')) %>%
-    distinct(cond,drc,gid)
-td1s = td1 %>% arrange(cond,gt,gid,st) %>%
-    group_by(cond,gt,gid) %>% slice(1) %>% ungroup() %>% select(-time)
+    distinct(cond,time,drc,gid)
+td1s = td1 %>% arrange(cond,time,gt,gid,st) %>%
+    group_by(cond,time,gt,gid) %>% slice(1) %>% ungroup()
 td4 = td3 %>% crossing(gt = gts3) %>%
-    left_join(td1s, by = c('cond','gt','gid'))
+    left_join(td1s, by = c('cond','time','gt','gid'))
 td4s = td4 %>% mutate(drc1=str_to_upper(str_sub(drc,1,1))) %>%
-    group_by(cond,drc,drc1,gid) %>%
+    group_by(cond,time,drc,drc1,gid) %>%
     summarise(nd=sum(st==drc1), nu=sum(st!=drc1)) %>% ungroup() %>%
-    filter(nd >0, nu>0) %>% select(cond,drc,drc1,gid)
-td = td4 %>% inner_join(td4s, by=c('cond','drc','gid')) %>%
+    filter(nd >0, nu>0) %>% select(cond,time,drc,drc1,gid)
+td = td4 %>% inner_join(td4s, by=c('cond','time','drc','gid')) %>%
     spread(gt,st) %>% mutate(st=glue('{B73}{Mo17}{W22}')) %>%
-    select(cond,drc,gid,st) %>% filter(cond=='cold')
+    select(cond,time,drc,gid,st) %>% filter(cond=='cold')
 #}}}
 
-#{{{ prepare NM matrix
+#{{{ read in NM matrix and run mclust
+#{{{ read in
 yid = 'rn20a'
 res = rnaseq_cpm(yid)
 th = res$th; tm = res$tm
-
+#
 th1 = th %>% filter(Experiment=='NM') %>%
     select(sid=SampleID, gt=Genotype, cond=Treatment, time=Timepoint) %>%
     mutate(cond = str_to_lower(cond))
-
+#
 rr = tm %>% select(gid, sid=SampleID, cpm=CPM) %>%
     inner_join(th1, by ='sid') %>%
     select(-sid) %>% spread(time, cpm)
 rd = rr %>% gather(time, rc, -gid, -gt, -cond) %>%
+    mutate(time = as.numeric(time)) %>%
     spread(cond, rc) %>%
     mutate(log2fc = log2(cold/control)) %>%
     arrange(gid, gt)
+#}}}
 
-rd2 = td %>% inner_join(rd, by='gid') %>%
+#{{{ mclust
+rd2 = td %>% inner_join(rd, by=c('time','gid')) %>%
     arrange(drc,time,gid,gt) %>%
     group_by(drc,time,st,gid) %>% summarise(log2fcs = list(log2fc)) %>%
     ungroup()
-
+#
 require(mclust)
-xs=rd2$log2fcs[[i]]
+#xs=rd2$log2fcs[[i]]
 bimod <- function(i, xs, drc, gts25, gts3) {
     #{{{
     #cat(i,'\n')
@@ -84,45 +105,142 @@ bimod <- function(i, xs, drc, gts25, gts3) {
     if (is.null(names(means))) names(means) = classes[1]
     if (is.null(names(classes))) names(classes) = names(xs1)
     clu = tibble(clu=as.integer(names(means)), avg=as.numeric(means), prop=pros)
-    if (drc == 'up') {
-        clu = clu %>% mutate(nclu = ifelse(avg < 1, 0, 1))
-    } else if (drc == 'down') {
-        clu = clu %>% mutate(nclu = ifelse(avg <= -1, -1, 0))
-    }
+    #if (drc == 'up') {
+        #clu = clu %>% mutate(nclu = ifelse(avg < 1, 0, 1))
+    #} else if (drc == 'down') {
+        #clu = clu %>% mutate(nclu = ifelse(avg <= -1, -1, 0))
+    #}
     t_lfc = tibble(gt=names(xs1), log2fc=as.numeric(xs1))
     t_clu = tibble(gt=names(classes), clu=as.integer(classes)) %>%
-        inner_join(clu %>% select(clu,nclu), by='clu') %>%
-        select(-clu) %>% rename(clu=nclu) %>%
+        #inner_join(clu %>% select(clu,nclu), by='clu') %>%
+        #select(-clu) %>% rename(clu=nclu) %>%
         inner_join(t_lfc, by='gt')
     clu = t_clu %>% group_by(clu) %>%
         summarise(avg = mean(log2fc), prop=n()/nrow(t_clu)) %>% ungroup()
-    tibble(n=nrow(clu), bic=BIC(mod), clu=list(clu), t_clu=list(t_clu))
+    ebic = mod$BIC[,'E']
+    vbic = mod$BIC[,'V']
+    t_bic = tibble(nc=as.integer(names(ebic)), bic=as.numeric(ebic), vbic=as.numeric(vbic))
+    tibble(nc=nrow(clu), t_bic=list(t_bic), clu=list(clu), t_clu=list(t_clu))
     #}}}
 }
 pb <- progress_bar$new(total=nrow(rd2))
 rd3 = rd2 %>% mutate(i=1:n()) %>%
     mutate(x=pmap(list(i,log2fcs,drc), bimod,gts25=gts25,gts3=gts3)) %>%
     select(-i,-log2fcs) %>% unnest(x)
+#}}}
 
-rd3 %>% count(drc,time, n, bic>50) %>% print(n=40)
-rd4 = rd3 %>% filter(n>1, bic>50)
+#{{{ refine mclust results
+refine_bimod <- function(clu, t_clu) {
+    #{{{
+    pb$tick()
+    assign_clu <- function(x) tibble(clu=c(-1,0,1), d=c(x+1,x,x-1)) %>%
+        mutate(d = abs(d)) %>% arrange(d) %>% pluck('clu',1)
+    clu = clu %>% mutate(nclu = map_dbl(avg, assign_clu))
+    t_clu = t_clu %>%
+        inner_join(clu %>% select(clu,nclu), by='clu') %>%
+        select(-clu) %>% rename(clu=nclu)
+    clu = t_clu %>% group_by(clu) %>%
+        summarise(avg = mean(log2fc), prop=n()/nrow(t_clu)) %>% ungroup()
+    dn = -1 %in% clu$clu
+    nd = 0 %in% clu$clu
+    up = 1 %in% clu$clu
+    tibble(nc1=nrow(clu), nd=!!nd, dn=!!dn, up=!!up,
+           clu1=list(clu), t_clu1=list(t_clu))
+    #}}}
+}
+rd4 = rd3 %>% filter(nc>=2)
+pb <- progress_bar$new(total=nrow(rd4))
+rd4 = rd4 %>%
+    mutate(x = map2(clu,t_clu, refine_bimod)) %>% unnest(x)
+rd5 = rd4 %>% filter(time==25, (drc=='down' & dn) | (drc=='up' & up), nc1>=2)
+#}}}
 
+r = list(rd3=rd3, rd4=rd4, rd5=rd5)
 fo = glue('{dirw}/01.mclust.rds')
-saveRDS(rd3, fo)
+saveRDS(r, fo)
 #}}}
 
 fi = glue('{dirw}/01.mclust.rds')
-ti = readRDS(fi)
-ti %>% count(drc,time, n, bic>50) %>% print(n=40)
-rd = ti %>% filter(n>1, bic>50)
+r = readRDS(fi)
+rd3 = r$rd3; rd5 = r$rd5
 
-gid = 'Zm00001d046561'
-gid = 'Zm00001d044762'
-rd %>% filter(gid==!!gid)
-rd %>% filter(gid==!!gid) %>% pluck('clu',1)
-rd %>% filter(gid==!!gid) %>% pluck('t_clu',1) %>% print(n=25)
+#{{{ uni- to bi- model composition - f7a
+clus = c('uni-modal','bi-modal', 'multi-modal (>=3)')
+tp = rd3 %>% mutate(clu = ifelse(nc==1, clus[1],
+                         ifelse(nc==2, clus[2], clus[3]))) %>%
+    count(time, clu) %>% filter(time==25) %>%
+    mutate(time = glue("cold_{time}h")) %>%
+    mutate(clu = factor(clu, levels=clus)) %>%
+    rename(tag1=time,tag2=clu)
+#
+pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='') +
+    o_margin(.3,.3,.3,.3) +
+    theme(legend.position='none')
+fo = glue("{dirw}/10.modal.dist.pdf")
+ggsave(pa, file=fo, width=3, height=5)
+#}}}
 
-#{{{ prepare variable response
+#{{{ example of uni- and bi- model genes
+plot_lfc_cluster <- function(ti, tit, drc, gts3) {
+    #{{{
+    tp = ti %>% mutate(clu=factor(clu)) %>%
+        mutate(gt0 = ifelse(gt %in% gts3, gt, 'other')) %>%
+        mutate(gt0 = factor(gt0, levels=c(gts3,'other'))) %>%
+        mutate(tit = !!tit)
+    bw = diff(range(tp$log2fc)) / 15
+    off = ifelse(drc == 'down', -1, 1)
+    cols4 = c(pal_aaas()(length(unique(tp$gt0))-1),'white')
+    ggplot(tp, aes(x=log2fc, fill=gt0)) +
+        geom_dotplot(method='histodot', binwidth=bw, stackgroups=T, dotsize=1) +
+        geom_vline(xintercept=off, size=.5, color='gray', linetype='dashed') +
+        scale_fill_manual(values=cols4) +
+        scale_color_manual(values=cols4) +
+        facet_wrap(tit ~., scale='free', nrow=3) +
+        otheme(xtext=T, ytext=T, xtick=T, ytick=T, xtitle=T, ytitle=T,
+            legend.pos='top.right')
+    #}}}
+}
+
+#{{{ explore
+tp0 = rd5 %>%
+    #filter(drc=='down') %>% slice(31:39)
+    filter(drc=='up') %>% slice(181:189)
+    #filter(nc1 == 1, drc=='up') %>% slice(11:19)
+tp0 = rd3 %>%
+    filter(nc == 1, time==25, drc=='up') %>% slice(51:59) %>%
+    rename(t_clu1=t_clu)
+tp = tp0 %>%
+    mutate(tit=glue("{st} {gid}")) %>%
+    mutate(p = pmap(list(t_clu1, tit,drc), plot_lfc_cluster, gts3=gts3))
+ps = tp$p
+fo = glue("{dirw}/10.modal.pdf")
+ggarrange(plotlist=ps, nrow=3, ncol=3) %>%
+    ggexport(filename=fo, width=7, height=7)
+#}}}
+
+#final
+gids = c('Zm00001d011276', 'Zm00001d012312',
+    'Zm00001d007630','Zm00001d040011',
+    'Zm00001d038577','Zm00001d045565')
+tp1 = rd3 %>% filter(gid %in% gids,time==25,drc=='up') %>% select(drc,gid,st,t_clu1=t_clu)
+gids = c('Zm00001d017130','Zm00001d007890',
+         'Zm00001d032811', 'Zm00001d003460')
+tp2 = rd5 %>% filter(gid %in% gids) %>% select(drc,gid,st,t_clu1)
+tp = tp1 %>% mutate(tag='unimodal') %>%
+    bind_rows(tp2 %>% mutate(tag='bimodal')) %>%
+    mutate(tit=glue("{tag} {gid} ({st})")) %>%
+    mutate(p = pmap(list(t_clu1, tit,drc), plot_lfc_cluster, gts3=gts3))
+ps = tp$p
+fo = glue("{dirw}/10.modal.pdf")
+pb = ggarrange(plotlist=ps, nrow=4, ncol=3)
+pb %>% ggexport(filename=fo, width=7, height=10)
+#}}}
+
+fo = glue("{dirf}/f7.pdf")
+ggarrange(pa, pb, nrow=1, widths=c(1,3)) %>%
+    ggexport(filename=fo, width=7, height=5)
+
+#{{{ read variable response
 fg = glue('{dird}/15_de/09.gene.status.rds')
 x = readRDS(fg)
 td1=x$td1; td2=x$td2
@@ -137,10 +255,54 @@ ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
     mutate(st = factor(st, levels=levels(td2$st))) %>%
     select(cond,time,qry,tgt,gid,st,reg)
 #}}}
-#{{{
-i=2; vnt=x$vnt[[i]]; t_clu=x$t_clu[[i]]
+#{{{ local association test
+#{{{i=1
+t_clu=x$t_clu1[[i]]; chrom=x$chrom[i]; start=x$start[i]; end=x$end[[i]]
+vnt_scan <- function(t_clu,drc, chrom,start,end) {
+    #{{{
+    #pb$tick()
+    if (drc == 'down') {
+        pheno = t_clu %>% mutate(clu=ifelse(clu==-1, 1, 0))
+    } else {
+        pheno = t_clu %>% mutate(clu=ifelse(clu==1, 1, 0))
+    }
+    pheno = pheno %>% select(sid=gt,clu)
+    vnt = read_vnt(chrom,start,end)
+    if(nrow(vnt)==0) return(tibble())
+    vnt0 = vnt %>% distinct(chrom,pos,ref,alt) %>%
+        mutate(snp=glue("v{1:n()}")) %>%
+        mutate(snp = as_factor(snp))
+    y = vnt %>% mutate(st = ifelse(is.na(gt), '0 0',
+        ifelse(gt==0, "A A", "T T"))) %>%
+        inner_join(vnt0, by=c('chrom','pos','ref','alt')) %>%
+        select(chrom,snp,pos, sid,st)
+    t_ped = y %>% select(-chrom,-pos) %>%
+        spread(snp,st) %>% left_join(pheno, by='sid') %>%
+        replace_na(list(clu=-9)) %>% select(sid,clu,everything())
+    t_map = y %>% distinct(chrom,snp,pos)
+    #
+    pre = glue("vs{sample(1e5,1)}")
+    f_ped = glue("{pre}.ped")
+    write.table(t_ped, f_ped, sep=" ", row.names=F, col.names=F, quote=F)
+    f_map = glue("{pre}.map")
+    write_delim(t_map, f_map, delim=" ", col_names=F, quote_escape=F)
+    #
+    system(glue("plink --ped {pre}.ped --map {pre}.map --no-fid --no-parents --no-sex --1 --allow-extra-chr --indep-pairwise 50 5 0.99"))
+    system(glue("plink --ped {pre}.ped --map {pre}.map --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust --extract plink.prune.in"))
+    system(glue("rm {pre}*"))
+    #
+    fi = "plink.assoc.adjusted"
+    tr = read_delim(fi, delim=' ', trim_ws=T, col_names=T) %>%
+        select(snp=SNP, p.raw=UNADJ, p.bon=BONF, p.fdr=FDR_BH)
+    p = vnt0 %>% inner_join(tr, by='snp') %>%
+        select(chrom,pos,ref,alt,snp,everything())
+    nsig = sum(p$p.bon < 0.05)
+    nsig.fdr = sum(p$p.fdr < 0.05)
+    tibble(vnt=list(vnt), p=list(p), nsig=nsig, nsig.fdr=nsig.fdr)
+    #}}}
+}
 fet <- function(x00,x01,x10,x11) fisher.test(matrix(c(x00,x10,x01,x11), nrow=2))$p.value
-vnt_scan <- function(t_clu, chrom,start,end) {
+vnt_scan0 <- function(t_clu, chrom,start,end) {
     #{{{
     pb$tick()
     vnt = read_vnt(chrom,start,end)
@@ -158,61 +320,238 @@ vnt_scan <- function(t_clu, chrom,start,end) {
     #}}}
 }
 
-pb <- progress_bar$new(total=nrow(rd))
-x0 = rd %>% #filter(gid == !!gid) %>%
+x = rd5 %>%# slice(1:2) %>% #filter(gid == !!gid) %>%
     inner_join(tgl, by='gid') %>%
-    mutate(start = start - 2000, end = end + 2000) %>%
-    mutate(x = pmap(list(t_clu,chrom,start,end), vnt_scan)) %>%
-    select(drc,time,st,gid,x) %>% unnest(x)
+    mutate(start = start - 2000, end = end + 2000)
+#pb <- progress_bar$new(total=nrow(x))
+x = x %>%
+    mutate(data = pmap(list(t_clu1,drc, chrom,start,end), vnt_scan)) %>%
+    select(drc,time,st,gid,data) %>% unnest(data)
 
 fo = glue("{dirw}/05.test.rds")
-saveRDS(x0, fo)
-x0 = readRDS(fo)
-
-x1 = x0 %>% mutate(refl=nchar(ref), altl=nchar(alt),
-                   vtype = ifelse(refl==1&altl==1, 'snp', 'idl'),
-                   size=glue("{refl}->{altl}"), x=str_c(x00,x01,x10,x11,sep=','))
-x1s = x1 %>% group_by(drc,time,st,gid) %>%
-    summarise(nsnp=sum(vtype=='snp'),nidl=sum(vtype=='indel'),
-        nsig=sum(p.raw<.05)) %>%
-    ungroup()
-x1s %>% filter(nsig> 0)
-x2 = x1 %>% filter(p.raw < .05) %>% arrange(p.raw)
-x3 = x2 %>% select(time,st,gid,chrom,pos, size,x,p.raw,v)
-x3 %>% select(-v) %>% print(width=Inf,n=20)
-
-i = 292
-gid = x3 %>% pluck('gid', i)
-x3 %>% select(-v) %>% filter(gid==!!gid) %>% print(width=Inf)
-
-#{{{
-tp = x2 %>% slice(i) %>%
-    mutate(tit=glue("{time}h {gid} [B|M|W]={st} {chrom}:{pos}:{ref}->{alt}")) %>%
-    unnest(v) %>% select(gid,tit,p.raw,sid,gt,clu,log2fc) %>%
-    arrange(clu) %>%
-    mutate(gtc = ifelse(sid %in% gts3, sid, 'ZZZ'))
-#
-p = ggplot(tp, aes(x=gt, y=log2fc)) +
-    geom_boxplot(aes(group=gt), size=.5, width=.7) +
-    geom_jitter(aes(color=gtc), width=.3, size=2, alpha=.9) +
-    #geom_text(data=tps, aes(x=st,y=500*1.01,label=lab), size=2.5,vjust=0) +
-    scale_x_continuous(breaks=c(0,1),labels=c('ref','alt'),expand=expansion(mult=c(.2,.2))) +
-    scale_y_continuous(name='log2FoldChange', expand=expansion(mult=c(.02,.02))) +
-    scale_color_aaas() +
-    ggtitle(tp$tit[1]) +
-    otheme(ytitle=T,ytext=T,ytick=T, xtick=T, xtext=T,
-           legend.pos='top.right', panel.spacing=.2, strip.compact=F) +
-    theme(plot.title=element_text(size=8))
-#}}}
-fo = glue("{dirw}/{tp$gid[1]}.pdf")
-ggsave(p, file=fo, width=4, height=4)
-
+saveRDS(x, fo)
 #}}}
 
+fi = glue("{dirw}/05.test.rds")
+ti = readRDS(fi)
+ti %>% count(drc, nsig > 0)
+
+# add reg
 ddeg3 = ddeg2 %>% filter(cond=='cold',tgt=='B73') %>% select(time,gid,reg)
-j = x1s %>%
+ti2 = ti %>%
     mutate(time=as.integer(time)) %>%
-    #filter(time==25) %>%
     mutate(sig = ifelse(nsig > 0,'sig','insig')) %>%
-    left_join(ddeg3, by=c("time",'gid'))
-j %>% count(reg, sig) %>% spread(sig,n) %>% mutate(prop=sig/(sig+insig))
+    left_join(ddeg3, by=c("time",'gid')) %>%
+    replace_na(list(reg = 'bkg'))
+ti2 %>% count(reg, sig) %>% spread(sig,n) %>% mutate(prop=sig/(sig+insig))
+
+#{{{ plot cis/trans prop
+regs = c("bkg","cis","cis+trans",'trans','conserved','unexpected')
+sigs = c('sig','insig')
+tp = ti2 %>% count(reg, sig) %>% rename(tag1=reg, tag2=sig) %>%
+    mutate(tag1=factor(tag1, levels=regs)) %>%
+    mutate(tag2 = factor(tag2, levels=sigs))
+pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='') +
+    o_margin(.3,.3,.3,.3) +
+    theme(legend.position='none')
+fo = glue("{dirw}/17.reg.pdf")
+ggsave(pa, file=fo, width=4, height=4)
+#}}}
+
+# add symbol & note
+ti3 = ti2 %>% inner_join(tga, by='gid')
+j = ti3
+
+j %>% filter(nsig>0,reg %in% c('cis','cis+trans')) %>%
+    select(gid,p,nsig,reg,symbol) %>% print(n=40,width=Inf)
+
+#}}}
+
+
+
+#{{{ final plot
+#{{{ read
+fi = glue('{dirw}/01.mclust.rds')
+r = readRDS(fi)
+rd3 = r$rd3; rd5 = r$rd5
+rd5b = rd5 %>% select(drc,time,gid,clu=t_clu1)
+#
+fi = glue("{dirw}/05.test.rds")
+ti = readRDS(fi)
+#
+fi = glue("{dird}/25_dreme/05.best.mtfs.rds")
+r = readRDS(fi)
+tk = r$tk %>% filter(bid=='b01') %>% select(mtfs) %>% unnest(mtfs)
+fm = glue("{dird}/41_ml/00_nf/03_motif_lists/b01.meme")
+nfea = 'top30'
+#}}}
+#{{{ functions
+plot_vcf <- function(vnt) {
+    #{{{ snp haplotype plot
+    cols_vcf = c(pal_aaas()(2), 'white')
+    tp = vnt %>% replace_na(list(gt=9)) %>% mutate(gt = factor(gt)) %>%
+        mutate(x = as_integer(factor(pos)))
+    ggplot(tp) +
+        geom_tile(aes(x=x, y=sid, fill=gt), alpha=1) +
+        scale_x_continuous(expand=expansion(mult=c(.0,.0))) +
+        scale_y_discrete(expand=expansion(mult=c(.0,.0))) +
+        scale_fill_manual(values = cols_vcf) +
+        otheme(legend.pos='none', panel.border=F, ytext=T,ytick=T,xtext=F)
+    #}}}
+}
+fimo_locate <- function(gid,fm,nfea) {
+    #{{{
+    tg = tibble(gid = glue("B73_{gid}"), status = 1)
+    write_tsv(tg, 'tmp.tsv')
+    cmd = glue("fimo.py prepare_ml tmp.tsv {fm} tmp.bed --epi raw --nfea {nfea} --fmt long")
+    system(cmd)
+    ti = read_tsv('tmp.bed', col_names=c("gid",'start','end','mid'))
+    system("rm tmp.bed")
+    ti
+    #}}}
+}
+get_mtf_loc <- function(gid, fm, nfea, tk, srd, pb) {
+    #{{{
+    x = fimo_locate(gids[1], fm, nfea)
+    x1 = x %>% inner_join(tk %>% select(mid,fid,fname,known,conseq), by='mid') %>%
+        mutate(i = 1:n()) %>%
+        mutate(fname = ifelse(known, fname, fid)) %>%
+        select(gid,start,end,i,known,fname,conseq)
+    x1m = bed_merge(x1) %>%
+        inner_join(x1 %>% select(i,known,fname,conseq), by='i') %>%
+        arrange(chr,beg,end, desc(known), fname) %>%
+        group_by(chr,beg,end) %>%
+        summarise(txt = str_c(fname,collapse=',')) %>% ungroup() %>%
+        mutate(pos = (beg+end)/2) %>%
+        select(gid=chr,pos,txt)
+    if (srd=='-') {
+        x1m %>% mutate(pos=pe-pos)
+    } else {
+        x1m %>% mutate(pos=pb+pos)
+    }
+    #}}}
+}
+plot_box <- function(clu,assoc,vnt, gts3) {
+    #{{{ boxplot
+    tp = assoc %>% arrange(p.bon) %>% slice(1) %>%
+        select(chrom,pos,ref,alt) %>%
+        inner_join(vnt, by=c('chrom','pos','ref','alt')) %>%
+        inner_join(clu, by=c('sid'='gt')) %>%
+        select(sid,gt,clu,log2fc) %>%
+        arrange(clu) %>%
+        mutate(gtc = ifelse(sid %in% gts3, sid, 'ZZZ'))
+    #
+    ggplot(tp, aes(x=gt, y=log2fc)) +
+        geom_boxplot(aes(group=gt), size=.5, width=.7) +
+        geom_jitter(aes(color=gtc), width=.3, size=2, alpha=.9) +
+        #geom_text(data=tps, aes(x=st,y=500*1.01,label=lab), size=2.5,vjust=0) +
+        scale_x_continuous(breaks=c(0,1),labels=c('ref','alt'),expand=expansion(mult=c(.2,.2))) +
+        scale_y_continuous(name='log2FoldChange', expand=expansion(mult=c(.02,.02))) +
+        scale_color_aaas() +
+        #ggtitle(tp$tit[1]) +
+        otheme(ytitle=T,ytext=T,ytick=T, xtick=T, xtext=T,
+               legend.pos='top.right', panel.spacing=.2, strip.compact=F) +
+        theme(plot.title=element_text(size=8))
+    #}}}
+}
+#}}}
+
+gids = c('Zm00001d046561', 'Zm00001d044762')
+gids = c('Zm00001d017130','Zm00001d041920','Zm00001d018794')
+gids = c('Zm00001d047307','Zm00001d003252','Zm00001d024425','Zm00001d018794','Zm00001d025016','Zm00001d020970','Zm00001d021891')
+gids = gids[1:7]
+i=2
+gid=tp0$gid[i];pb=tp0$pb[i];pe=tp0$pe[i];srd=tp0$srd[i]
+vnt=tp0$vnt[[i]];assoc=tp0$assoc[[i]]
+tit=tp0$tit[i];clu=tp0$clu[[i]];gts=gts25;fo=tp0$fo[i]
+plot_gene_vnt <- function(gid,pb,pe,srd,vnt,assoc,tit,clu,gts,fo,
+                          txdb,fm,nfea,tk) {
+    #{{{
+    tg = txdb_gene(txdb, gid, gb=0)
+    pg = plot_genes(tg, pb, pe, label.top=T)
+    tm = get_mtf_loc(gid, fm, nfea, tk, srd, pb)
+    #
+    assoc2 = assoc %>% mutate(sig=p.bon < 0.05) %>% select(chrom,pos,ref,alt,sig)
+    tp = vnt %>% replace_na(list(gt=9)) %>% mutate(gt = factor(gt)) %>%
+        mutate(i = as_integer(factor(pos)))
+    tpy = tp %>% distinct(sid) %>% filter(sid %in% gts) %>%
+        mutate(sid = factor(sid, levels=gts[gts %in% tp$sid])) %>%
+        mutate(y = -1 -as_integer(sid) * .5)
+    tp = tp %>% inner_join(tpy, by='sid') %>%
+        mutate(x = pb + (pe-pb)/max(tp$i) * i)
+    tpx = tp %>% distinct(chrom, pos, ref, alt, x) %>%
+        left_join(assoc2, by=c("chrom",'pos','ref','alt')) %>%
+        replace_na(list(sig=F))
+    cols_vcf = c(pal_simpsons()(2), 'white')
+    seg.sizes = c(.1,.5)
+    seg.cols = c('gray','orange red')
+    pa = pg +
+        geom_point(data=tm, aes(x=pos,y=.3), size=1, color='red') +
+        geom_text(data=tm, aes(x=pos,y=.3,label=txt), size=1.5,vjust=.5,angle=30) +
+        geom_segment(data=tpx, aes(x=pos,y=0,xend=pos,yend=-.5, color=sig, size=sig), lineend='round') +
+        geom_segment(data=tpx, aes(x=pos,y=-.5,xend=x,yend=-1.1, color=sig, size=sig), lineend='round') +
+        geom_tile(data=tp, aes(x=x, y=y, fill=gt), alpha=1) +
+        scale_x_continuous(label=label_number(accuracy=1),
+                           position='top',
+                           limits=c(pb,pe),expand=expansion(mult=c(0,0))) +
+        scale_y_continuous(breaks=tpy$y,labels=tpy$sid,
+                           expand=expansion(add=c(0,.4),mult=c(0,0))) +
+        scale_color_manual(values = seg.cols) +
+        scale_fill_manual(values = cols_vcf) +
+        scale_size_manual(values = seg.sizes) +
+        otheme(legend.pos='none', panel.border=F,
+               ytext=T,ytick=T,xtext=T,xtick=T,
+               margin=c(0,0,0,0)) +
+        theme(axis.text.x = element_text(size=6)) +
+        theme(axis.text.y = element_text(size=6))
+    pb = plot_box(clu,assoc,vnt, gts3) +
+        ggtitle(tit)
+    ggarrange(pa, pb, nrow=1, ncol=2, widths=c(2,1)) %>%
+        ggexport(filename=fo, width=8, height=3)
+    #}}}
+}
+tp0 = ti %>% filter(gid %in% gids) %>% rename(assoc = p) %>%
+    inner_join(rd5b, by=c('drc','time','gid')) %>%
+    inner_join(tgl, by='gid') %>%
+    mutate(pb=start-2000, pe=end+2000) %>%
+    mutate(tit=glue("{time}h {gid} [B|M|W]={st}")) %>%
+    mutate(fo = glue("{dirw}/{gid}.pdf"))
+tp = tp0 %>% mutate(gts = list(gts25)) %>%
+    mutate(p = pmap(list(gid, pb, pe, srd, vnt, assoc, tit, clu, gts, fo),
+                    plot_gene_vnt, txdb=!!txdb,
+                    fm=!!fm, nfea=!!nfea, tk=!!tk)) %>%
+    print(width=Inf)
+#ggexport(tp$p[[1]], filename=fo, width=8, height=3)
+#}}}
+
+
+
+#{{{ plot uni-modal vs bi-modal BIC distri. [old]
+ti2 = ti %>% select(drc,time,gid,nc0=nc, t_bic) %>% unnest(t_bic) %>%
+    select(-vbic) %>%# rename(bic=vbic) %>%
+    filter(nc <= 2) %>% spread(nc, bic) %>%
+    mutate(dbic = `2`-`1`) %>% replace_na(list(dbic=-2)) %>%
+    mutate(nc = ifelse(nc0 > 2, 2, nc0))
+
+smin = -10; smax = 20; step = 2
+itvs = seq(smin,smax,by=step)
+tp = ti2 %>% filter(time==25) %>%
+    #mutate(score = pmin(20, pmax(0, tstat))) %>%
+    mutate(score = pmin(smax, pmax(smin, dbic))) %>%
+    mutate(bin = cut(score, breaks = itvs, include.lowest=T, right=T)) %>%
+    mutate(bin = as.numeric(bin)) %>%
+    mutate(nc = ifelse(nc==1, 'uni-modal', 'bi/multi-modal')) %>%
+    count(nc, bin)
+#
+p = ggplot(tp, aes(x=bin,y=n)) +
+    geom_col(aes(fill=nc),position=position_dodge(width=.8)) +
+    geom_vline(xintercept = 5.5, size=.5, linetype='dashed') +
+    scale_x_continuous(name = "BIC Difference(bimodal, unimodal)") +
+    scale_y_continuous(name = "Number Genes", expand=expansion(mult=c(0,.02))) +
+    scale_fill_npg(name = 'type') +
+    otheme(xtext=T,ytext=T,xtitle=T,ytitle=T,xtick=T,ytick=T,
+           legend.pos='top.right')
+fo = glue("{dirw}/10.modal.pdf")
+ggsave(p, file=fo, width=6, height=6)
+#}}}
+

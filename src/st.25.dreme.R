@@ -6,17 +6,17 @@ fi = glue("{dird}/21_seq/regions.xlsx")
 bins = read_xlsx(fi)$bin
 epis = c("raw",'umr','acrE','acrL')
 #{{{ read module lists  & write seq lists
-tag = 'degA'
 tag = 'degB'
-tag = 'dmodA'
+tag = 'degA'
 tag = 'dmodB'
+tag = 'dmodA'
 #tag = 'var2'
 fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
 md = readRDS(fi)
 tls = crossing(bin=bins, epi=epis) %>%
     mutate(bin = factor(bin, levels=bins)) %>%
     mutate(epi = factor(epi, levels=epis)) %>% arrange(bin, epi)
-
+#
 tcp = md %>% select(cid, gids)
 tcn = md %>% select(gids=gids_c) %>% distinct(gids) %>% mutate(cid=glue("cc{1:n()}"))
 tcl = tcp %>% bind_rows(tcn)
@@ -67,11 +67,11 @@ tls = tls0 %>% filter(!epi %in% c('acrL','acrE'))
 
 
 #{{{ read DREME motifs/kmers and save
-tag = 'degA'
+#tag = 'var2'
 tag = 'degB'
+tag = 'degA'
 tag = 'dmodA'
 tag = 'dmodB'
-#tag = 'var2'
 diri = glue("{dirw}/00_nf")
 #
 fi = glue("{diri}/{tag}/20.nseq.txt")
@@ -267,6 +267,12 @@ saveRDS(r3, fo)
 #{{{ summerize motifs found in each module/searching parameter
 fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
+#{{{ table stats
+tc0 = r3$tc %>% select(bid,scope)
+r3$tk %>% inner_join(tc0, by='bid') %>% count(scope)
+r3$tk %>% inner_join(tc0, by='bid') %>% distinct(scope,fid) %>% count(scope)
+r3$tk %>% inner_join(tc0, by='bid') %>% distinct(scope,fid,known) %>% count(scope,known)
+#}}}
 
 #{{{ num. motifs found in each module - f3b & sf07
 #{{{ f3b & sf07
@@ -647,13 +653,14 @@ t1 = tk %>% select(mid,fid,fname,known, bid,lid,pval,pos,ng,neg,ng_c) %>%
 t2 = t1 %>% arrange(bid, pval) %>%
     separate(bin,c('opt','bin'),sep=":", remove=F) %>%
     arrange(bid, pval) %>%
-    group_by(bid, fid, fname) %>%
+    group_by(bid, fid, fname,known) %>%
     slice(1) %>% ungroup() %>%
     arrange(bid, pval) %>%
     group_by(bid) %>%
     mutate(i = 1:n()) %>% ungroup() %>%
     inner_join(tk %>% select(mid,mtf), by='mid') %>%
-    select(bid, i, opt,bin,epi, pval,mid,fid,fname,mtf,pos,ng,neg,ng_c)
+    mutate(conseq = map_chr(mtf,'consensus')) %>%
+    select(bid, i, opt,bin,epi, pval,mid,fid,fname,known,conseq,mtf,pos,ng,neg,ng_c)
 t3 = t2 %>% group_by(bid) %>% nest() %>% rename(mtfs=data) %>% ungroup() %>%
     mutate(n_mtf = map_int(mtfs, nrow)) %>%
     select(bid, n_mtf, mtfs) %>% print(n=30)
@@ -661,6 +668,9 @@ t3 = t2 %>% group_by(bid) %>% nest() %>% rename(mtfs=data) %>% ungroup() %>%
 r5 = list(tc=tc, tl=tl, tk=t3)
 fo = glue("{dirw}/05.best.mtfs.rds")
 saveRDS(r5, fo)
+tk2 = t3 %>% unnest(mtfs) %>% select(-mtf)
+fo = glue("{dirw}/05.best.mtfs.tsv")
+write_tsv(tk2, fo)
 #}}}
 
 

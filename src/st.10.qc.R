@@ -1,9 +1,10 @@
 source('functions.R')
 dirw = glue('{dird}/10_qc')
+require(kableExtra)
 
 yid = 'rn20a'
 res = rnaseq_cpm(yid)
-th = res$th
+#th = res$th
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
@@ -163,4 +164,37 @@ fo = glue("{dirw}/22.tsne.{ex}.pdf")
 ggsave(fo, p2, width=6, height=6)
 #}}}
 
+#{{{ st1
+exps = c("TC",'HY','NM')
+conds = c("Control",'Cold','Heat')
+gts = unique(c(gts6,gts25))
+tp = res$bamstat %>%
+    inner_join(th, by=c('sid'='SampleID')) %>%
+    mutate(Experiment=factor(Experiment, levels=exps)) %>%
+    mutate(Treatment=factor(Treatment, levels=conds)) %>%
+    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    arrange(Experiment, Treatment, Timepoint, Genotype) %>%
+    group_by(Experiment) %>% mutate(i = 1:n()) %>%
+    ungroup() %>%
+    mutate(Experiment = as.character(Experiment)) %>%
+    mutate(Experiment=ifelse(i==1, Experiment, '')) %>%
+    mutate(Timepoint = as.character(Timepoint)) %>%
+    mutate(rate=percent(pair_map_hq/pair_map, accuracy=.1)) %>%
+    mutate(pair=number(pair,big.mark=',')) %>%
+    mutate(pair_map=number(pair_map,big.mark=',')) %>%
+    mutate(pair_map_hq=number(pair_map_hq,big.mark=',')) %>%
+    select(Experiment,Treatment,Timepoint,Genotype,
+        `Total Reads`=pair, `Mapped Reads`=pair_map,
+        `Uniquely Mapped`=pair_map_hq, `Unique Mapping Rate`=rate) %>%
+    print(width=Inf)
+
+x = tp %>%
+    kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
+        format.args = list(big.mark = ",")) %>%
+    #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
+    kable_styling(latex_options = c("striped", "hold_position"),
+        full_width=F, font_size = 9, position='left')
+fo = file.path(dirf, 'st1.rds')
+saveRDS(x, file=fo)
+#}}}
 

@@ -625,8 +625,39 @@ tp = md1 %>%
     select(cid,pnl,txt) %>%
     inner_join(tpa, by='cid') %>%
     mutate(cond = factor(cond, levels=conds3))
-#
-pa = plot_avg_expr(tp, ncol=2, strip.compact=F)
+#{{{ plot
+tpx = tp %>% distinct(x, xn) %>% arrange(xn)
+#tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
+#tp = tp %>% mutate(pnl=factor(pnl,levels=tpp$pnl))
+times = c(0,2,4,8,25)
+cols3 = pal_npg()(6)[c(2,1,4)]
+tpl1 = tp %>% arrange(cid, desc(y75)) %>%
+    filter(cid %in% c("c01",'c05')) %>%
+    group_by(cid) %>% slice(1) %>% ungroup() %>%
+    mutate(x='h000') %>% select(cid,pnl,txt,x,y=y75)
+tpl2 = tp %>% arrange(cid, y25) %>%
+    filter(cid %in% c("c04",'c02')) %>%
+    group_by(cid) %>% slice(1) %>% ungroup() %>%
+    mutate(x='h000') %>% select(cid,pnl,txt,x,y=y25)
+tpl3 = tp %>% arrange(cid, desc(y75)) %>%
+    filter(str_detect(cid, 'h')) %>%
+    group_by(cid) %>% slice(1) %>% ungroup() %>%
+    mutate(x='h250') %>% select(cid,pnl,txt,x,y=y75)
+pa = ggplot(tp, aes(x=x)) +
+    geom_ribbon(aes(ymin=y25,ymax=y75,fill=cond,group=cond), alpha=.2) +
+    geom_line(aes(y=y50, color=cond, group=cond)) +
+    geom_text(data=tpl1, aes(x=x,y=y, label=txt), size=2, hjust=0, vjust=1) +
+    geom_text(data=tpl2, aes(x=x,y=y, label=txt), size=2, hjust=0, vjust=0) +
+    geom_text(data=tpl3, aes(x=x,y=y, label=txt), size=2, hjust=1, vjust=1) +
+    scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$xn, expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
+    facet_wrap(pnl~., ncol=2, scale='free_y') +
+    scale_color_manual(values=cols3) +
+    scale_fill_manual(values=cols3) +
+    otheme(legend.pos='bottom.right', legend.dir='v',
+           panel.spacing=.1, strip.compact=F,
+           xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2))
+#}}}
 fo = glue("{dirw}/21.ME.pdf")
 ggsave(pa, file=fo, width=4, height=7)
 fo = glue("{dirf}/f2a.rds")

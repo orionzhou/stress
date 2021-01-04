@@ -95,7 +95,7 @@ Figure 3. Identification of enriched motifs in cold- and heat-responsive genes. 
 \pagebreak
 ![](plots/sf07.pdf){width=100%}
 
-Figure S7. Number of enriched motifs found using B73 promoter spaces (“B model”) or B73/Mo17/W22 promoter spaces (“BMW model”) of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  Identified motifs were compared with known TF binding motifs (cis-BP) and clustered based on sequence similarity.  The number of non-redundant motifs found using the full set of sequences (raw) in the specific region is shown as well as the number of motifs when only the unmethylated (umr) or accessible chromatin (acr) in this region was utilized. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes after sequence clustering.
+Figure S7. Number of enriched motifs found using B73 promoter spaces (“B model”) or B73/Mo17/W22 promoter spaces (“BMW model”) of different size and epigenetic filters.  Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were searched for enriched motifs with varying lengths of promoter space and different filters based on methylation or chromatin accessibility.  Identified motifs were compared with known TF binding motifs (cis-BP) and clustered based on sequence similarity.  Numbers in each cell represent the number of non-redundant motifs found using the full set of sequences (raw), using only the unmethylated regions (umr) or using only accessible chromatin regions in leaf (acrL) or ear (acrE) inside different sized promoter spaces.  Numbers in parentheses on the left side of plot indicate the number of genes in each co-expression module used for motif mining, while numbers on the right side of plot indicate the total number of non-redundant motifs found for each set of genes after sequence clustering.
 
 \pagebreak
 ![](plots/sf08.pdf){width=100%}
@@ -110,8 +110,7 @@ Figure S9. Meta plots of selected stress-responsive motifs in gene promoters.  T
 \pagebreak
 ![](plots/f4.pdf){width=60%}
 
-Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue) and (C) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
-
+Figure 4. Performance (Area Under ROC Curve, AUROC) comparison of different machine learning models predicting cold and heat responsive expression.  (A) performance comparison of models trained using small promoter spaces (-500, +500, -/+500) against large promoter spaces (-2k, +2k, -/+2k).  In each case same epigenetic filters (UMR) and number of features (top100) were used for training; (B) performance comparison of models trained using the full set of DEGs against models trained using specific co-expression clusters.  In each case same sized promoter spaces (-/+2k), epigenetic filters (UMR) and number of features (top100) were used;  (C) performance comparison of models using all genomic sequence (red) or UMR regions only (blue) (same sized promoter spaces (-/+2k) and number of features (top100) were used).  In each training average AUROC (N=100 model runs) is show along with the standard deviation.  Pairwise comparisons were made using t-test with significance levels indicated (\*: 0.05; \*\*: 0.01; \*\*\*: 0.001)
 
 \pagebreak
 ![](plots/sf10.pdf){width=60%}
@@ -126,7 +125,7 @@ Figure 5. Characterization of genes with variable stress responsive patterns amo
 \pagebreak
 ![](plots/sf11.pdf){width=100%}
 
-Figure S11.  Comparison of heat- and cold-response gene expression in B73, Mo17 and W22. (A) At each time point for cold or heat stress we identified DEGs in all three genotypes and show the overlap of DEGs.  The actual expression levels in all three genotypes for the non-redundant set of genes in shown in (B).  The genes are classified based on response in B73, Mo17 and W22 (0 indicates not DE and 1 indicates DE in the three genotypes such that ‘111’ indicates DE in B73, Mo17 and W22 while ‘010’ would indicate DE in Mo17 but not B73 or W22.  Note that for some genes classified as having variable responses there are actually similar changes in all genotypes but there are other examples with clear response on some genotypes but not in others.
+Figure S11.  Comparison of heat- and cold-response gene expression in B73, Mo17 and W22. (A) At each time point for cold or heat stress we identified DEGs in all three genotypes and show the overlap of DEGs.  The actual expression levels in all three genotypes for the non-redundant set of up-regulated genes in shown in (B).  The genes are classified based on response in B73, Mo17 and W22 (0 indicates not DE and 1 indicates DE in the three genotypes such that ‘111’ indicates DE in B73, Mo17 and W22 while ‘010’ would indicate DE in Mo17 but not B73 or W22.  Note that for some genes classified as having variable responses there are actually similar changes in all genotypes but there are other examples with clear response on some genotypes but not in others.
 
 
 \pagebreak
@@ -148,4 +147,15 @@ Figure 6. Cross-genotype performance of machine learning models predicting cold 
 
 
 
+\pagebreak
+
+```{r, message=FALSE, echo=FALSE}
+dirf = '/home/springer/zhoux379/projects/stress/data/95_figures/plots'
+options(tinytex.verbose = TRUE)
+```
+
+Table S1. Sample statistics.
+```{r, message=FALSE, echo=FALSE}
+readRDS(file.path(dirf, 'st1.rds'))
+```
 

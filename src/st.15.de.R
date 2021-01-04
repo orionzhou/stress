@@ -484,7 +484,7 @@ p1 = ggplot() +
     geom_segment(tpy, mapping=aes(x=.4,xend=.4,y=ymin,yend=ymax), lineend='round',size=.4, color='royalblue') +
     geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymin,yend=ymin), lineend='round', size=.3, color='royalblue') +
     geom_segment(tpy, mapping=aes(x=.32,xend=.4,y=ymax,yend=ymax), lineend='round', size=.3, color='royalblue') +
-    geom_text(tpy, mapping=aes(x=.3,y=ymid,label=tag), size=2.5, hjust=1, color='gray30') +
+    geom_text(tpy, mapping=aes(x=.3,y=ymid,label=tag), size=2.5, hjust=1,angle=40, color='gray30') +
     scale_x_discrete(expand=expansion(mult=c(.9,.05))) +
     scale_y_reverse(expand=expansion(mult=c(.005,.005))) +
     #scale_fill_viridis(name = 'log2fc', direction=-1) +

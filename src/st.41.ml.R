@@ -13,9 +13,10 @@ fk = glue("{dirw}/05.tk.tsv")
 write_tsv(tk %>% select(bid, n_mtf), fk)
 diro = glue('{dirn}/03_motif_lists')
 if(!dir.exists(diro)) dir.create(diro)
+bkg = c(.2688,.2312,.2312,.2688)
 tk %>% mutate(mtfs = map(mtfs, 'mtf')) %>%
     mutate(fo = glue("{diro}/{bid}.meme")) %>%
-    mutate(l = map2(mtfs, fo, write_meme, overwrite=T))
+    mutate(l = map2(mtfs, fo, write_meme, bkg=bkg, overwrite=T))
 
 tc12 = r5$tc %>% mutate(train=scope) %>% select(train,everything())
 fi = glue("{dird}/17_cluster/50_modules/var1.rds")
@@ -219,7 +220,7 @@ plot_meta_tss1 <- function(ti, tit,cids, md) {
     #}}}
     #}}}
 }
-tp2 = tp1 %>% filter(cid != 'c30', i!=24) %>%
+tp2 = tp1 %>% filter(cid!='c30', !mid %in% c('b08_l446_1','b08_l465_2')) %>%
     mutate(tit = glue("{cond}: {note}")) %>%
     mutate(fname = ifelse(nchar(fname)>10, glue("{str_sub(fname,1,3)}...{str_sub(fname,-3,-1)}"), fname)) %>%
     mutate(pnl = glue("{fname} ({fnote})")) %>%
@@ -236,7 +237,7 @@ p = ggarrange(
               ggarrange(ps[[2]], NULL, ncol=2, widths=c(1,.6)),
               ggarrange(ps[[3]], NULL, ncol=2, widths=c(1,0)),
               ggarrange(ps[[4]], NULL, ncol=2, widths=c(1,.23)),
-              ggarrange(ps[[5]], NULL, ncol=2, widths=c(1,0)),
+              ggarrange(ps[[5]], NULL, ncol=2, widths=c(1,.23)),
               ggarrange(ps[[6]], NULL, ncol=2, widths=c(1,.23)),
               ggarrange(ps[[7]], NULL, ncol=2, widths=c(1,0)),
               nrow=7, ncol=1, heights=c(2,2))
@@ -260,7 +261,7 @@ bins = c(
          #"TSS:-/+2k,TTS:-500",
          #"TSS:-/+2k,TTS:-1k"
 )
-epis = c('raw','umr')
+epis = c('raw','umr','acrL')
 nfeas = c('top30', 'top50', 'top100', 'top200')
 mods = c('zoops', 'anr')
 bins1 = c("TSS:-/+2k")
@@ -300,6 +301,8 @@ write_tsv(to, fo)
 fi = glue("{dirw}/06.tk.tc.rds")
 r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
+tc0 = tc %>% mutate(cond_note=glue("{cond}: {note}")) %>%
+    select(bid, cond_note) %>% mutate(cond_note=as_factor(cond_note))
 
 #{{{ process trained models
 #{{{ params
@@ -334,7 +337,10 @@ collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
   best = th %>% filter(bin==!!bin,epi==!!epi, nfea==!!nfea, mod==!!mod) %>%
       inner_join(ml, by=c('did'='sid')) %>%
       filter(!is.na(fit)) %>% select(did,tid,bid,fit,metric)
-  list(metric=metric, best=best)
+  vis = ml %>% select(did=sid, perm, vis) %>%
+    unnest(vis) %>%
+    inner_join(th, by='did')
+  list(metric=metric, best=best, vis=vis)
   #}}}
 }
 tags = c("b3")
@@ -344,19 +350,66 @@ tags = c("b1")
 tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_models, dirw=dirw)) %>%
   mutate(metric = map(x, 'metric')) %>%
+  mutate(vis = map(x, 'vis')) %>%
   mutate(best = map(x,'best')) %>% select(-x)
 fm = glue('{dirw}/11.models.rds')
 saveRDS(tm, fm)
+# write models
 tb = tm %>% select(tag, best) %>% unnest(best) %>%
     select(tag,tid,bid)
 fb = glue('{dirw}/12.best.models.tsv')
 write_tsv(tb, fb)
+# write models
+tb = tm %>% select(tag, best) %>% unnest(best)
+tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
+    mutate(map2(fit, fo, saveRDS))
+#}}}
+
+#{{{ eval feature importance
+fm = glue('{dirw}/11.models.rds')
+tm = readRDS(fm)
+
+tp1 = tk %>% select(bid,mtfs) %>% unnest(mtfs) %>%
+    mutate(fc = (pos/ng)/(neg/ng_c)) %>%
+    select(bid,i,mid,pval,fc,fid,fname)
+tp2 = tm %>% select(vis) %>% unnest(vis) %>%
+    rename(mid=Variable,score=Importance) %>%
+    group_by(did,bid,bin,epi,nfea,mod,mid) %>%
+    summarise(avg=mean(score), std=sd(score), q25=quantile(score,.225),
+              q50=quantile(score,.5), q75=quantile(score,.75)) %>%
+    ungroup()
+tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
+    inner_join(tc0, by='bid')
+
+get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
+pval2symbol <- function(pval) ifelse(pval > .05, 'NS', ifelse(pval>.01, '*', ifelse(pval>.001, '**', '***')))
+tp %>% group_by(bid,bin,epi,nfea,mod) %>%
+    summarise(spc=cor(i, avg, method='spearman'),
+              p.raw=cor.test(i,avg, method='spearman')$p.value) %>%
+    ungroup() %>%
+    mutate(txt = pval2symbol(p.raw)) %>%
+    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
+
+tp0 = tp %>%
+    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
+tps = tp0 %>% arrange(bid, desc(q50)) %>%
+    group_by(bid) %>% slice(1:5) %>% ungroup()
+p = ggplot(tp0) +
+    geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
+    geom_text_repel(data=tps, aes(x=i,y=q50,label=fname), size=2) +
+    scale_x_continuous(expand=expansion(mult=c(.03,.03))) +
+    scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
+    facet_wrap(~cond_note, nrow=3, scale='free') +
+    otheme(xtext=T,xtick=T,ytitle=T,ytext=T,ytick=T, strip.compact=T)
+fo = glue("{dirw}/41.fea.imp.pdf")
+ggsave(p, file=fo, width=10, height=7)
 #}}}
 
 #{{{ eval model performance in B - f4 & sf10
 fm = glue('{dirw}/11.models.rds')
 tm = readRDS(fm)
 
+tag='b3'; train='var'
 tag='b2'; train='BMW'
 tag='b1'; train='B'
 #{{{ prepare tc1
@@ -369,10 +422,10 @@ bins = c(
          #"TSS:-/+2k,TTS:-500",
          #"TSS:-/+2k,TTS:-1k"
 )
-epis = c('all','umr')
+epis = c('all','umr','acrL')
 nfeas = c('top30', 'top50', 'top100', 'top200')
 mods = c('binary', 'quantitative')
-epi_map = c('raw'='all','umr'='umr')
+epi_map = c('raw'='all','umr'='umr','acrL'='acrL')
 mod_map = c('zoops'='binary','anr'='quantitative')
 tc1 = tc %>% filter(train==!!train) %>%
     select(bid,cond,note) %>%
@@ -405,15 +458,15 @@ map_signif <- function(p) ifelse(p<0.001, "***",
 plot_barplot_sig <- function(ti, tis, metric='auroc', x='bin', grp='epi',
     pnl='cond_mod', x.rotate=F, tit=F, cols=pal_npg()(8)) {
   #{{{
-  ymax = 1.0 * max(ti[[metric]])
   tp = ti %>%
     mutate(score = get(metric)) %>%
     filter(!is.na(score)) %>%
     mutate(x = get(x), pnl = get(pnl), grp=get(grp)) %>%
     group_by(cond, note, cond_note, bin, epi, nfea, mod, x, pnl, grp) %>%
     summarise(sd = sd(score), score = mean(score)) %>% ungroup()
-  tps0 = tp %>% mutate(y = score + 1.5*sd) %>%
+  tps0 = tp %>% mutate(y = score + sd + .01) %>%
       group_by(pnl, x) %>% summarise(y = max(y)) %>% ungroup()
+  ymax = max(tps0$y)
   tps = tis %>% mutate(x = get(x), pnl = get(pnl)) %>%
       mutate(xmin=as.integer(x) - .2) %>%
       mutate(xmax=as.integer(x) + .2) %>%
@@ -426,7 +479,7 @@ plot_barplot_sig <- function(ti, tis, metric='auroc', x='bin', grp='epi',
       geom_segment(data=tps, aes(x=xmin,xend=xmax,y=y,yend=y), size=.5) +
       geom_text(data=tps, aes(x=x,y=y,label=sig), vjust=-.3, size=2.5) +
       scale_x_discrete(expand=expansion(add=c(.5,.5))) +
-      scale_y_continuous(name=str_to_upper(metric), expand=expansion(mult=c(0,.05))) +
+      scale_y_continuous(name=str_to_upper(metric), expand=expansion(add=c(0,.03))) +
       coord_cartesian(ylim= c(.5, ymax)) +
       scale_fill_manual(name='', values=cols) +
       scale_color_manual(name='', values=cols) +
@@ -479,7 +532,7 @@ pa = plot_barplot_sig(tp, tps, metric=metric, x='bin1', grp="bin2",
   theme(legend.direction='horizontal')
 #}}}
 #{{{ f4b
-tp = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary')
+tp = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary', epi %in% c("all","umr"))
 tps = tp %>%
   group_by(bin_nfea_mod, cond_note) %>%
   summarise(p.raw = t.test(auroc ~ epi)$p.value) %>%
@@ -512,15 +565,15 @@ tps = tp %>%
 plot_barplot_sig2 <- function(ti, tis, metric='auroc', x='bin', grp='epi',
     pnl='cond_mod', x.rotate=F, tit=F, cols=pal_npg()(8), tip=.01) {
   #{{{
-  ymax = 1.0 * max(ti[[metric]])
   tp = ti %>%
     mutate(score = get(metric)) %>%
     filter(!is.na(score)) %>%
     mutate(x = get(x), pnl = get(pnl), grp=get(grp)) %>%
     group_by(cond, note, cond_note, bin, epi, nfea, mod, x, pnl, grp) %>%
     summarise(sd = sd(score), score = mean(score)) %>% ungroup()
-  tps0 = tp %>% mutate(y = score + 1.5*sd) %>%
+  tps0 = tp %>% mutate(y = score + sd + .01) %>%
       group_by(pnl) %>% summarise(y = max(y)) %>% ungroup()
+  ymax = max(tps0$y)
   tps = tis %>% mutate(x = (xmin+xmax)/2, pnl = get(pnl)) %>%
       inner_join(tps0, by=c('pnl'))
     #{{{
@@ -533,7 +586,7 @@ plot_barplot_sig2 <- function(ti, tis, metric='auroc', x='bin', grp='epi',
       geom_segment(data=tps, aes(x=xmax,xend=xmax,y=y-tip,yend=y), size=.5) +
       geom_text(data=tps, aes(x=x,y=y,label=sig), vjust=-.3, size=2.5) +
       scale_x_discrete(expand=expansion(add=c(.5,.5))) +
-      scale_y_continuous(name=str_to_upper(metric), expand=expansion(mult=c(0,.05))) +
+      scale_y_continuous(name=str_to_upper(metric), expand=expansion(add=c(0,.03))) +
       coord_cartesian(ylim= c(.5, ymax)) +
       scale_fill_manual(name='', values=cols) +
       scale_color_manual(name='', values=cols) +
@@ -564,7 +617,7 @@ pc = plot_barplot_sig2(tp, tps, metric=metric, x='cond_note', grp="cond_note",
   theme(legend.position = 'none')
 #}}}
 
-p = ggarrange(pa, pb, pc, nrow=3, ncol=1,
+p = ggarrange(pa, pc, pb, nrow=3, ncol=1,
           labels = LETTERS[1:4], heights=c(1,1,1))
 fo = glue("{dirw}/31.bar.sig.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=8)
@@ -701,7 +754,7 @@ p = ggarrange(pa, pb, pd, nrow=3, ncol=1,
 fo = glue("{dirw}/30.auroc.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=7)
 fo = glue("{dirf}/sf10.pdf")
-p %>% ggexport(filename=fo, width=6, height=7)
+#p %>% ggexport(filename=fo, width=6, height=7)
 # {{{ F1 scores
 #fo = glue("{dirw}/30.f1.{tag}.pdf")
 #p %>% ggexport(filename=fo, width=6, height=9)
@@ -724,17 +777,11 @@ md = deg12 %>% pluck('ds',1) %>% select(gid) %>%
 fo = glue("{dirw}/21.all.tsv")
 write_tsv(md, fo)
 #}}}
-# run j21 kmer.py prepare_ml
-
-fi = glue('{dirw}/11.models.rds')
-tb = readRDS(fi) %>% select(tag, best) %>% unnest(best)
-
-# write models
-tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
-    mutate(map2(fit, fo, saveRDS))
+# run j21 fimo.py prepare_ml
 # run j21 ml_predict
 
-to = tb %>% select(tag, tid, cid) %>%
+fb = glue('{dirw}/12.best.models.tsv')
+to = read_tsv(fb) %>% select(tag, tid, bid) %>%
     mutate(fi = glue("{dirw}/24_ml_out/{tag}_{tid}.tsv")) %>%
     mutate(pred = map(fi, read_tsv)) %>% select(-fi)
 
@@ -745,8 +792,8 @@ saveRDS(to, fo)
 #{{{ evaluate model performance for different gene categories
 fp = glue('{dirw}/25.model.pred.rds')
 pd = readRDS(fp) %>%
-    inner_join(tc %>% select(tid,train,cid,cond,note), by=c('tid','cid')) %>%
-    select(tag,train,tid,cid,cond,note,pred) %>% unnest(pred) %>%
+    inner_join(tc %>% select(tid,train,bid,cid,cond,note), by=c('tid','bid')) %>%
+    select(tag,train,tid,bid,cid,cond,note,pred) %>% unnest(pred) %>%
     separate(gid, c('gt','gid'), sep='_')
 #{{{ prepare variable response
 fg = glue('{dird}/15_de/09.gene.status.rds')
@@ -804,6 +851,7 @@ p = ggplot(tp, aes(x=train, y=score)) +
          margin = c(.2,.2,.2,.2), xgrid=T, panel.border=F,
          strip.style='white', strip.compact=F, panel.spacing=.1,
          xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T) +
+  theme(legend.justification=c(.5,-.8)) +
   #theme(axis.text.x = element_text(angle=0,size=8, hjust=1,vjust=1)) +
   theme(strip.text.y = element_text(angle=0,size=8))
 #}}}
