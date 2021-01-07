@@ -115,9 +115,7 @@ Figure 4. Performance (Area Under ROC Curve, AUROC) comparison of different mach
 \pagebreak
 ![](plots/sf10.pdf){width=60%}
 
-Figure S10. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different sizes of promoter sequences surrounding the TSS; (B) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and and (C) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
-
-Figure 4. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different windows near the TSS and TTS; (B) with all sequence (red) or UMR regions only (blue); (C)  (D) using different numbers of mostly enriched motifs as input features. In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
+Figure S10. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different sizes of promoter sequences surrounding the TSS; (B) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and and (C) using different numbers of mostly enriched motifs as input features. Number of non-redundant motifs used for model training are indicated on top of each set of bars in (C). In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
 
 
 \pagebreak
