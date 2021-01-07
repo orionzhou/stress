@@ -581,7 +581,7 @@ p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
-    guides(color=guide_legend(nrow=1), shape=F)
+    guides(color=guide_legend(nrow=2), shape=F)
 fo = glue("{dirf}/sf13a.rds")
 saveRDS(p, fo)
 #}}}

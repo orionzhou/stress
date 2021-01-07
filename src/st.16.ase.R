@@ -292,7 +292,7 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -.6, legend.box='h',
+           legend.vjust = -1.2, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
 fo = glue('{dirf}/sf14a.rds')
@@ -304,7 +304,7 @@ ggsave(p, file = fp, width = 5, height = 7)
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
-ymax = 120
+ymax = 100
 p = ggplot(tp1) +
     geom_bar(aes(x=x, y=n, fill=reg), width=.7, stat='identity') +
     geom_text(data=tp1s,aes(x=5.6,y=ymax,label=lab), size=2.5, vjust=.5,hjust=1) +
@@ -314,7 +314,7 @@ p = ggplot(tp1) +
     scale_fill_manual(name='Mode:', values=cols9) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -.6, legend.box='h',
+           legend.vjust = -1.2, legend.box='h',
            xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
 fo = glue('{dirf}/sf14b.rds')
 saveRDS(p, fo)
