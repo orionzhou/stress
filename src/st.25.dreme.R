@@ -643,6 +643,63 @@ fo = glue("{dirf}/sf08.pdf")
 p4 %>% ggexport(filename=fo, width=12, height=8)
 #}}}
 
+#{{{ check fold enrichment in all versus umr
+#{{{ prepare
+t1 = tk %>% select(mid,fid,fname,known, bid,lid,pval,pos,ng,neg,ng_c) %>%
+    inner_join(tl %>% select(lid, bid, bin, epi), by=c('bid','lid')) %>%
+    arrange(bid,bin,epi,fid, pval) %>%
+    group_by(bid,bin,epi,fid,fname,known) %>%
+    slice(1) %>% ungroup()
+t2 = t1 %>% arrange(bid, pval) %>%
+    separate(bin,c('opt','bin'),sep=":", remove=F) %>%
+    arrange(bid, pval) %>%
+    group_by(bid, fid, fname,known) %>%
+    slice(1) %>% ungroup() %>%
+    arrange(bid, pval) %>%
+    group_by(bid) %>%
+    mutate(i = 1:n()) %>% ungroup() %>%
+    select(bid,i,fid)
+t3 = t2 %>% inner_join(t1,by=c('bid','fid')) %>%
+    filter(bin == 'TSS:-/+2k', epi %in% c("raw",'umr')) %>%
+    select(bid,i,fid,fname,known,epi,pval)
+#}}}
+
+tc0  = tc %>% filter(scope=='B') %>%
+    mutate(pnl=glue("{cond}:{note}")) %>% select(bid,pnl)
+tp = t3 %>%
+    inner_join(tc0, by='bid') %>%
+    spread(epi,pval) %>%
+    filter(!is.na(raw), !is.na(umr)) %>%
+    arrange(bid,i) %>% group_by(bid) %>% mutate(i = 1:n()) %>% ungroup() %>%
+    gather(epi,pval, -bid,-pnl,-i,-fid,-fname,-known) %>%
+    mutate(score = -log10(pval)) %>%
+    mutate(txt = number(score, accuracy=1)) %>%
+    mutate(lab = ifelse(known, fname, '')) %>%
+    select(bid,pnl,i,txt,lab,known,epi,score)
+#
+tpy = tp %>% distinct(pnl,i,lab)
+#{{{ plot
+swit = (min(tp$score) + max(tp$score)) / 2
+p = ggplot(tp, aes(x=epi,y=i)) +
+    geom_tile(aes(fill=score), na.rm=F, size=0, color='white') +
+    geom_text(aes(label=txt, color=score>swit), hjust=.5, size=2.5) +
+    geom_text(data=tpy, aes(x=.4,y=i,label=lab), hjust=1, size=2) +
+    #geom_vline(xintercept=tp1$o, color='blue') +
+    scale_x_discrete(expand=expansion(add=c(2,.5))) +
+    scale_y_discrete(expand=expansion(mult=c(0,0))) +
+    scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
+    scale_color_manual(values=c('black','white')) +
+    facet_wrap(pnl ~ ., ncol=3) +
+    otheme(legend.pos='none', legend.dir='v', legend.title=T,
+           margin = c(.3,.3,.3,.3), legend.vjust=-1.7,
+           strip.compact=F, panel.spacing = .5,
+           xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
+    guides(color=F)
+#}}}
+fo = glue("{dirw}/z.pdf")
+ggsave(p, file=fo, width=6, height=6)
+#}}}
+
 #{{{ pick best motifs for each gene list
 fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)

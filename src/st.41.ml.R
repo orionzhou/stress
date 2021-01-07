@@ -344,8 +344,8 @@ collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
   #}}}
 }
 tags = c("b3")
-tags = c("b1",'b2')
 tags = c("b1")
+tags = c("b1",'b2')
 
 tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_models, dirw=dirw)) %>%
@@ -363,46 +363,6 @@ write_tsv(tb, fb)
 tb = tm %>% select(tag, best) %>% unnest(best)
 tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
     mutate(map2(fit, fo, saveRDS))
-#}}}
-
-#{{{ eval feature importance
-fm = glue('{dirw}/11.models.rds')
-tm = readRDS(fm)
-
-tp1 = tk %>% select(bid,mtfs) %>% unnest(mtfs) %>%
-    mutate(fc = (pos/ng)/(neg/ng_c)) %>%
-    select(bid,i,mid,pval,fc,fid,fname)
-tp2 = tm %>% select(vis) %>% unnest(vis) %>%
-    rename(mid=Variable,score=Importance) %>%
-    group_by(did,bid,bin,epi,nfea,mod,mid) %>%
-    summarise(avg=mean(score), std=sd(score), q25=quantile(score,.225),
-              q50=quantile(score,.5), q75=quantile(score,.75)) %>%
-    ungroup()
-tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
-    inner_join(tc0, by='bid')
-
-get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
-pval2symbol <- function(pval) ifelse(pval > .05, 'NS', ifelse(pval>.01, '*', ifelse(pval>.001, '**', '***')))
-tp %>% group_by(bid,bin,epi,nfea,mod) %>%
-    summarise(spc=cor(i, avg, method='spearman'),
-              p.raw=cor.test(i,avg, method='spearman')$p.value) %>%
-    ungroup() %>%
-    mutate(txt = pval2symbol(p.raw)) %>%
-    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
-
-tp0 = tp %>%
-    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
-tps = tp0 %>% arrange(bid, desc(q50)) %>%
-    group_by(bid) %>% slice(1:5) %>% ungroup()
-p = ggplot(tp0) +
-    geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
-    geom_text_repel(data=tps, aes(x=i,y=q50,label=fname), size=2) +
-    scale_x_continuous(expand=expansion(mult=c(.03,.03))) +
-    scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
-    facet_wrap(~cond_note, nrow=3, scale='free') +
-    otheme(xtext=T,xtick=T,ytitle=T,ytext=T,ytick=T, strip.compact=T)
-fo = glue("{dirw}/41.fea.imp.pdf")
-ggsave(p, file=fo, width=10, height=7)
 #}}}
 
 #{{{ eval model performance in B - f4 & sf10
@@ -455,6 +415,7 @@ tm1 = tm %>% filter(tag == !!tag) %>% select(tag,metric) %>% unnest(metric) %>%
 #{{{ functions
 map_signif <- function(p) ifelse(p<0.001, "***",
     ifelse(p<0.01, "**", ifelse(p<0.05, '*', 'NS')))
+eval_signif <- function(x, y) map_signif(t.test(x, y)$p.value)
 plot_barplot_sig <- function(ti, tis, metric='auroc', x='bin', grp='epi',
     pnl='cond_mod', x.rotate=F, tit=F, cols=pal_npg()(8)) {
   #{{{
@@ -504,89 +465,34 @@ plot_barplot_sig <- function(ti, tis, metric='auroc', x='bin', grp='epi',
   p
   #}}}
 }
-cols14 = c(brewer.pal(4,'Blues')[2:4],brewer.pal(4,'Greens')[2:4],
-    brewer.pal(4,'Purples')[2:4],brewer.pal(4,'Greys')[2:4],
-    brewer.pal(4,'Reds')[2:3])
-bids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(bid)
-#}}}
-
-metric = 'auroc'
-#{{{ f4a
-tp = tm1 %>%
-    filter(bid %in% bids4, epi=='umr', nfea=='top100', mod=='binary') %>%
-    filter(!str_detect(bin, "1k")) %>%
-    mutate(bin=str_replace(bin, "TSS:", "")) %>%
-    mutate(bin1=ifelse(str_detect(bin,"^\\-/\\+"),"-/+",
-                       ifelse(str_detect(bin,"^\\+"), "+", "-"))) %>%
-    mutate(bin2 = str_replace_all(bin, "[\\+\\-\\/]", '')) %>%
-    mutate(bin1 = as_factor(bin1)) %>%
-    mutate(bin2 = as_factor(bin2))
-tps = tp %>%
-  group_by(cond_note,bin1) %>%
-  summarise(p.raw = t.test(auroc ~ bin2)$p.value) %>%
-  mutate(p.adj = p.adjust(p.raw)) %>%
-  mutate(sig = map_chr(p.raw, map_signif))
-pa = plot_barplot_sig(tp, tps, metric=metric, x='bin1', grp="bin2",
-                      pnl='cond_note', x.rotate=F, cols=pal_npg()(5)) +
-  theme(legend.position = c(.4,.9), legend.justification = c(.5,.5)) +
-  theme(legend.direction='horizontal')
-#}}}
-#{{{ f4b
-tp = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary', epi %in% c("all","umr"))
-tps = tp %>%
-  group_by(bin_nfea_mod, cond_note) %>%
-  summarise(p.raw = t.test(auroc ~ epi)$p.value) %>%
-  mutate(p.adj = p.adjust(p.raw)) %>%
-  mutate(sig = map_chr(p.raw, map_signif))
-pb = plot_barplot_sig(tp, tps, metric=metric, x='cond_note', grp="epi",
-                      pnl='bin_nfea_mod', x.rotate=T, cols=pal_aaas()(5)) +
-  o_margin(0,.2,.2,2.1) +
-  theme(legend.position = c(.5,1), legend.justification = c(.5,1)) +
-  theme(legend.direction='horizontal')
-#}}}
-#{{{ f4c
-tp = tm1 %>% filter(bin=='TSS:-/+2k',epi=='umr',nfea=='top100',mod=='binary')
-tps = tp %>%
-  mutate(i = as.integer(cond_note)) %>%
-  group_by(bin_epi_nfea_mod, i) %>%
-  summarise(value=list(auroc)) %>% ungroup() %>%
-  spread(i, value) %>%
-  #mutate(p_1_2 = t.test(unlist(`1`),unlist(`2`))$p.value) %>%
-  mutate(p_4_6 = t.test(unlist(`4`),unlist(`6`))$p.value) %>%
-  mutate(p_7_8 = t.test(unlist(`7`),unlist(`8`))$p.value) %>%
-  #mutate(p_10_11 = t.test(unlist(`10`),unlist(`11`))$p.value) %>%
-  select(bin_epi_nfea_mod, starts_with('p')) %>%
-  gather(cmp, p.raw, -bin_epi_nfea_mod) %>%
-  separate(cmp, c('pre','xmin','xmax'), sep='_') %>% select(-pre) %>%
-  mutate(xmin = as.numeric(xmin) - .2) %>%
-  mutate(xmax = as.numeric(xmax) + .2) %>%
-  mutate(sig = map_chr(p.raw, map_signif))
-#
-plot_barplot_sig2 <- function(ti, tis, metric='auroc', x='bin', grp='epi',
-    pnl='cond_mod', x.rotate=F, tit=F, cols=pal_npg()(8), tip=.01) {
+get_bar_stats <- function(ti, metric='auroc', x='bin', grp='epi',
+    pnl='cond_mod') {
+    #{{{
+    ti %>%
+        mutate(score = get(metric)) %>%
+        filter(!is.na(score)) %>%
+        mutate(x = get(x), pnl = get(pnl), grp=get(grp)) %>%
+        #group_by(cond, note, cond_note, bin, epi, nfea, mod, x, pnl, grp) %>%
+        group_by(pnl, x, grp) %>%
+        summarise(scores=list(score), std=sd(score), avg=mean(score)) %>%
+        ungroup()
+    #}}}
+}
+plot_barplot <- function(ti,tis, x.rotate=F, ylab='AUROC', tit=F, cols=pal_npg()(8)) {
   #{{{
-  tp = ti %>%
-    mutate(score = get(metric)) %>%
-    filter(!is.na(score)) %>%
-    mutate(x = get(x), pnl = get(pnl), grp=get(grp)) %>%
-    group_by(cond, note, cond_note, bin, epi, nfea, mod, x, pnl, grp) %>%
-    summarise(sd = sd(score), score = mean(score)) %>% ungroup()
-  tps0 = tp %>% mutate(y = score + sd + .01) %>%
-      group_by(pnl) %>% summarise(y = max(y)) %>% ungroup()
-  ymax = max(tps0$y)
-  tps = tis %>% mutate(x = (xmin+xmax)/2, pnl = get(pnl)) %>%
-      inner_join(tps0, by=c('pnl'))
+  tps0 = tp %>% mutate(y = avg + std + .01) %>%
+      group_by(pnl, x) %>% summarise(y = max(y)) %>% ungroup()
+  tps = tis
+  ymax = max(tps0$y, tps$ysig)
     #{{{
     pd = position_dodge(width=.8)
     p = ggplot(tp) +
-      geom_col(aes(x=x,y=score,color=grp),fill=NA, position=pd, width=.7) +
-      geom_errorbar(aes(x=x,y=score,ymin=score-sd, ymax=score+sd, col=grp), width=.2, size=.3, position=pd) +
-      geom_segment(data=tps, aes(x=xmin,xend=xmax,y=y,yend=y), size=.5) +
-      geom_segment(data=tps, aes(x=xmin,xend=xmin,y=y-tip,yend=y), size=.5) +
-      geom_segment(data=tps, aes(x=xmax,xend=xmax,y=y-tip,yend=y), size=.5) +
-      geom_text(data=tps, aes(x=x,y=y,label=sig), vjust=-.3, size=2.5) +
+      geom_col(aes(x=x,y=avg,color=grp),fill=NA, position=pd, width=.7) +
+      geom_errorbar(aes(x=x,y=avg,ymin=avg-std, ymax=avg+std, col=grp), width=.2, size=.3, position=pd) +
+      geom_segment(data=tps, aes(x=xb,xend=xe,y=ysig,yend=ysig), size=.5) +
+      geom_text(data=tps, aes(x=xm,y=ysig,label=sig), vjust=-.3, size=2.5) +
       scale_x_discrete(expand=expansion(add=c(.5,.5))) +
-      scale_y_continuous(name=str_to_upper(metric), expand=expansion(add=c(0,.03))) +
+      scale_y_continuous(name=str_to_upper(ylab), expand=expansion(add=c(0,.03))) +
       coord_cartesian(ylim= c(.5, ymax)) +
       scale_fill_manual(name='', values=cols) +
       scale_color_manual(name='', values=cols) +
@@ -605,19 +511,115 @@ plot_barplot_sig2 <- function(ti, tis, metric='auroc', x='bin', grp='epi',
     p = p +
       theme(axis.text.x=element_text(angle=25, hjust=1, vjust=1, size=7.5))
   if(tit) {
-    tit1 = str_to_upper(ifelse(metric=='f1','f-score',metric))
+    tit1 = str_to_upper(ifelse(ylab=='f1','f-score',ylab))
     p = p + ggtitle(tit)
   }
   p
   #}}}
 }
-pc = plot_barplot_sig2(tp, tps, metric=metric, x='cond_note', grp="cond_note",
-                      pnl='bin_epi_nfea_mod', x.rotate=T, cols=pal_simpsons()(11)) +
+cols14 = c(brewer.pal(4,'Blues')[2:4],brewer.pal(4,'Greens')[2:4],
+    brewer.pal(4,'Purples')[2:4],brewer.pal(4,'Greys')[2:4],
+    brewer.pal(4,'Reds')[2:3])
+bids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(bid)
+#}}}
+
+metric = 'auroc'
+#{{{ f4a
+tp0 = tm1 %>%
+    filter(bid %in% bids4, epi=='umr', nfea=='top100', mod=='binary') %>%
+    filter(!str_detect(bin, "1k")) %>%
+    mutate(bin=str_replace(bin, "TSS:", "")) %>%
+    mutate(bin1 = str_replace_all(bin, "[\\+\\-\\/]", '')) %>%
+    mutate(bin2=ifelse(str_detect(bin,"^\\-/\\+"),"-/+",
+                       ifelse(str_detect(bin,"^\\+"), "+", "-"))) %>%
+    mutate(bin1 = as_factor(bin1)) %>%
+    mutate(bin2 = as_factor(bin2))
+tp = get_bar_stats(tp0, x='bin1', grp='bin2', pnl='cond_note')
+#{{{ sig
+tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
+tps1 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
+    mutate(sig = map2_chr(`-`, `-/+`, eval_signif)) %>%
+    inner_join(tps0, by=c('pnl','x')) %>%
+    mutate(x = as.numeric(x)) %>%
+    mutate(xm = x, xb = x - .3, xe = x +.3, ysig = ymax + .03) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
+    mutate(sig = map2_chr(`+`, `-/+`, eval_signif)) %>%
+    inner_join(tps0, by=c('pnl','x')) %>%
+    mutate(x = as.numeric(x)) %>%
+    mutate(xm = x + .15, xb = x, xe = x +.3, ysig = ymax + .01) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+tps0b = tp %>% group_by(pnl) %>% summarise(ymax = max(avg+std)) %>% ungroup()
+tps3 = tp %>% filter(grp=='-/+') %>% select(-avg,-std) %>%
+    spread(x, scores) %>%
+    mutate(sig = map2_chr(`500`, `2k`, eval_signif)) %>%
+    inner_join(tps0b, by=c('pnl')) %>%
+    mutate(xm = 1.75, xb = 1.25, xe = 2.25, ysig = ymax + .06) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+tps = rbind(tps1,tps2,tps3)
+#}}}
+#
+pa = plot_barplot(tp, tps, x.rotate=F, ylab=metric, cols=pal_npg()(5)) +
+  theme(legend.position = c(.37,.95), legend.justification = c(.5,.5)) +
+  theme(legend.direction='horizontal')
+#}}}
+#{{{ f4b
+tp0 = tm1 %>% filter(bin=='TSS:-/+2k',epi=='umr',nfea=='top100',mod=='binary')
+tp = get_bar_stats(tp0, x='cond_note', grp='cond_note', pnl='bin_epi_nfea_mod')
+#{{{ sig
+tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
+tps0 = tp %>% select(-avg,-std,-grp) %>%
+    mutate(x = as.numeric(x)) %>%
+    spread(x, scores)
+tps1 = tps0 %>% mutate(sig = map2_chr(`1`,`2`, eval_signif)) %>%
+    mutate(xm = 1.5, xb=1, xe=2, ysig=.9)
+tps2 = tps0 %>% mutate(sig = map2_chr(`1`,`3`, eval_signif)) %>%
+    mutate(xm = 2, xb=1, xe = 3, ysig=.94)
+tps3 = tps0 %>% mutate(sig = map2_chr(`4`,`5`, eval_signif)) %>%
+    mutate(xm = 4.5, xb=4, xe = 5, ysig=.78)
+tps4 = tps0 %>% mutate(sig = map2_chr(`4`,`6`, eval_signif)) %>%
+    mutate(xm=5, xb=4, xe=6, ysig=.82)
+tps5 = tps0 %>% mutate(sig = map2_chr(`7`,`8`, eval_signif)) %>%
+    mutate(xm=7.5, xb=7, xe=8, ysig=.85)
+tps6 = tps0 %>% mutate(sig = map2_chr(`7`,`9`, eval_signif)) %>%
+    mutate(xm=8, xb=7, xe=9, ysig=.89)
+tps7 = tps0 %>% mutate(sig = map2_chr(`10`,`11`, eval_signif)) %>%
+    mutate(xm=10.5, xb=10, xe=11, ysig=.79)
+tps = rbind(tps1,tps2,tps3,tps4,tps5,tps6,tps7) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+#}}}
+pb = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=pal_simpsons()(11)) +
   o_margin(0,.2,.2,2.1) +
   theme(legend.position = 'none')
 #}}}
+#{{{ f4c
+tp0 = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary',
+                     epi %in% c("all","umr",'acrL'))
+tp = get_bar_stats(tp0, x='cond_note', grp='epi', pnl='bin_nfea_mod')
+#{{{ sig
+tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
+tps1 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
+    mutate(sig = map2_chr(all, umr, eval_signif)) %>%
+    inner_join(tps0, by=c('pnl','x')) %>%
+    mutate(x = as.numeric(x)) %>%
+    mutate(xm = x-.15, xb = x - .3, xe = x, ysig = ymax + .02) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
+    mutate(sig = map2_chr(umr, acrL, eval_signif)) %>%
+    inner_join(tps0, by=c('pnl','x')) %>%
+    mutate(x = as.numeric(x)) %>%
+    mutate(xm = x+.15, xb = x, xe = x +.3, ysig = ymax + .01) %>%
+    select(pnl,xm,xb,xe,ysig,sig)
+tps = rbind(tps1,tps2)
+#}}}
+cols3 = pal_aaas()(5)[c(1,3,2)]
+pc = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=cols3) +
+  o_margin(0,.2,.2,2.1) +
+  theme(legend.position = c(.5,1), legend.justification = c(.5,1)) +
+  theme(legend.direction='horizontal')
+#}}}
 
-p = ggarrange(pa, pc, pb, nrow=3, ncol=1,
+p = ggarrange(pa, pb, pc, nrow=3, ncol=1,
           labels = LETTERS[1:4], heights=c(1,1,1))
 fo = glue("{dirw}/31.bar.sig.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=8)
@@ -743,18 +745,23 @@ pc = plot_model_barplot(tpc, metric=metric,, x='cond_note', fill="mod",
 #}}}
 #{{{ pd
 tpd = tm1 %>% filter(bin=='TSS:-/+2k', epi=='umr', mod=='binary')
+tpd2 = tpd %>% group_by(bid,cond_note) %>%
+    summarise(ymax = mean(auroc) + sd(auroc) + .02) %>% ungroup()
+fx = glue("{dirw}/05.tk.tsv")
+tx = read_tsv(fx) %>% inner_join(tpd2) %>% mutate(txt=glue("({n_mtf})"))
 pd = plot_model_barplot(tpd, metric=metric,, x='cond_note', fill="nfea",
                         pnl='bin_epi_mod', x.rotate=T, cols=pal_simpsons()(8)) +
+  geom_text(data=tx, aes(x=cond_note,y=ymax,label=txt), vjust=0, size=2.5) +
   o_margin(0,.2,.2,2.1) +
   theme(legend.position = c(.5,1), legend.justification = c(.5,1))
 #}}}
-p = ggarrange(pa, pb, pd, nrow=3, ncol=1,
+p = ggarrange(pa, pc, pd, nrow=3, ncol=1,
           labels = LETTERS[1:4], heights=c(1.5, 1, 1.3))
 #}}}
 fo = glue("{dirw}/30.auroc.{tag}.pdf")
 p %>% ggexport(filename=fo, width=6, height=7)
 fo = glue("{dirf}/sf10.pdf")
-#p %>% ggexport(filename=fo, width=6, height=7)
+p %>% ggexport(filename=fo, width=6, height=7)
 # {{{ F1 scores
 #fo = glue("{dirw}/30.f1.{tag}.pdf")
 #p %>% ggexport(filename=fo, width=6, height=9)
@@ -762,6 +769,48 @@ fo = glue("{dirf}/sf10.pdf")
 #p %>% ggexport(filename=fo, width=6, height=9)
 #}}}
 #}}}
+#}}}
+
+#{{{ eval feature importance - sf11
+fm = glue('{dirw}/11.models.rds')
+tm = readRDS(fm)
+
+tp1 = tk %>% select(bid,mtfs) %>% unnest(mtfs) %>%
+    mutate(fc = (pos/ng)/(neg/ng_c)) %>%
+    select(bid,i,mid,pval,fc,fid,fname)
+tp2 = tm %>% select(vis) %>% unnest(vis) %>%
+    rename(mid=Variable,score=Importance) %>%
+    group_by(did,bid,bin,epi,nfea,mod,mid) %>%
+    summarise(avg=mean(score), std=sd(score), q25=quantile(score,.225),
+              q50=quantile(score,.5), q75=quantile(score,.75)) %>%
+    ungroup()
+tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
+    inner_join(tc0, by='bid')
+
+get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
+pval2symbol <- function(pval) ifelse(pval > .05, 'NS', ifelse(pval>.01, '*', ifelse(pval>.001, '**', '***')))
+tp %>% group_by(bid,bin,epi,nfea,mod) %>%
+    summarise(spc=cor(i, avg, method='spearman'),
+              p.raw=cor.test(i,avg, method='spearman')$p.value) %>%
+    ungroup() %>%
+    mutate(txt = pval2symbol(p.raw)) %>%
+    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
+
+tp0 = tp %>%
+    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
+tps = tp0 %>% arrange(bid, desc(q50)) %>%
+    group_by(bid) %>% slice(1:5) %>% ungroup()
+p = ggplot(tp0) +
+    geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
+    geom_text_repel(data=tps, aes(x=i,y=q50,label=fname), size=2) +
+    scale_x_continuous(expand=expansion(mult=c(.03,.03))) +
+    scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
+    facet_wrap(~cond_note, nrow=3, scale='free') +
+    otheme(xtext=T,xtick=T,ytitle=T,ytext=T,ytick=T, strip.compact=T)
+fo = glue("{dirw}/41.fea.imp.pdf")
+ggsave(p, file=fo, width=10, height=7)
+fo = glue("{dirf}/sf11.pdf")
+ggsave(p, file=fo, width=10, height=7)
 #}}}
 
 #{{{ gather & save model predictions for all B/M/W genes

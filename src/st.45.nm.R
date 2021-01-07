@@ -168,19 +168,23 @@ rd3 = r$rd3; rd5 = r$rd5
 clus = c('uni-modal','bi-modal', 'multi-modal (>=3)')
 tp = rd3 %>% mutate(clu = ifelse(nc==1, clus[1],
                          ifelse(nc==2, clus[2], clus[3]))) %>%
-    count(time, clu) %>% filter(time==25) %>%
+    filter(time==25) %>%
     mutate(time = glue("cold_{time}h")) %>%
+    count(drc, clu) %>%
+    mutate(drc = factor(drc, levels=c('up','down'))) %>%
     mutate(clu = factor(clu, levels=clus)) %>%
-    rename(tag1=time,tag2=clu)
+    rename(tag1=drc,tag2=clu)
 #
 pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='') +
     o_margin(.3,.3,.3,.3) +
     theme(legend.position='none')
 fo = glue("{dirw}/10.modal.dist.pdf")
 ggsave(pa, file=fo, width=3, height=5)
+fo = glue("{dirf}/f7a.rds")
+saveRDS(pa, fo)
 #}}}
 
-#{{{ example of uni- and bi- model genes
+#{{{ example of uni- and bi- model genes - f7b
 plot_lfc_cluster <- function(ti, tit, drc, gts3) {
     #{{{
     tp = ti %>% mutate(clu=factor(clu)) %>%
@@ -195,9 +199,10 @@ plot_lfc_cluster <- function(ti, tit, drc, gts3) {
         geom_vline(xintercept=off, size=.5, color='gray', linetype='dashed') +
         scale_fill_manual(values=cols4) +
         scale_color_manual(values=cols4) +
-        facet_wrap(tit ~., scale='free', nrow=3) +
-        otheme(xtext=T, ytext=T, xtick=T, ytick=T, xtitle=T, ytitle=T,
-            legend.pos='top.right')
+        facet_wrap(tit ~., scale='free', nrow=1) +
+        otheme(xtext=T, xtick=T, xtitle=T,
+            legend.pos='top.right') +
+        o_margin(0,.3,0,.3)
     #}}}
 }
 
@@ -222,9 +227,11 @@ ggarrange(plotlist=ps, nrow=3, ncol=3) %>%
 gids = c('Zm00001d011276', 'Zm00001d012312',
     'Zm00001d007630','Zm00001d040011',
     'Zm00001d038577','Zm00001d045565')
+gids=gids[c(2,5)]
 tp1 = rd3 %>% filter(gid %in% gids,time==25,drc=='up') %>% select(drc,gid,st,t_clu1=t_clu)
 gids = c('Zm00001d017130','Zm00001d007890',
          'Zm00001d032811', 'Zm00001d003460')
+gids=gids[c(2,4)]
 tp2 = rd5 %>% filter(gid %in% gids) %>% select(drc,gid,st,t_clu1)
 tp = tp1 %>% mutate(tag='unimodal') %>%
     bind_rows(tp2 %>% mutate(tag='bimodal')) %>%
@@ -232,13 +239,11 @@ tp = tp1 %>% mutate(tag='unimodal') %>%
     mutate(p = pmap(list(t_clu1, tit,drc), plot_lfc_cluster, gts3=gts3))
 ps = tp$p
 fo = glue("{dirw}/10.modal.pdf")
-pb = ggarrange(plotlist=ps, nrow=4, ncol=3)
-pb %>% ggexport(filename=fo, width=7, height=10)
+pb = ggarrange(plotlist=ps, nrow=2, ncol=2)
+pb %>% ggexport(filename=fo, width=5, height=5)
+fo = glue("{dirf}/f7b.rds")
+saveRDS(pb, fo)
 #}}}
-
-fo = glue("{dirf}/f7.pdf")
-ggarrange(pa, pb, nrow=1, widths=c(1,3)) %>%
-    ggexport(filename=fo, width=7, height=5)
 
 #{{{ read variable response
 fg = glue('{dird}/15_de/09.gene.status.rds')
@@ -256,8 +261,10 @@ ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
     select(cond,time,qry,tgt,gid,st,reg)
 #}}}
 #{{{ local association test
-#{{{i=1
-t_clu=x$t_clu1[[i]]; chrom=x$chrom[i]; start=x$start[i]; end=x$end[[i]]
+#{{{
+i=37
+drc=x$drc[i]; t_clu=x$t_clu1[[i]]
+chrom=x$chrom[i]; start=x$start[i]; end=x$end[[i]]
 vnt_scan <- function(t_clu,drc, chrom,start,end) {
     #{{{
     #pb$tick()
@@ -287,10 +294,26 @@ vnt_scan <- function(t_clu,drc, chrom,start,end) {
     f_map = glue("{pre}.map")
     write_delim(t_map, f_map, delim=" ", col_names=F, quote_escape=F)
     #
-    system(glue("plink --ped {pre}.ped --map {pre}.map --no-fid --no-parents --no-sex --1 --allow-extra-chr --indep-pairwise 50 5 0.99"))
-    system(glue("plink --ped {pre}.ped --map {pre}.map --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust --extract plink.prune.in"))
+    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --blocks --blocks-min-maf 0 --blocks-strong-highci 1 --blocks-inform-frac 0.8"))
+    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --indep-pairwise 50 5 0.99"))
+    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust --extract plink.prune.in"))
     system(glue("rm {pre}*"))
-    #
+    #{{{ haplo block
+    if (file.info("plink.blocks")$size == 0) {
+        tb = tibble()
+    } else {
+    fi = "plink.blocks.det"
+        tb = read_delim(fi, delim=' ', trim_ws=T, col_names=T) %>%
+            select(snps=SNPS) %>% mutate(bid=1:n()) %>%
+            mutate(snps = map(snps, str_split, pattern="[\\|]")) %>%
+            mutate(snps = map(snps, 1)) %>% unnest(snps) %>% rename(snp=snps) %>%
+            inner_join(vnt0, by='snp') %>%
+            group_by(bid) %>%
+            summarise(start=min(pos), end=max(pos),
+                      snp1=min(snp), snp2=max(snp)) %>%
+            ungroup()
+    }
+    #}}}
     fi = "plink.assoc.adjusted"
     tr = read_delim(fi, delim=' ', trim_ws=T, col_names=T) %>%
         select(snp=SNP, p.raw=UNADJ, p.bon=BONF, p.fdr=FDR_BH)
@@ -298,7 +321,7 @@ vnt_scan <- function(t_clu,drc, chrom,start,end) {
         select(chrom,pos,ref,alt,snp,everything())
     nsig = sum(p$p.bon < 0.05)
     nsig.fdr = sum(p$p.fdr < 0.05)
-    tibble(vnt=list(vnt), p=list(p), nsig=nsig, nsig.fdr=nsig.fdr)
+    tibble(vnt=list(vnt), p=list(p), block=list(tb), nsig=nsig, nsig.fdr=nsig.fdr)
     #}}}
 }
 fet <- function(x00,x01,x10,x11) fisher.test(matrix(c(x00,x10,x01,x11), nrow=2))$p.value
@@ -364,10 +387,7 @@ j = ti3
 
 j %>% filter(nsig>0,reg %in% c('cis','cis+trans')) %>%
     select(gid,p,nsig,reg,symbol) %>% print(n=40,width=Inf)
-
 #}}}
-
-
 
 #{{{ final plot
 #{{{ read
@@ -457,10 +477,10 @@ plot_box <- function(clu,assoc,vnt, gts3) {
 #}}}
 
 gids = c('Zm00001d046561', 'Zm00001d044762')
-gids = c('Zm00001d017130','Zm00001d041920','Zm00001d018794')
 gids = c('Zm00001d047307','Zm00001d003252','Zm00001d024425','Zm00001d018794','Zm00001d025016','Zm00001d020970','Zm00001d021891')
+gids = c('Zm00001d017130','Zm00001d041920','Zm00001d018794')
 gids = gids[1:7]
-i=2
+i=1
 gid=tp0$gid[i];pb=tp0$pb[i];pe=tp0$pe[i];srd=tp0$srd[i]
 vnt=tp0$vnt[[i]];assoc=tp0$assoc[[i]]
 tit=tp0$tit[i];clu=tp0$clu[[i]];gts=gts25;fo=tp0$fo[i]

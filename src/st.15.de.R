@@ -367,7 +367,7 @@ fo = file.path(dirw, '10.deg.venn.pdf')
 ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
-#{{{ simple gt venn graph - f5a, sf11a
+#{{{ simple gt venn graph - f5a, sf12a
 #{{{ preprocsss
 drcs = c('up','down')
 td2 = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -407,7 +407,7 @@ ggsave(p, filename=fo, width=4, height=4.5)
 fo = glue("{dirf}/f5a.rds")
 saveRDS(p, fo)
 #}}}
-#{{{ all panel venn- sf11a
+#{{{ all panel venn- sf12a
 tp = td3 %>%
     mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
     arrange(drc,cond)
@@ -424,12 +424,12 @@ p = ggplot(tpc) +
            legend.dir='h', legend.vjust=-.7)
 fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
 ggsave(p, filename=fo, width=4, height=8)
-fo = glue("{dirf}/sf11a.rds")
+fo = glue("{dirf}/sf12a.rds")
 saveRDS(p, fo)
 #}}}
 #}}}
 
-#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf11b
+#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf12b
 #{{{ preprocess
 drcs = c('up','down')
 ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -467,7 +467,7 @@ ty2 = ty %>%
 ty2 %>% count(cond, drc, nDE) %>% print(n=4)
 #}}}
 
-#{{{ heatmap plot - sf11b
+#{{{ heatmap plot - sf12b
 fmax=5
 drc = 'up'
 tp = ty2 %>% filter(drc==!!drc) %>%
@@ -496,7 +496,7 @@ p1 = ggplot() +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
 fp = glue("{dirw}/12.heatmap.pdf")
 ggsave(p1, file = fp, width = 8, height = 8)
-fo = glue("{dirf}/sf11b.rds")
+fo = glue("{dirf}/sf12b.rds")
 saveRDS(p1, fo)
 #}}}
 
@@ -557,7 +557,7 @@ ggsave(p1, file = fp, width = 8, height = 10)
 #}}}
 #}}}
 
-#{{{ genotypic difference in cold/heat response - f5, sf12
+#{{{ genotypic difference in cold/heat response - f5, sf13
 #{{{ multi-panel scatter plot
 tp = td %>% filter(ddrc != 0, deg != 'A=B=')
 linecol = 'azure3'; lty = 'solid'
@@ -567,7 +567,7 @@ tx = tibble(deg = c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-',
                     'A+B-','A-B+','A=B='),
              x = c(1:3, 5:7, 9:11))
 
-#{{{ scatter plot - sf12a
+#{{{ scatter plot - sf13a
 p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
@@ -582,12 +582,12 @@ p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1), shape=F)
-fo = glue("{dirf}/sf12a.rds")
+fo = glue("{dirf}/sf13a.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.pdf")
 ggsave(p, file = fp, width = 8, height = 9.5)
-#{{{ bar plot showing counts - sf12b
+#{{{ bar plot showing counts - sf13b
 tp1 = tp %>% count(cond, x, deg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -603,7 +603,7 @@ p = ggplot(tp1) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
-fo = glue("{dirf}/sf12b.rds")
+fo = glue("{dirf}/sf13b.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.cnt.pdf")
