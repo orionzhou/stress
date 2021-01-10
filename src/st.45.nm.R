@@ -5,6 +5,7 @@ tgl = gcfg$gene %>% select(gid,chrom,start,end,srd)
 tga = read_loci() %>% select(gid,symbol,note)
 txdb = load_txdb('Zmays_B73', primary=T)
 #{{{ functions
+require(cluster)
 read_vnt <- function(chrom,beg,end,
                      fv='~/projects/wgc/data/05_maize_merged/08.vcf.gz',
                      gts=gts31) {
@@ -77,6 +78,49 @@ rd = rr %>% gather(time, rc, -gid, -gt, -cond) %>%
     spread(cond, rc) %>%
     mutate(log2fc = log2(cold/control)) %>%
     arrange(gid, gt)
+#}}}
+
+#{{{ HY & NM consistency - sf15a
+fi = glue('{dird}/15_de/01.de.rds')
+ti = readRDS(fi)
+
+fc1 = ti %>% filter(Genotype %in% gts3, Treatment=='Cold', Timepoint==25, TimepointB == 25) %>%
+    select(gt=Genotype,ds) %>% unnest(ds) %>%
+    select(gid, gt, log2fc.hy=log2fc)
+fc2 = rd %>% filter(gt %in% gts3, time==25) %>%
+    select(gid,gt,log2fc.nm=log2fc)
+tp = fc1 %>% inner_join(fc2, by=c('gid','gt')) %>%
+    filter(!is.nan(log2fc.nm), is.finite(log2fc.nm)) %>%
+    rename(x=log2fc.hy, y=log2fc.nm)
+#
+tpl = tp %>% group_by(gt) %>% nest() %>% ungroup() %>%
+    mutate(fit = map(data, ~ lm(y~x, data=.x))) %>%
+    mutate(tidied = map(fit, glance))%>%
+    unnest(tidied) %>%
+    mutate(lab = glue("adjusted R<sup>2</sup> = {number(adj.r.squared,accuracy=.01)}")) %>%
+    print(width=Inf)
+fcm = 5
+tp = tp %>%
+    mutate(x = pmax(pmin(x,fcm), -fcm)) %>%
+    mutate(y = pmax(pmin(y,fcm), -fcm))
+#{{{ plot
+p = ggplot(tp, aes(x=x,y=y)) +
+    geom_hex(bins=80) +
+    geom_richtext(data=tpl, aes(x=-5,y=5,label=lab,hjust=0,vjust=1), size=2.5) +
+    scale_x_continuous(name='mean log2fc in HY experiment', limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name='log2fc in NM experiment', limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
+    scale_fill_viridis(name='density', direction=-1) +
+    #scale_fill_manual(name='', values=pal_npg()(3)[c(3,2,1)]) +
+    facet_wrap(gt~., nrow=3) +
+    otheme(legend.pos='none', legend.title=T, legend.dir='v',
+           legend.box='h', legend.vjust=-.5, panel.spacing=.3,
+           xtext=T, xtick=T, xtitle=T, ytitle=T, ytext=T, ytick=T,
+           xgrid=T, ygrid=T) + o_margin(.3,.3,.3,.3)
+#}}}
+fo = glue("{dirw}/08.fc.pdf")
+ggsave(p, file=fo, width=3, height=7)
+fo = glue("{dirf}/sf15a.rds")
+saveRDS(p, fo)
 #}}}
 
 #{{{ mclust
@@ -295,8 +339,9 @@ vnt_scan <- function(t_clu,drc, chrom,start,end) {
     write_delim(t_map, f_map, delim=" ", col_names=F, quote_escape=F)
     #
     system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --blocks --blocks-min-maf 0 --blocks-strong-highci 1 --blocks-inform-frac 0.8"))
-    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --indep-pairwise 50 5 0.99"))
-    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust --extract plink.prune.in"))
+    #system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --indep-pairwise 50 5 0.99"))
+    #system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust --extract plink.prune.in"))
+    system(glue("plink --file {pre} --no-fid --no-parents --no-sex --1 --allow-extra-chr --assoc --adjust"))
     system(glue("rm {pre}*"))
     #{{{ haplo block
     if (file.info("plink.blocks")$size == 0) {
@@ -365,21 +410,23 @@ ti2 = ti %>%
     mutate(time=as.integer(time)) %>%
     mutate(sig = ifelse(nsig > 0,'sig','insig')) %>%
     left_join(ddeg3, by=c("time",'gid')) %>%
-    replace_na(list(reg = 'bkg'))
+    filter(!is.na(reg))
 ti2 %>% count(reg, sig) %>% spread(sig,n) %>% mutate(prop=sig/(sig+insig))
 
-#{{{ plot cis/trans prop
+#{{{ plot cis/trans prop - sf15b
 regs = c("bkg","cis","cis+trans",'trans','conserved','unexpected')
 sigs = c('sig','insig')
 tp = ti2 %>% count(reg, sig) %>% rename(tag1=reg, tag2=sig) %>%
     mutate(tag1=factor(tag1, levels=regs)) %>%
     mutate(tag2 = factor(tag2, levels=sigs))
-pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='') +
+p = cmp_proportion1(tp, ytext=T, xangle=15, lab.size=2) +
     o_margin(.3,.3,.3,.3) +
     theme(legend.position='none')
-fo = glue("{dirw}/17.reg.pdf")
-ggsave(pa, file=fo, width=4, height=4)
 #}}}
+fo = glue("{dirw}/17.reg.pdf")
+ggsave(p, file=fo, width=4, height=4)
+fo = glue("{dirf}/sf15b.rds")
+saveRDS(p, fo)
 
 # add symbol & note
 ti3 = ti2 %>% inner_join(tga, by='gid')
@@ -426,7 +473,7 @@ fimo_locate <- function(gid,fm,nfea) {
     cmd = glue("fimo.py prepare_ml tmp.tsv {fm} tmp.bed --epi raw --nfea {nfea} --fmt long")
     system(cmd)
     ti = read_tsv('tmp.bed', col_names=c("gid",'start','end','mid'))
-    system("rm tmp.bed")
+    system("rm tmp.tsv tmp.bed")
     ti
     #}}}
 }
@@ -453,67 +500,106 @@ get_mtf_loc <- function(gid, fm, nfea, tk, srd, pb) {
 }
 plot_box <- function(clu,assoc,vnt, gts3) {
     #{{{ boxplot
-    tp = assoc %>% arrange(p.bon) %>% slice(1) %>%
-        select(chrom,pos,ref,alt) %>%
+    tp1 = assoc %>% arrange(p.bon) %>% slice(1) %>%
+        select(chrom,pos,ref,alt)
+    xtit = tp1 %>%
+        mutate(ref = ifelse(nchar(ref)>=5, glue('[{nchar(ref)}]'), ref)) %>%
+        mutate(xtit=glue("{chrom}:{pos}:{ref}/{alt}")) %>%
+        pluck('xtit',1)
+    tp = tp1 %>%
         inner_join(vnt, by=c('chrom','pos','ref','alt')) %>%
         inner_join(clu, by=c('sid'='gt')) %>%
         select(sid,gt,clu,log2fc) %>%
         arrange(clu) %>%
-        mutate(gtc = ifelse(sid %in% gts3, sid, 'ZZZ'))
+        mutate(gtc = ifelse(sid %in% gts3, sid, 'other')) %>%
+        mutate(gtc = factor(gtc, levels=c(gts3,'other')))
     #
     ggplot(tp, aes(x=gt, y=log2fc)) +
-        geom_boxplot(aes(group=gt), size=.5, width=.7) +
+        geom_boxplot(aes(group=gt), size=.5, width=.7, outlier.shape=NA) +
         geom_jitter(aes(color=gtc), width=.3, size=2, alpha=.9) +
         #geom_text(data=tps, aes(x=st,y=500*1.01,label=lab), size=2.5,vjust=0) +
-        scale_x_continuous(breaks=c(0,1),labels=c('ref','alt'),expand=expansion(mult=c(.2,.2))) +
+        scale_x_continuous(name=xtit,breaks=c(0,1),labels=c('ref','alt'),expand=expansion(mult=c(.2,.2))) +
         scale_y_continuous(name='log2FoldChange', expand=expansion(mult=c(.02,.02))) +
         scale_color_aaas() +
         #ggtitle(tp$tit[1]) +
-        otheme(ytitle=T,ytext=T,ytick=T, xtick=T, xtext=T,
-               legend.pos='top.right', panel.spacing=.2, strip.compact=F) +
+        otheme(ytitle=T,ytext=T,ytick=T, xtitle=T,xtick=T, xtext=T,
+               legend.pos='top.center.out',legend.dir='h', legend.vjust=-.4,
+               panel.spacing=.2, strip.compact=F) +
+        o_margin(2,.3,.3,.1) +
+        guides(color=guide_legend(nrow=2)) +
+        theme(axis.title.x=element_text(size=7.5)) +
         theme(plot.title=element_text(size=8))
     #}}}
 }
 #}}}
 
-gids = c('Zm00001d046561', 'Zm00001d044762')
-gids = c('Zm00001d047307','Zm00001d003252','Zm00001d024425','Zm00001d018794','Zm00001d025016','Zm00001d020970','Zm00001d021891')
-gids = c('Zm00001d017130','Zm00001d041920','Zm00001d018794')
-gids = gids[1:7]
-i=1
-gid=tp0$gid[i];pb=tp0$pb[i];pe=tp0$pe[i];srd=tp0$srd[i]
-vnt=tp0$vnt[[i]];assoc=tp0$assoc[[i]]
-tit=tp0$tit[i];clu=tp0$clu[[i]];gts=gts25;fo=tp0$fo[i]
-plot_gene_vnt <- function(gid,pb,pe,srd,vnt,assoc,tit,clu,gts,fo,
+gids = c('Zm00001d006065','Zm00001d047307','Zm00001d003252','Zm00001d024425',
+    'Zm00001d052653','Zm00001d018794','Zm00001d025016','Zm00001d020970',
+    'Zm00001d041920','Zm00001d021891')
+gids = c('Zm00001d003252')
+gids = c('Zm00001d024425')
+gids = c('Zm00001d017130')
+gids = c('Zm00001d020970') # sf16b
+gids = c('Zm00001d052653') # sf16a
+plot_gene_vnt <- function(gid,pb,pe,srd,vnt,assoc,blk,tit,clu,gts,fo,
                           txdb,fm,nfea,tk) {
     #{{{
     tg = txdb_gene(txdb, gid, gb=0)
     pg = plot_genes(tg, pb, pe, label.top=T)
     tm = get_mtf_loc(gid, fm, nfea, tk, srd, pb)
-    #
-    assoc2 = assoc %>% mutate(sig=p.bon < 0.05) %>% select(chrom,pos,ref,alt,sig)
-    tp = vnt %>% replace_na(list(gt=9)) %>% mutate(gt = factor(gt)) %>%
-        mutate(i = as_integer(factor(pos)))
-    tpy = tp %>% distinct(sid) %>% filter(sid %in% gts) %>%
-        mutate(sid = factor(sid, levels=gts[gts %in% tp$sid])) %>%
+    #{{{ prepare
+    assoc2 = assoc %>% mutate(sig=p.bon < 0.05) %>%
+        select(chrom,pos,ref,alt,sig)
+    vnt0 = vnt %>% distinct(chrom,pos,ref,alt) %>%
+        mutate(snp=glue("v{1:n()}")) %>%
+        mutate(snp = as_factor(snp))
+    tp0 = vnt %>%
+        inner_join(vnt0, by=c('chrom','pos','ref','alt')) %>%
+        mutate(i = as_integer(snp))
+    tp0w = tp0 %>% select(snp,sid,gt) %>% spread(snp,gt)
+    sids = hc_order_row(tp0w, cor.opt='gower')
+    tp = tp0 %>% replace_na(list(gt=9)) %>% mutate(gt = factor(gt)) %>%
+        mutate(sid = factor(sid, levels=sids[sids %in% clu$gt]))
+    tpy = tp %>% distinct(sid) %>%# filter(sid %in% gts) %>%
+        #mutate(sid = factor(sid, levels=gts[gts %in% tp$sid])) %>%
         mutate(y = -1 -as_integer(sid) * .5)
     tp = tp %>% inner_join(tpy, by='sid') %>%
         mutate(x = pb + (pe-pb)/max(tp$i) * i)
-    tpx = tp %>% distinct(chrom, pos, ref, alt, x) %>%
+    tpx = tp %>% distinct(i, snp, chrom, pos, ref, alt, x) %>%
         left_join(assoc2, by=c("chrom",'pos','ref','alt')) %>%
         replace_na(list(sig=F))
+    xmin=min(tpx$pos,tpx$x); xmax = max(tpx$pos,tpx$x)
+    tpx0 = tpx %>% select(snp,pos,x)
+    #}}}
+    #{{{ block
+    tpb = blk %>%
+        inner_join(tpx0, by=c('snp1'='snp')) %>%
+        rename(pos1=pos,x1=x) %>%
+        inner_join(tpx0, by=c('snp2'='snp')) %>%
+        rename(pos2=pos,x2=x) %>%
+        select(snp1,snp2,pos1,pos2,x1,x2) %>%
+        mutate(hcol = rep(1:5, as.integer(nrow(blk)/5)+1)[1:nrow(blk)]) %>%
+        mutate(hcol = factor(hcol))
+    tpt = clu %>% rename(sid=gt) %>% inner_join(tpy, by='sid') %>%
+        mutate(txt = str_pad(number(log2fc, accuracy=1), width=2, pad=' '))
+    #}}}
+    #{{{ plot
     cols_vcf = c(pal_simpsons()(2), 'white')
-    seg.sizes = c(.1,.5)
+    seg.sizes = c(.1,.5); blk.size = .7
     seg.cols = c('gray','orange red')
+    blk.col = pal_lancet()(3)[1]
     pa = pg +
         geom_point(data=tm, aes(x=pos,y=.3), size=1, color='red') +
         geom_text(data=tm, aes(x=pos,y=.3,label=txt), size=1.5,vjust=.5,angle=30) +
         geom_segment(data=tpx, aes(x=pos,y=0,xend=pos,yend=-.5, color=sig, size=sig), lineend='round') +
         geom_segment(data=tpx, aes(x=pos,y=-.5,xend=x,yend=-1.1, color=sig, size=sig), lineend='round') +
+        geom_segment(data=tpb, aes(x=pos1,xend=pos2,y=0,yend=0),color=blk.col,size=blk.size) +
+        geom_segment(data=tpb, aes(x=x1,xend=x2,y=-1.1,yend=-1.1),color=blk.col,size=blk.size) +
+        geom_text(data=tpt, aes(x=xmax, y=y, label=txt),size=2,hjust=0) +
         geom_tile(data=tp, aes(x=x, y=y, fill=gt), alpha=1) +
         scale_x_continuous(label=label_number(accuracy=1),
                            position='top',
-                           limits=c(pb,pe),expand=expansion(mult=c(0,0))) +
+                           limits=c(pb,pe),expand=expansion(mult=c(0,.03))) +
         scale_y_continuous(breaks=tpy$y,labels=tpy$sid,
                            expand=expansion(add=c(0,.4),mult=c(0,0))) +
         scale_color_manual(values = seg.cols) +
@@ -524,54 +610,36 @@ plot_gene_vnt <- function(gid,pb,pe,srd,vnt,assoc,tit,clu,gts,fo,
                margin=c(0,0,0,0)) +
         theme(axis.text.x = element_text(size=6)) +
         theme(axis.text.y = element_text(size=6))
-    pb = plot_box(clu,assoc,vnt, gts3) +
-        ggtitle(tit)
-    ggarrange(pa, pb, nrow=1, ncol=2, widths=c(2,1)) %>%
-        ggexport(filename=fo, width=8, height=3)
+    #}}}
+    pb = plot_box(clu,assoc,vnt, gts3) + ggtitle(tit)
+    p = ggarrange(pa, pb, nrow=1, ncol=2, widths=c(3,1))
+    p %>% ggexport(filename=fo, width=8, height=3)
+    p
     #}}}
 }
 tp0 = ti %>% filter(gid %in% gids) %>% rename(assoc = p) %>%
     inner_join(rd5b, by=c('drc','time','gid')) %>%
     inner_join(tgl, by='gid') %>%
     mutate(pb=start-2000, pe=end+2000) %>%
-    mutate(tit=glue("{time}h {gid} [B|M|W]={st}")) %>%
+    mutate(tit=glue("[B|M|W]={st}")) %>%
     mutate(fo = glue("{dirw}/{gid}.pdf"))
+i=1; gid=tp0$gid[i];pb=tp0$pb[i];pe=tp0$pe[i];srd=tp0$srd[i]
+vnt=tp0$vnt[[i]];assoc=tp0$assoc[[i]]; blk=tp0$block[[i]]
+tit=tp0$tit[i];clu=tp0$clu[[i]];gts=gts25;fo=tp0$fo[i]
 tp = tp0 %>% mutate(gts = list(gts25)) %>%
-    mutate(p = pmap(list(gid, pb, pe, srd, vnt, assoc, tit, clu, gts, fo),
+    mutate(p = pmap(list(gid, pb, pe, srd, vnt,assoc,block, tit,clu,gts,fo),
                     plot_gene_vnt, txdb=!!txdb,
                     fm=!!fm, nfea=!!nfea, tk=!!tk)) %>%
     print(width=Inf)
-#ggexport(tp$p[[1]], filename=fo, width=8, height=3)
+
+fo = glue("{dirf}/f7c.rds")
+saveRDS(tp$p[[1]], fo)
+
+fo = glue("{dirf}/sf16a.rds")
+saveRDS(tp$p[[1]], fo)
+fo = glue("{dirf}/sf16b.rds")
+saveRDS(tp$p[[1]], fo)
 #}}}
 
 
-
-#{{{ plot uni-modal vs bi-modal BIC distri. [old]
-ti2 = ti %>% select(drc,time,gid,nc0=nc, t_bic) %>% unnest(t_bic) %>%
-    select(-vbic) %>%# rename(bic=vbic) %>%
-    filter(nc <= 2) %>% spread(nc, bic) %>%
-    mutate(dbic = `2`-`1`) %>% replace_na(list(dbic=-2)) %>%
-    mutate(nc = ifelse(nc0 > 2, 2, nc0))
-
-smin = -10; smax = 20; step = 2
-itvs = seq(smin,smax,by=step)
-tp = ti2 %>% filter(time==25) %>%
-    #mutate(score = pmin(20, pmax(0, tstat))) %>%
-    mutate(score = pmin(smax, pmax(smin, dbic))) %>%
-    mutate(bin = cut(score, breaks = itvs, include.lowest=T, right=T)) %>%
-    mutate(bin = as.numeric(bin)) %>%
-    mutate(nc = ifelse(nc==1, 'uni-modal', 'bi/multi-modal')) %>%
-    count(nc, bin)
-#
-p = ggplot(tp, aes(x=bin,y=n)) +
-    geom_col(aes(fill=nc),position=position_dodge(width=.8)) +
-    geom_vline(xintercept = 5.5, size=.5, linetype='dashed') +
-    scale_x_continuous(name = "BIC Difference(bimodal, unimodal)") +
-    scale_y_continuous(name = "Number Genes", expand=expansion(mult=c(0,.02))) +
-    scale_fill_npg(name = 'type') +
-    otheme(xtext=T,ytext=T,xtitle=T,ytitle=T,xtick=T,ytick=T,
-           legend.pos='top.right')
-fo = glue("{dirw}/10.modal.pdf")
-ggsave(p, file=fo, width=6, height=6)
-#}}}
 

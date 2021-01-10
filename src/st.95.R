@@ -109,11 +109,27 @@ ggexport(filename="f6.pdf", width=8, height=7)
 #{{{ Fig 7
 a = readRDS('f7a.rds')
 b = readRDS('f7b.rds')
-c = image_read_pdf("../../45_nam/Zm00001d017130.pdf")
+c = readRDS('f7c.rds')
 fo = glue("{dirf}/f7.pdf")
 ab = ggarrange(a, b, nrow=1, widths=c(1,2), labels=LETTERS[1:2])
-ggarrange(ab, as.grob(c), nrow=2, heights=c(1.5,1), labels=c('','C')) %>%
-    ggexport(filename=fo, width=6, height=7)
+ggarrange(ab, c, nrow=2, heights=c(1,1), labels=c('','C')) %>%
+    ggexport(filename=fo, width=7, height=7)
 #}}}
 
+#{{{ Fig S15
+a = readRDS('sf15a.rds')
+b = readRDS('sf15b.rds') + o_margin(.3,.3,.3,.3)
+b = ggarrange(b, NULL, nrow=2, ncol=1, heights=c(1,1.8))
+ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
+          widths=c(2,2,2), heights=c(2,2)) %>%
+ggexport(filename="sf15.pdf", width=6, height=7)
+#}}}
+
+#{{{ Fig S16
+a = readRDS('sf16a.rds')
+b = readRDS('sf16b.rds')
+ggarrange(a, b, nrow=2, ncol=1, labels=LETTERS[1:5],
+          widths=c(2,2,2), heights=c(2,2)) %>%
+ggexport(filename="sf16.pdf", width=6, height=6)
+#}}}
 

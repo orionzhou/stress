@@ -51,21 +51,10 @@ dirf = '/home/springer/zhoux379/projects/stress/data/95_figures/plots'
 
 Figure S1. Experimental design used for generation of RNA-Seq data. (A) Temperature readings from a sensor that was with the plants throughout the experiment and shows the time of light / dark (gray shading indicates time without lights). (B) Three different experiments were conducted to assess the changes in gene expression in response to cold or heat stress in 14 day maize seedlings.  In experiment 1 (time course - TC) one replicate for three inbreds was collected at each of the indicated time-points.  In experiment 2 (inbred - hybrid - HY, second row) three biological replicates were sampled from three maize inbreds and their F1 hybrids at time 0 and two time points during the stress.  In experiment 3 a single biological replicate was sampled for a panel of 25 genotypes under control and cold conditions at two time points.
 
-
-\pagebreak
-![](plots/f1.pdf){width=100%}
-
-Figure 1. Identification of genes that are differentially expressed in response to heat or cold stress. (A) t-SNE clustering of samples from the HY experiment under control, cold and heat conditions.  The genotypes are indicated by different symbols/colors and the conditions for each set of samples are indicated in the plot. (B) Number of differentially expressed genes (DEGs) under cold and heat conditions at 1 and 25 hour time points. For each time point the number of genes that showed differential expression (see Methods) relative to the control sampled at time 0 (the onset of the stress; time0_control) is shown as well as the number of genes that showed differential expression relative to the control sample collected at matching time point (i.e., 1h or 25h; timeM_control). Numbers inside red bar represent genes that are differentially expressed in both comparisons.
-
 \pagebreak
 ![](plots/sf02.pdf){width=100%}
 
 Figure S2. Hierarchical (A) and t-SNE (B) clustering of all samples from the time course (TC) experiment under control, cold and heat conditions.  (A) The samples showed strong clustering by genotype (indicated by color of labels) and within each genotype the samples tend to cluster by treatment.  (B) t-SNE plot shows similar clustering based on both genotype and treatment.
-
-\pagebreak
-![](plots/f2.pdf){width=100%}
-
-Figure 2. Expression profile and GO enrichment of cold- and heat-responsive gene clusters.  B73, Mo17 and W22 genes that exhibit significant DE after 1 hour or 25 hours stress treatment were used to perform co-expression clustering based on their time-course expression pattern (see methods).  (A) Expression pattern for the most abundant co-expression clusters that represent early, late or transient changes upon cold or heat treatment.  The median expression level of control and stress conditions for the genes within each module is shown and the number of B73, Mo17 and W22 genes in each module is indicated. Ranges at each time point represent 25%-75% quantile expression levels. (B) For the set of all up-regulated genes under cold or heat conditions we determined the number of TFs and assessed GO enrichment.  Two highly enriched GO terms (with significance p < 0.01) are shown for each module, and the significance level is indicated.
 
 \pagebreak
 ![](plots/sf03.pdf){width=100%}
@@ -87,10 +76,6 @@ Figure S5. Characterization of maize Heat Shock Factors (HSF) response to heat s
 
 Figure S6. Characterization of TFs that have previously been reported to play a role in maize response to cold. Out of 235 previously reported cold stress-related TFs, 109 TFs were expressed with ≥ 5 CPM for at least one sample (treatment x time point), while 43 were differentially expressed in response to cold stress and assigned into cold up-regulated modules including: (A) late activation, (B) early activation, (C) differentially expressed (DE). DE cold up-regulated genes were identified in the hybrid experiment (3 replicates, 1h and 25h after stress) and TF gene response to cold stress in the time-series (1 replicate, 9 time points) may not depict cold up-regulation for each DE gene.
 
-\pagebreak
-![](plots/f3.pdf){width=70%}
-
-Figure 3. Identification of enriched motifs in cold- and heat-responsive genes. (A) Varying potential ‘promoter’ sequence spaces were utilized to search for motifs that are enriched in different sets of genes.  The schematic indicates a representative gene with the transcription start site (TSS) indicated.  The potential regions include different lengths of sequences upstream the promoter (-500, -1k, -2k) as well as sets of sequence that include both upstream and downstream sequence (i.e., +/-500).  In addition, for each of these potential regions we also subset the sequence to only include regions that are unmethylated (UMR - unmethylated regions) or that are classified as accessible based on ATAC analysis (ACR - accessible chromatin region) in leaf or ear tissue (Ricci et al., 2019).  (B) Co-expression modules as well as the entire set of cold-/heat- up-/down-regulated genes were used to search for enriched motifs (see Methods).  The number of non-redundant motifs found using +/- 2k promoter sequence as well as different epigenetic filters (i.e., UMRs, ACRs) were shown. The numbers on the right side of the plot indicate the total number of non-redundant motifs found for each set of genes using +/-2k promoter space as well as the other promoter spaces of different sizes (shown in Figure S7).
 
 \pagebreak
 ![](plots/sf07.pdf){width=100%}
@@ -108,20 +93,9 @@ Figure S8. Enriched motifs include known transcription factor binding sites (TFB
 Figure S9. Meta plots of selected stress-responsive motifs in gene promoters.  Two to four motifs from each of the seven co-expression clusters (cold early activation, cold late activation, etc.) with their relative locations in the TSS:-/+2k region cut into 40 bins.  The occurrence of each motif in these bins were recorded and the proportion of genes contains the motif in each bin is plotted.
 
 \pagebreak
-![](plots/f4.pdf){width=60%}
-
-Figure 4. Performance (Area Under ROC Curve, AUROC) comparison of different machine learning models predicting cold and heat responsive expression.  (A) performance comparison of models trained using small promoter spaces (-500, +500, -/+500) against large promoter spaces (-2k, +2k, -/+2k).  In each case same epigenetic filters (UMR) and number of features (top100) were used for training; (B) performance comparison of models trained using the full set of DEGs against models trained using specific co-expression clusters.  In each case same sized promoter spaces (-/+2k), epigenetic filters (UMR) and number of features (top100) were used;  (C) performance comparison of models using all genomic sequence ("all", blue), UMR regions only ("umr", green) or using leaf accessible regions only ("acrL", red) with the same sized promoter spaces (-/+2k) and number of features (top100).  In each training average AUROC (N=100 model runs) is show along with the standard deviation.  Pairwise comparisons were made using t-test with significance levels indicated (\*: 0.05; \*\*: 0.01; \*\*\*: 0.001)
-
-\pagebreak
 ![](plots/sf10.pdf){width=60%}
 
 Figure S10. Performance (Area Under ROC Curve, AUROC) of machine learning models predicting cold and heat responsive expression.  Models were trained to predict expression responses to heat or cold using: (A) different sizes of promoter sequences surrounding the TSS; (B) using "binary encoding" (0/1) or "quantitative encoding" (0/1/2/...) of motifs and and (C) using different numbers of mostly enriched motifs as input features. Number of non-redundant motifs used for model training are indicated on top of each set of bars in (C). In each training the average AUROC (N=100 model runs) is show along with the standard deviation.
-
-
-\pagebreak
-![](plots/f5.pdf){width=100%}
-
-Figure 5. Characterization of genes with variable stress responsive patterns among inbreds.  (A) A Venn diagram is used to assess genes that are up-regulated in response to 25h of cold stress for B73, Mo17 and W22.  The overlap of DE genes at other time points is shown in Figure S11A.  (B) For genes that show significantly stronger (or weaker) response to cold at 25h in B73 compared to Mo17 we show the log2 fold-change (cold 25h / control 25h) for both inbreds. The classification of differential responses for other genotype contrasts and timepoints is provided in Figure S12.  Above the diagonal line are genes showing stronger cold response in Mo17 while those below the diagonal line represent genes showing stronger B73 response. Different colors indicate groups of genes with different DE status (e.g., red genes are ones up-regulated in both inbreds (but showing significantly different response), green are genes only up-regulated in Mo17).   The number of genes in each category is shown in (C). For each class the response in the two genotypes (A and B) is indicated as up-regulated (“+”), down-regulated (“-”) or not DE (=).  (D) For the subset of genes classified as having a response in only one of the two genotypes that also had SNPs we assessed allele-specific expression in the F1 hybrid.  The proportion of allele 1 (B73) change in stress vs control of the F1 (x-axis) was compared to the proportion of the change in expression in the parental genotypes (y-axis).  A maximum likelihood model was applied to classify cis- and trans- inheriance patterns and shown in different colors. The number of genes classified into each type of regulatory pattern for response to abiotic stress are shown in (E).  Similar analyses for other genotypes, stress and time points are shown in Figure S13.
 
 
 \pagebreak
@@ -149,20 +123,9 @@ Figure S14. Cis/trans characterization of genes showing different stress respons
 
 
 \pagebreak
-![](plots/f6.pdf){width=100%}
-
-Figure 6. Cross-genotype performance of machine learning models predicting cold or heat responsive expression.  Models were trained only using B73 sequence and labels ("B model") or data from all three genotypes ("BMW model"). (A) Area Under ROC curve (AUROC) for models predicting stress responsive expression in B73, Mo17 and W22. (B) Model prediction accuracy for genes showing consistent ("Both respond") or variable ("Only B73/Mo17/W22 respond") response patterns among genotypes.  In each observed category the number and proportion of predictions were marked in the plot with the correct predictions highlighted with red boxes.  (C) Dissection of regulatory patterns for genes showing variable response patterns among genotypes.  Variable response genes were first grouped by whether model prediction agrees with observed status ("Correct" if the model correctly predicts one genotype responds but the other does not, "Incorrect" if the model predicts oppositely, "Both respond" and "Neither respond" if the model predicts both or neither genotypes respond - although in reality only one genotype responds). Then within each group the number of proportion of different regulatory patterns ("cis", "trans", etc) were marked.
-
-
-\pagebreak
 ![](plots/sf15.pdf){width=70%}
 
 Figure S15. Identification of cis-regulatory variants associated with variable cold responsive pattern in a panel of 25 maize genotypes.  (A) Consistency of log2 fold changes for each gene called between two experiments: the replicated HY experiment with 3 maize inbreds (x-axis) and the NM experiment with 25 maize genotypes (y-axis).  Point density is shown to avoid over plotting.  Linear regression is performed and the adjusted R2 values are marked.  (B) Cis-regulated variable response genes are enriched in having significantly associated local variants.  Shown are proportions of genes with detected local associations for variable response genes under different regulatory patterns.
-
-\pagebreak
-![](plots/f7.pdf){width=80%}
-
-Figure 7. Identification of cis-regulatory variants associated with variable cold responsive pattern in a panel of 25 maize genotypes. (A) Proportion of ~2000 variable response genes showing uni-modal, bi-modal and multi-modal distributions of the log2 fold change ratios (cold/control);  (B) Examples of two genes showing uni-modal log2fc ratios and two showing bi-modal ratio distributions;  (C) Cis-regulatory variation associated with cold responsiveness in a maize mitochondrial transcription termination factor (mTERF17).  Heatmap shows bi-allelic variants (SNP and short indels) within 2kb of the gene with yellow indicating reference (B73) allele and blue indicating alternate allele.  Log2 fold change of each genotype is show on the right of the heatmap. Below the gene structure plot are locations of the most (top30) enriched cold-responsive motifs (red dots ) with the motif name marked, as well as haplotype blocks (dark blue segments) identified using PLINK.  Boxplot on the right shows the top associating variant and the log2fc distributions of genotypes carrying the two alleles.
 
 
 \pagebreak

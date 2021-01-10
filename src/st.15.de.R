@@ -83,7 +83,7 @@ tc2 = th1 %>% distinct(Genotype, Treatment, Timepoint, cond) %>%
 tc = rbind(tc1, tc2)
 
 x = call_deg(th1, tm, tc)
-fo = file.path(dirw, '01.de.rds')
+fo = glue('{dird}/15_de/01.de.rds')
 saveRDS(x, fo)
 #}}}
 
