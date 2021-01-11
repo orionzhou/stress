@@ -785,7 +785,7 @@ tp2 = tm %>% select(vis) %>% unnest(vis) %>%
               q50=quantile(score,.5), q75=quantile(score,.75)) %>%
     ungroup()
 tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
-    inner_join(tc0, by='bid')
+    inner_join(tc0, by='bid') %>% filter(bid <= 'b11')
 
 get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
 pval2symbol <- function(pval) ifelse(pval > .05, 'NS', ifelse(pval>.01, '*', ifelse(pval>.001, '**', '***')))
@@ -803,10 +803,10 @@ tps = tp0 %>% arrange(bid, desc(q50)) %>%
 p = ggplot(tp0) +
     geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
     geom_text_repel(data=tps, aes(x=i,y=q50,label=fname), size=2) +
-    scale_x_continuous(expand=expansion(mult=c(.03,.03))) +
+    scale_x_continuous(name="Motif Enrichment Ranking", expand=expansion(mult=c(.03,.03))) +
     scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
     facet_wrap(~cond_note, nrow=3, scale='free') +
-    otheme(xtext=T,xtick=T,ytitle=T,ytext=T,ytick=T, strip.compact=T)
+    otheme(xtext=T,xtick=T,xtitle=T,ytitle=T,ytext=T,ytick=T, strip.compact=T)
 fo = glue("{dirw}/41.fea.imp.pdf")
 ggsave(p, file=fo, width=10, height=7)
 fo = glue("{dirf}/sf11.pdf")
