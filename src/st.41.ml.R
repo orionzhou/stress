@@ -559,7 +559,8 @@ tps3 = tp %>% filter(grp=='-/+') %>% select(-avg,-std) %>%
 tps = rbind(tps1,tps2,tps3)
 #}}}
 #
-pa = plot_barplot(tp, tps, x.rotate=F, ylab=metric, cols=pal_npg()(5)) +
+cols3 = pal_simpsons()(3)
+pa = plot_barplot(tp, tps, x.rotate=F, ylab=metric, cols=cols3) +
   theme(legend.position = c(.37,.95), legend.justification = c(.5,.5)) +
   theme(legend.direction='horizontal')
 #}}}
@@ -588,7 +589,7 @@ tps7 = tps0 %>% mutate(sig = map2_chr(`10`,`11`, eval_signif)) %>%
 tps = rbind(tps1,tps2,tps3,tps4,tps5,tps6,tps7) %>%
     select(pnl,xm,xb,xe,ysig,sig)
 #}}}
-pb = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=pal_simpsons()(11)) +
+pb = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=rep('black',20)) +
   o_margin(0,.2,.2,2.1) +
   theme(legend.position = 'none')
 #}}}
@@ -613,6 +614,7 @@ tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
 tps = rbind(tps1,tps2)
 #}}}
 cols3 = pal_aaas()(5)[c(1,3,2)]
+cols3 = pal_jco()(3)
 pc = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=cols3) +
   o_margin(0,.2,.2,2.1) +
   theme(legend.position = c(.5,1), legend.justification = c(.5,1)) +

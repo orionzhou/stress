@@ -629,9 +629,10 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     facet_wrap(scope ~ ., nrow=1) +
     otheme(legend.pos='bottom.left', legend.dir='v', legend.title=T,
            margin = c(.3,.3,.3,5.3), legend.vjust=-1.7,
-           strip.compact=F, panel.spacing = .5,
+           strip.size=12, strip.compact=F, panel.spacing = .5,
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
     theme(legend.position = c(0,0), legend.justification = c(1,0)) +
+    theme(legend.title = element_text(size=10)) +
     theme(axis.text.x = element_text(angle=25, hjust=1, vjust=1, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)

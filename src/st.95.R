@@ -10,7 +10,7 @@ b = readRDS('f1b.rds')
 ggarrange(a, b, nrow=1, ncol=2,
           labels = LETTERS[1:2],
           widths=c(2,2), heights=c(2,2)) %>%
-ggexport(filename="f1.pdf", width=9, height=6)
+ggexport(filename="f1r.pdf", width=9, height=6)
 #}}}
 
 #{{{ Fig S2
