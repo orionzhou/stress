@@ -307,7 +307,7 @@ td1 = deg48 %>%
     mutate(n = map_int(gids, length))
 #}}}
 
-#{{{ bar plot - f1b
+#{{{ bar plot - f1d
 tp = td1 %>% filter(Genotype %in% gts3) %>% mutate(n0 = n0-n, n1=n1-n) %>%
     select(Genotype,Treatment,Timepoint,drc,ctrl0_uniq=n0,ctrlx_uniq=n1,
            ctrl0_share=n, ctrlx_share=n) %>%
@@ -348,7 +348,7 @@ p = ggplot(tp) +
     guides(color=F,fill=F)
 fo = file.path(dirw, '10.deg.pdf')
 ggsave(p, filename=fo, width=5, height=8)
-saveRDS(p, file.path(dirf, 'f1b.rds'))
+saveRDS(p, file.path(dirf, 'f1d.rds'))
 #}}}
 
 #{{{ ## time0 v timeM: venn graph
@@ -367,7 +367,7 @@ fo = file.path(dirw, '10.deg.venn.pdf')
 ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
-#{{{ simple gt venn graph - f5a, sf12a
+#{{{ simple gt venn graph - f2a, sf01a
 #{{{ preprocsss
 drcs = c('up','down')
 td2 = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -388,7 +388,7 @@ td3 = td2 %>% select(Genotype,cond,drc, gids) %>%
 #}}}
 
 cols3 = pal_tron()(5)[c(1,2,3)]
-#{{{ single panel venn - fig 5a
+#{{{ single panel venn - f2a
 tp = td3 %>% filter(cond=='Cold_25h', drc=='up') %>%
     mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
     arrange(drc,cond)
@@ -404,10 +404,10 @@ p = ggplot(tpc) +
            legend.dir='h', legend.vjust=-.7)
 fo = sprintf('%s/11.gt.venn.pdf', dirw)
 ggsave(p, filename=fo, width=4, height=4.5)
-fo = glue("{dirf}/f5a.rds")
+fo = glue("{dirf}/f2a.rds")
 saveRDS(p, fo)
 #}}}
-#{{{ all panel venn- sf12a
+#{{{ all panel venn- sf01a
 tp = td3 %>%
     mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
     arrange(drc,cond)
@@ -429,7 +429,7 @@ saveRDS(p, fo)
 #}}}
 #}}}
 
-#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf12b
+#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf01b
 #{{{ preprocess
 drcs = c('up','down')
 ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -467,7 +467,7 @@ ty2 = ty %>%
 ty2 %>% count(cond, drc, nDE) %>% print(n=4)
 #}}}
 
-#{{{ heatmap plot - sf12b
+#{{{ heatmap plot - sf01b
 fmax=5
 drc = 'up'
 tp = ty2 %>% filter(drc==!!drc) %>%
@@ -496,7 +496,7 @@ p1 = ggplot() +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
 fp = glue("{dirw}/12.heatmap.pdf")
 ggsave(p1, file = fp, width = 8, height = 8)
-fo = glue("{dirf}/sf12b.rds")
+fo = glue("{dirf}/sf01b.rds")
 saveRDS(p1, fo)
 #}}}
 
@@ -557,7 +557,7 @@ ggsave(p1, file = fp, width = 8, height = 10)
 #}}}
 #}}}
 
-#{{{ genotypic difference in cold/heat response - f5, sf13
+#{{{ genotypic difference in cold/heat response - f2b-c, sf02
 #{{{ multi-panel scatter plot
 tp = td %>% filter(ddrc != 0, deg != 'A=B=')
 linecol = 'azure3'; lty = 'solid'
@@ -567,7 +567,7 @@ tx = tibble(deg = c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-',
                     'A+B-','A-B+','A=B='),
              x = c(1:3, 5:7, 9:11))
 
-#{{{ scatter plot - sf13a
+#{{{ scatter plot - sf02a
 p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
@@ -582,12 +582,12 @@ p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2), shape=F)
-fo = glue("{dirf}/sf13a.rds")
+fo = glue("{dirf}/sf02a.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.pdf")
 ggsave(p, file = fp, width = 8, height = 9.5)
-#{{{ bar plot showing counts - sf13b
+#{{{ bar plot showing counts - sf02b
 tp1 = tp %>% count(cond, x, deg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -603,13 +603,13 @@ p = ggplot(tp1) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
-fo = glue("{dirf}/sf13b.rds")
+fo = glue("{dirf}/sf02b.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.cnt.pdf")
 ggsave(p, file = fp, width = 6, height = 6)
 
-#{{{ scatter plot fig 5b
+#{{{ scatter plot f2b
 tp1 = tp %>% filter(cond == "Cold_25h: Mo17 vs B73") %>%
     mutate(cond = "Cold_25h: Mo17 (A) vs B73 (B)")
 p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
@@ -626,12 +626,12 @@ p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
            legend.spacing.x=.05, legend.vjust=-.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2), shape=F)
-fo = glue("{dirf}/f5b.rds")
+fo = glue("{dirf}/f2b.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/16.ddeg.1.pdf")
 ggsave(p, file = fp, width = 4, height = 4)
-#{{{ bar plot fig 5c
+#{{{ bar plot f2c
 tp1 = tp %>% count(cond, x, deg) %>%
     filter(cond == "Cold_25h: Mo17 vs B73") %>%
     mutate(cond == "Cold_25h: Mo17 (A) vs B73 (B)")
@@ -649,7 +649,7 @@ p = ggplot(tp1) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
-fo = glue("{dirf}/f5c.rds")
+fo = glue("{dirf}/f2c.rds")
 saveRDS(p, fo)
 #}}}
 
@@ -780,11 +780,17 @@ fo = glue('{dirw}/09.gene.status.rds')
 saveRDS(r, fo)
 #}}}
 
-#{{{ share DEG list
+#{{{ share DEG list & stats
 to = td2 %>% mutate(n_deg = map_int(gids, length)) %>%
     mutate(gid = map_chr(gids, str_c, collapse=',')) %>%
     select(-gids)
 fo = file.path(dirw, '05.deg.tsv')
+write_tsv(to, fo)
+
+to = deg48 %>% filter(cond2=='timeM') %>%
+    mutate(cond=glue("{Treatment}_{Timepoint}h")) %>% unnest(ds) %>%
+    select(Genotype,cond,gid,log2fc,padj)
+fo = glue('{dird}/71_share/05.de.tsv')
 write_tsv(to, fo)
 #}}}
 

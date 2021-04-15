@@ -264,7 +264,7 @@ saveRDS(r3, fo)
 #}}}
 
 
-#{{{ summerize motifs found in each module/searching parameter
+#{{{ summerize motifs found in each module/searching parameter - f4b-c
 fi = glue("{dirw}/03.mtf.grp.rds")
 r3 = readRDS(fi)
 #{{{ table stats
@@ -274,8 +274,73 @@ r3$tk %>% inner_join(tc0, by='bid') %>% distinct(scope,fid) %>% count(scope)
 r3$tk %>% inner_join(tc0, by='bid') %>% distinct(scope,fid,known) %>% count(scope,known)
 #}}}
 
-#{{{ num. motifs found in each module - f3b & sf07
-#{{{ f3b & sf07
+#{{{ num. motifs found in each module - f4b
+#{{{ f4b
+tc = r3$tc %>% filter(scope == 'B')
+tc1 = tc %>% select(bid,cid,scope)
+tl = r3$tl %>% filter(epi=='raw', !str_detect(bin,'1k')) %>% inner_join(tc1,by='bid')
+tk = r3$tk %>% filter(lid %in% tl$lid) %>% inner_join(tc1,by='bid')
+#{{{ select plot - prepare plot data
+tps = tk %>% group_by(bid,scope,cid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup() %>%
+    inner_join(tc %>% select(bid,cond,note,ng), by='bid')
+tk1 = tk %>% group_by(bid,lid) %>%
+    summarise(n_grp=length(unique(fid))) %>% ungroup()
+tp0 = tl %>% select(scope,lid,bid,cid, bin, epi, ng) %>%
+    inner_join(tk1, by=c('bid','lid')) %>% rename(score = n_grp) %>%
+    mutate(lab = score)
+tpy = tps %>%
+    mutate(cond_note = glue("{cond}: {note}")) %>%
+    mutate(ylab = glue("{cond}: {note} ({ng})")) %>%
+    mutate(ylab1 = glue("({ng})")) %>%
+    mutate(ylab2 = glue("({n_grp})")) %>%
+    arrange(desc(bid)) %>% mutate(i=1:n())
+tpp = tpy %>% group_by(scope) %>% summarise(ymin=min(i), ymax=max(i)) %>% ungroup()
+tpy_l = tibble(o=c(0,2,5,8,11)) %>% crossing(tpp) %>% mutate(o=o+ymin)
+#
+tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
+    separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    mutate(x = 1:n()) %>% crossing(tpp)
+xmax = max(tpx$x)
+tpx1 = tpx %>% group_by(scope,ymax,opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tpx2 = tpx %>% group_by(scope,ymax,opt) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
+tp = tp0 %>% inner_join(tpx, by=c('scope','bin','epi')) %>%
+    inner_join(tpy %>% select(bid,i), by='bid')
+tpx_l = tibble(o=seq(0,to=6, by=3)+.5) %>%
+    crossing(tpp)
+swit = (min(tp$score) + max(tp$score)) / 2
+tp = tp %>% mutate(lab.col=score>swit)
+#}}}
+
+#{{{ select plot - ps
+ps = ggplot(tp, aes(x=x,y=i)) +
+    geom_tile(aes(fill=score), na.rm = F) +
+    geom_text(aes(label=lab, color=lab.col), hjust=.5, size=2.5) +
+    geom_segment(data=tpx_l,aes(x=o,xend=o,y=ymin-.5,yend=ymax+.5),color='blue',size=.5)+
+    geom_segment(data=tpy_l,aes(x=.5,xend=xmax+.5,y=o-.5,yend=o-.5),color='blue',size=.5)+
+    geom_text(data=tpx,aes(x=x,y=ymin-.6,label=bin2),size=2.5,vjust=1,angle=30,hjust=.8) +
+    geom_text(data=tpy,aes(x=.3,y=i,label=ylab),size=2.5,hjust=1) +
+    geom_text(data=tpy,aes(x=xmax+.7,y=i,label=ylab2),size=2.5,hjust=0) +
+    #geom_text(data=tpy,aes(x=xmax+5,y=i,label=cond_note),size=2.8,hjust=.5) +
+    scale_x_continuous(expand=expansion(add=c(5,1.2))) +
+    scale_y_continuous(expand=expansion(add=c(.5,.05))) +
+    scale_fill_gradientn(name='# motifs',colors=cols100v) +
+    scale_color_manual(values=c('black','white')) +
+    #facet_wrap(scope~., scale='free_y', ncol=2) +
+    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
+           margin = c(1.3,.3,.3,.3), panel.border=F,
+           xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F) +
+    #theme(legend.position = c(0,0), legend.justification = c(1,0)) +
+    #theme(legend.title = element_text(size=10, margin=margin(b=.8,unit="lines"))) +
+    theme(strip.text.x=element_text(hjust=.3,size=10,face='bold')) +
+    guides(color=F)
+#}}}
+fo = glue("{dirw}/11.n.mtf.pdf")
+ggexport(ps, filename=fo, width=4, height=4)
+saveRDS(ps, glue("{dirf}/f4b.rds"))
+#}}}
+
+#{{{ ## f4b (old w. B and BMW models)
 tc = r3$tc %>% mutate(scope = glue("{scope} model"))
 tc1 = tc %>% select(bid,cid,scope)
 tl = r3$tl %>% filter(bid %in% tc1$bid) %>% inner_join(tc1,by='bid')
@@ -334,8 +399,6 @@ pf = ggplot(tp, aes(x=x,y=i)) +
 #}}}
 
 fo = glue("{dirw}/10.n.mtf.pdf")
-ggexport(pf, filename=fo, width=7, height=7)
-fo = glue("{dirf}/sf07.pdf")
 ggexport(pf, filename=fo, width=7, height=7)
 
 tc = r3$tc %>% mutate(scope = glue("{scope} model"))
@@ -397,7 +460,7 @@ ps = ggplot(tp, aes(x=x,y=i)) +
 
 fo = glue("{dirw}/11.n.mtf.s.pdf")
 ggexport(ps, filename=fo, width=6, height=5)
-saveRDS(ps, glue("{dirf}/f3b.rds"))
+#saveRDS(ps, glue("{dirf}/f4b.rds"))
 #}}}
 
 #{{{ ## below are old
@@ -589,7 +652,7 @@ ps2 = ggplot(tp, aes(x=x,y=i)) +
 #}}}
 #}}}
 
-#{{{ top 40 motifs found in each module - sf08
+#{{{ top 40 motifs found in each module - prepare data 
 tc=r3$tc; tl=r3$tl; tk=r3$tk
 r1 = tk %>% select(mid,fid,fname,known, bid,lid,pval) %>%
     inner_join(tl %>% select(lid,bid,bin,epi,ng), by=c('bid','lid')) %>%
@@ -614,34 +677,40 @@ tp = tp %>% inner_join(tps, by=c('cid','fid')) %>%
 tpx = tp %>% distinct(bid,scope,cid, cond, ng, note, opt) %>%
     mutate(xlab = glue("{cond}: {note} ({ng})"))
 tp1 = tibble(o=cumsum(c(11))+.5)
-#}}}
-#{{{ plot
+tp = tp %>% filter(scope=='B')
+tpx = tpx %>% filter(scope=='B')
 swit = (min(tp$score) + max(tp$score)) / 2
+tp = tp %>% mutate(lab.col=score>swit)
+#}}}
+
+#{{{ plot f4c
 p4 = ggplot(tp, aes(x=cid,y=i)) +
     geom_tile(aes(fill=score), na.rm = F, size=.5, color='white') +
-    geom_text(aes(label=lab, color=score>swit), hjust=.5, size=2.5) +
+    geom_text(aes(label=lab, color=lab.col), hjust=.5, size=2.5) +
     geom_vline(xintercept=tp1$o, color='blue') +
-    scale_x_discrete(breaks=tpx$cid, labels=tpx$xlab, expand=c(0,0)) +
+    scale_x_discrete(breaks=tpx$cid, labels=tpx$xlab, expand=expansion(add=c(3,0))) +
     scale_y_discrete(expand=expansion(mult=c(0,0))) +
     scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
-    #scale_fill_viridis(name='normalized eigengene value') +
     scale_color_manual(values=c('black','white')) +
-    facet_wrap(scope ~ ., nrow=1) +
+    annotate('text', x=0, y=20, label='Enrichment Rank', size=3, angle=90) +
+    annotate('segment', x=0, xend=0, y=17, yend=15, arrow=arrow(length=unit(.1,'inches'), type='closed')) +
+    annotate('segment', x=0, xend=0, y=23, yend=25, arrow=arrow(length=unit(.1,'inches'), type='closed')) +
+    annotate('text', x=0, y=26, label='Higher', size=2.5) +
+    annotate('text', x=0, y=14, label='Lower', size=2.5) +
     otheme(legend.pos='bottom.left', legend.dir='v', legend.title=T,
-           margin = c(.3,.3,.3,5.3), legend.vjust=-1.7,
+           margin = c(.3,.3,.3,.3), legend.vjust=-1.7, panel.border=F,
            strip.size=12, strip.compact=F, panel.spacing = .5,
            xtick=T, ytick=F, xtitle=F, xtext=T, ytext=F) +
-    theme(legend.position = c(0,0), legend.justification = c(1,0)) +
-    theme(legend.title = element_text(size=10)) +
+    theme(legend.position = c(0,0), legend.justification = c(0,0)) +
+    theme(legend.title = element_text(size=10, margin=margin(b=.8,unit="lines"))) +
     theme(axis.text.x = element_text(angle=25, hjust=1, vjust=1, size=7.5)) +
     #theme(axis.text.y = element_markdown(size=7.5)) +
     guides(color=F)
 #}}}
 #
 fo = glue("{dirw}/12.top.mtf.pdf")
-p4 %>% ggexport(filename=fo, width=12, height=8)
-fo = glue("{dirf}/sf08.pdf")
-p4 %>% ggexport(filename=fo, width=12, height=8)
+p4 %>% ggexport(filename=fo, width=6, height=8)
+saveRDS(p4, glue("{dirf}/f4c.rds"))
 #}}}
 
 #{{{ check fold enrichment in all versus umr

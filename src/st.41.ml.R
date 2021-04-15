@@ -40,7 +40,7 @@ if(!dir.exists(diro)) dir.create(diro)
 tc %>% mutate(fo = glue("{diro}/{tid}.tsv")) %>% mutate(j=map2(ts, fo, write_tsv))
 #}}}
 
-#{{{ motif meta plots - sf09
+#{{{ motif meta plots - sfxx
 fi = glue("{dirw}/06.tk.tc.rds")
 r6 = readRDS(fi)
 tc = r6$tc; tk = r6$tk
@@ -244,7 +244,6 @@ p = ggarrange(
 fo = glue("{dirw}/55.metaplot.pdf")
 ggexport(p, filename=fo, width=8, height=10)
 fo = glue("{dirf}/sf09.pdf")
-ggexport(p, filename=fo, width=8, height=10)
 #}}}
 
 #{{{ create ML training config
@@ -365,7 +364,7 @@ tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
     mutate(map2(fit, fo, saveRDS))
 #}}}
 
-#{{{ eval model performance in B - f4 & sf10
+#{{{ eval model performance in B - f5 & sf10
 fm = glue('{dirw}/11.models.rds')
 tm = readRDS(fm)
 
@@ -524,7 +523,7 @@ bids4 = tm1 %>% filter(str_detect(note, '^all')) %>% pull(bid)
 #}}}
 
 metric = 'auroc'
-#{{{ f4a
+#{{{ f5a
 tp0 = tm1 %>%
     filter(bid %in% bids4, epi=='umr', nfea=='top100', mod=='binary') %>%
     filter(!str_detect(bin, "1k")) %>%
@@ -564,7 +563,7 @@ pa = plot_barplot(tp, tps, x.rotate=F, ylab=metric, cols=cols3) +
   theme(legend.position = c(.37,.95), legend.justification = c(.5,.5)) +
   theme(legend.direction='horizontal')
 #}}}
-#{{{ f4b
+#{{{ f5b
 tp0 = tm1 %>% filter(bin=='TSS:-/+2k',epi=='umr',nfea=='top100',mod=='binary')
 tp = get_bar_stats(tp0, x='cond_note', grp='cond_note', pnl='bin_epi_nfea_mod')
 #{{{ sig
@@ -593,7 +592,7 @@ pb = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=rep('black',20)) +
   o_margin(0,.2,.2,2.1) +
   theme(legend.position = 'none')
 #}}}
-#{{{ f4c
+#{{{ f5c
 tp0 = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary',
                      epi %in% c("all","umr",'acrL'))
 tp = get_bar_stats(tp0, x='cond_note', grp='epi', pnl='bin_nfea_mod')
@@ -621,12 +620,13 @@ pc = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=cols3) +
   theme(legend.direction='horizontal')
 #}}}
 
-p = ggarrange(pa, pb, pc, nrow=3, ncol=1,
-          labels = LETTERS[1:4], heights=c(1,1,1))
+a = image_read("scheme.png")
+p = ggarrange(as.grob(a), pa, pb, pc, nrow=4, ncol=1,
+          labels = LETTERS[1:4], heights=c(1,1,1,1))
 fo = glue("{dirw}/31.bar.sig.{tag}.pdf")
-p %>% ggexport(filename=fo, width=6, height=8)
-fo = glue("{dirf}/f4.pdf")
-p %>% ggexport(filename=fo, width=6, height=8)
+#p %>% ggexport(filename=fo, width=6, height=8)
+fo = glue("{dirf}/f5.pdf")
+p %>% ggexport(filename=fo, width=6, height=10)
 
 #{{{ sf10
 #{{{ functions

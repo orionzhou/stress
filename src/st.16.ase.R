@@ -236,7 +236,7 @@ ggsave(p, file = fp, width = 4.5, height = 6)
 #}}}
 #}}}
 
-#{{{ cis/trans for dDEGs - f5, sf14
+#{{{ cis/trans for dDEGs - f2d-e, sf03
 #{{{ read
 fi = file.path(dird, '15_de/05.rds')
 r = readRDS(fi)
@@ -282,7 +282,7 @@ linecol = 'azure3'; lty = 'solid'
 cols9 = pal_simpsons()(10)
 #}}}
 
-#{{{ scatter plot - sf14a
+#{{{ scatter plot - sf03a
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
@@ -295,12 +295,12 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
            legend.vjust = -1.2, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
-fo = glue('{dirf}/sf14a.rds')
+fo = glue('{dirf}/sf03a.rds')
 saveRDS(p, fo)
 #}}}
 fp = glue('{dirw}/13.modex.pdf')
 ggsave(p, file = fp, width = 5, height = 7)
-#{{{ bar plot showing counts - sf14b
+#{{{ bar plot showing counts - sf03b
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -316,13 +316,13 @@ p = ggplot(tp1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            legend.vjust = -1.2, legend.box='h',
            xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
-fo = glue('{dirf}/sf14b.rds')
+fo = glue('{dirf}/sf03b.rds')
 saveRDS(p, fo)
 #}}}
 fp = glue('{dirw}/13.modex.cnt.pdf')
 ggsave(p, file = fp, width = 4.5, height = 6)
 
-#{{{ scatter plot fig 5d
+#{{{ scatter plot f2d
 tp1 = tp %>% filter(cond=='Cold25_B73xMo17')
 p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
@@ -336,12 +336,12 @@ p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
            legend.spacing.x=.05, legend.vjust = -.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2))
-fo = glue('{dirf}/f5d.rds')
+fo = glue('{dirf}/f2d.rds')
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/14.modex.1.pdf")
 ggsave(p, file = fp, width = 4, height = 4)
-#{{{ bar plot fig 5e
+#{{{ bar plot f2e
 tp1 = tp %>% count(cond, x, reg) %>%
     filter(cond=='Cold25_B73xMo17')
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
@@ -358,7 +358,7 @@ p = ggplot(tp1) +
            legend.vjust = -.6, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=20, size=7.5, vjust=1, hjust=1))
-fo = glue('{dirf}/f5e.rds')
+fo = glue('{dirf}/f2e.rds')
 saveRDS(p, fo)
 #}}}
 #}}}

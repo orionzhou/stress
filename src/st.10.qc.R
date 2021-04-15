@@ -2,13 +2,13 @@ source('functions.R')
 dirw = glue('{dird}/10_qc')
 require(kableExtra)
 
-yid = 'rn20a'
+yid = 'zm.rn20a'
 res = rnaseq_cpm(yid)
 #th = res$th
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
-#{{{ TC
+#{{{ TC - sf04
 ex = 'TC'
 th1 = th %>% filter(Experiment==ex) %>%
     mutate(Genotype = factor(Genotype, levels=gts3)) %>%
@@ -25,7 +25,7 @@ tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=6, height=8)
-fo = glue('{dirf}/sf02a.rds')
+fo = glue('{dirf}/sf04a.rds')
 saveRDS(p1a, fo)
 
 p1b = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Genotype',
@@ -38,7 +38,7 @@ p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=3,iter=1000, seed=12,
     shapes=c(0,1,2), pal.col='aaas')
 fo = glue("{dirw}/22.tsne.{ex}.pdf")
 ggsave(fo, p2, width=5, height=5)
-fo = file.path(dirf, 'sf02b.rds')
+fo = file.path(dirf, 'sf04b.rds')
 saveRDS(p2, fo)
 
 th2 = th1 %>% filter(Genotype=='B73')
@@ -66,9 +66,11 @@ p2c = plot_tsne(tm2,th2,pct.exp=.8,perp=4,iter=800, seed=12,
 ggsave(sprintf("%s/22.tsne.%s.W22.pdf", dirw, ex), p2c, width=6, height=6)
 #}}}
 
-#{{{ HY
+#{{{ HY - f1c, sf01a-f
+#{{{ init
 ex = 'HY'
 th1 = th %>% filter(Experiment==ex) %>%
+    mutate(Genotype = ifelse(Genotype %in% names(gt_map2), gt_map2[Genotype], Genotype)) %>%
     mutate(Genotype = factor(Genotype, levels=gts6)) %>%
     mutate(grp = sprintf("%s_%dh_%s", Treatment, Timepoint, Genotype)) %>%
     mutate(cond = sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -79,8 +81,13 @@ th1 = th %>% filter(Experiment==ex) %>%
     mutate(clab = ifelse(Replicate==1, cond, ''))
 tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
     mutate(value=asinh(CPM))
+conds = c("Control_0h",'Control_1h','Control_25h','Cold_1h','Cold_25h',
+    'Heat_1h','Heat_25h')
+cols7 = c('gray', brewer.pal(n = 6, name = "Paired")[c(3,4,1,2,5,6)])
+cols7 = pal_simpsons()(16)[c(3,4,14,10,7,1,5)]
+#}}}
 
-#{{{ f1a
+#{{{ hclust
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Treatment',
     expand.x=.2)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=8, height=10)
@@ -88,7 +95,10 @@ ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=8, height=10)
 p1b = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Treatment',
     expand.x=.2)
 ggsave(sprintf("%s/21.hclust.%s.s.pdf",dirw,ex), p1b, width=8, height=10)
+#}}}
 
+#{{{ f1c, sf01a-f
+#{{{ tsne
 p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=6,iter=800, seed=12,
     var.shape='Genotype',var.col='Genotype',var.lab='clab',var.ellipse='grp',
     legend.pos='top.left', legend.dir='v', legend.box='v',legend.title=F,
@@ -107,10 +117,11 @@ fo = glue("{dirw}/22.tsne.{ex}.inbreds.pdf")
 ggsave(fo, p2, width=5, height=5)
 #}}}
 
+#{{{ tSNE - indi gt 
 gt = 'B73'
 gt = 'Mo17'
 gt = 'W22'
-#{{{ f1a - indi
+#{{{ f1c - indi
 th2 = th1 %>% filter(Genotype %in% gt)
 p2 = plot_tsne(tm1,th2,pct.exp=.7,perp=2.5,iter=1000, seed=12,
     var.shape='Treatment',var.col='Treatment',var.lab='clab',var.ellipse='grp',
@@ -130,6 +141,122 @@ ggarrange(a, b, c, nrow=2, ncol=2,
           labels = c("B73","Mo17", "W22"),
           widths=c(2,2), heights=c(2,2)) %>%
 ggexport(filename=fo, width=6, height=6)
+#}}}
+
+#{{{ pca - f1c, sf01
+#{{{ filter th and tm
+th1 = th %>% filter(Experiment==ex) %>%
+    mutate(Genotype = ifelse(Genotype %in% names(gt_map2), gt_map2[Genotype], Genotype)) %>%
+    mutate(cond = sprintf("%s_%dh", Treatment, Timepoint)) %>%
+    mutate(cond = factor(cond, levels=conds)) %>%
+    mutate(grp = Genotype) %>%
+    arrange(Genotype,Treatment,Timepoint) %>%
+    group_by(grp) %>% mutate(i = 1:n()) %>% ungroup() %>%
+    mutate(clab = ifelse(i==1, Genotype, ''))
+tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
+    mutate(value=asinh(CPM))
+#}}}
+
+#{{{ 6 genotypes
+p2 = plot_pca(tm1,th1, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='clab',var.ellipse='grp',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.pdf")
+ggsave(fo, p2, width=6, height=6)
+#}}}
+
+#{{{ 3 genotypes - sf01a
+th2 = th1 %>% filter(Genotype %in% gts3)
+p2 = plot_pca(tm1,th2, min.value=1, pct.exp=.6, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='clab',var.ellipse='grp',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.inbreds.pdf")
+ggsave(fo, p2, width=5, height=5)
+#}}}
+fo = glue("{dirf}/sf01a.rds")
+saveRDS(p2, fo)
+
+#{{{ B73 - f1c
+gt = 'B73'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/f1c.rds')
+saveRDS(p3, fo)
+
+#{{{ sf01b
+gt = 'Mo17'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/sf01b.rds')
+saveRDS(p3, fo)
+
+#{{{ sf01c
+gt = 'W22'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/sf01c.rds')
+saveRDS(p3, fo)
+
+#{{{ sf01d
+gt = 'B73xMo17'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/sf01d.rds')
+saveRDS(p3, fo)
+
+#{{{ sf01e
+gt = 'W22xB73'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/sf01e.rds')
+saveRDS(p3, fo)
+
+#{{{ sf01f
+gt = 'W22xMo17'
+th2 = th1 %>% filter(Genotype == gt)
+p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+    var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
+    legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
+    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
+ggsave(fo, p3, width=4, height=4)
+#}}}
+fo = glue('{dirf}/sf01f.rds')
+saveRDS(p3, fo)
+#}}}
+#}}}
 #}}}
 
 #{{{ NM

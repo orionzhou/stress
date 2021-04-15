@@ -82,7 +82,7 @@ p_temp = ggplot(tp, aes(has, temp)) +
     geom_point(aes(color=stress), size=.5) +
     #geom_text(data=tfa, aes(x=25+.2, y=temp-.1, label=fawt),size=4,family='fas',vjust=1,hjust=0) +
     geom_text(data=tpa, aes(x=25+.3, y=temp+1, label=stress), hjust=.5, vjust=0, size=2.5) +
-    facet_wrap(~ExpTxt, ncol=1) +
+    #facet_wrap(~ExpTxt, ncol=1) +
     scale_x_continuous(name='Hours after Treatment', breaks=c(0,1,14,22,25), expand=expansion(mult=c(.02,.06))) +
     scale_y_continuous(name='Temperature (C)', expand=expansion(mult=c(.02,.08))) +
     scale_color_manual(values=cols3) +
@@ -208,13 +208,22 @@ p2 = p +
     theme(axis.text.y=element_text(color=NA)) +
     theme(axis.title.x=element_blank()) +
     theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
+p2z = p +
+    ggtitle('Control') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
+    theme(axis.text.y=element_text(color=NA)) +
+    theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
 #
 p = ggdraw() +
     draw_plot(p0, 0,.1,.9,.9)+
     draw_plot(p1,.05,.05,.9,.9)+
     draw_plot(p2,.1,0,.9,.9)
+pz = ggdraw() +
+    draw_plot(p0, 0,.1,.9,.9)+
+    draw_plot(p1,.05,.05,.9,.9)+
+    draw_plot(p2z,.1,0,.9,.9)
 #}}}
 pb=p
+pbz=pz
 ti = ti3 %>% inner_join(tx, by='ExpID')
 #{{{ plot design
 tpx = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
@@ -260,10 +269,12 @@ pc=p
 p = ggarrange(p_temp, pa, pb, pc, labels=LETTERS[1:4],
               ncol=1, heights=c(1,.7,.9,1), widths=c(1.3,1))
 
+fo = glue('{dirf}/f1a.rds')
+saveRDS(p_temp, fo)
+fo = glue('{dirf}/f1b.rds')
+saveRDS(pbz, fo)
 fo = glue('{dirw}/design.pdf')
 ggexport(p, filename=fo, width=5, height=7)
-fo = glue('{dirf}/sf01.pdf')
-ggexport(p, filename=fo, width=5, height=8)
 
 #{{{ plot design
 tpx = tp0 %>% distinct(Timepoint) %>% arrange(Timepoint) %>%

@@ -60,7 +60,7 @@ td = td4 %>% inner_join(td4s, by=c('cond','time','drc','gid')) %>%
     select(cond,time,drc,gid,st) %>% filter(cond=='cold')
 #}}}
 
-#{{{ read in NM matrix and run mclust
+#{{{ read in NM matrix and run mclust - sf12a
 #{{{ read in
 yid = 'rn20a'
 res = rnaseq_cpm(yid)
@@ -80,7 +80,7 @@ rd = rr %>% gather(time, rc, -gid, -gt, -cond) %>%
     arrange(gid, gt)
 #}}}
 
-#{{{ HY & NM consistency - sf15a
+#{{{ HY & NM consistency - sf12a
 fi = glue('{dird}/15_de/01.de.rds')
 ti = readRDS(fi)
 
@@ -119,7 +119,7 @@ p = ggplot(tp, aes(x=x,y=y)) +
 #}}}
 fo = glue("{dirw}/08.fc.pdf")
 ggsave(p, file=fo, width=3, height=7)
-fo = glue("{dirf}/sf15a.rds")
+fo = glue("{dirf}/sf12a.rds")
 saveRDS(p, fo)
 #}}}
 
@@ -304,7 +304,7 @@ ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
     mutate(st = factor(st, levels=levels(td2$st))) %>%
     select(cond,time,qry,tgt,gid,st,reg)
 #}}}
-#{{{ local association test
+#{{{ local association test - sf12
 #{{{
 i=37
 drc=x$drc[i]; t_clu=x$t_clu1[[i]]
@@ -413,7 +413,7 @@ ti2 = ti %>%
     filter(!is.na(reg))
 ti2 %>% count(reg, sig) %>% spread(sig,n) %>% mutate(prop=sig/(sig+insig))
 
-#{{{ plot cis/trans prop - sf15b
+#{{{ plot cis/trans prop - sf12b
 regs = c("bkg","cis","cis+trans",'trans','conserved','unexpected')
 sigs = c('sig','insig')
 tp = ti2 %>% count(reg, sig) %>% rename(tag1=reg, tag2=sig) %>%
@@ -425,7 +425,7 @@ p = cmp_proportion1(tp, ytext=T, xangle=15, lab.size=2) +
 #}}}
 fo = glue("{dirw}/17.reg.pdf")
 ggsave(p, file=fo, width=4, height=4)
-fo = glue("{dirf}/sf15b.rds")
+fo = glue("{dirf}/sf12b.rds")
 saveRDS(p, fo)
 
 # add symbol & note
@@ -436,7 +436,7 @@ j %>% filter(nsig>0,reg %in% c('cis','cis+trans')) %>%
     select(gid,p,nsig,reg,symbol) %>% print(n=40,width=Inf)
 #}}}
 
-#{{{ final plot
+#{{{ sf13
 #{{{ read
 fi = glue('{dirw}/01.mclust.rds')
 r = readRDS(fi)
@@ -539,8 +539,8 @@ gids = c('Zm00001d006065','Zm00001d047307','Zm00001d003252','Zm00001d024425',
 gids = c('Zm00001d003252')
 gids = c('Zm00001d024425')
 gids = c('Zm00001d017130')
-gids = c('Zm00001d020970') # sf16b
-gids = c('Zm00001d052653') # sf16a
+gids = c('Zm00001d020970') # sf13b
+gids = c('Zm00001d052653') # sf13a
 plot_gene_vnt <- function(gid,pb,pe,srd,vnt,assoc,blk,tit,clu,gts,fo,
                           txdb,fm,nfea,tk) {
     #{{{
@@ -635,9 +635,9 @@ tp = tp0 %>% mutate(gts = list(gts25)) %>%
 fo = glue("{dirf}/f7c.rds")
 saveRDS(tp$p[[1]], fo)
 
-fo = glue("{dirf}/sf16a.rds")
+fo = glue("{dirf}/sf13a.rds")
 saveRDS(tp$p[[1]], fo)
-fo = glue("{dirf}/sf16b.rds")
+fo = glue("{dirf}/sf13b.rds")
 saveRDS(tp$p[[1]], fo)
 #}}}
 
