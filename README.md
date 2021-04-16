@@ -16,21 +16,21 @@
 ### Links to R/Python scripts:
 - [kmer.py](https://github.com/orionzhou/nf/blob/master/bin/kmer.py): kmer utilities, use `kmer.py -h` to find out more
 
->usage: kmer.py [-h] {locate,prepare_ml,getfasta} ...
->
->kmer utilities
->
->optional arguments:
->  -h, --help            show this help message and exit
->
->available commands:
->  {locate,prepare_ml,getfasta}
->	locate              find given kmers in sequence database and report
->						locations
->	prepare_ml          locate given kmers for given IDs in sequence db using
->						various filters and prepare output for ML
->	getfasta            extract fasta for given IDs in sequence db using
->						various filters
+    usage: kmer.py [-h] {locate,prepare_ml,getfasta} ...
+
+    kmer utilities
+
+    optional arguments:
+      -h, --help            show this help message and exit
+
+    available commands:
+      {locate,prepare_ml,getfasta}
+        locate              find given kmers in sequence database and report
+                            locations
+        prepare_ml          locate given kmers for given IDs in sequence db using
+                            various filters and prepare output for ML
+        getfasta            extract fasta for given IDs in sequence db using
+                            various filters
 
 - [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite](https://meme-suite.org/meme/)
 
