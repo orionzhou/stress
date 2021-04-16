@@ -8,8 +8,10 @@ epis = c("raw",'umr','acrE','acrL')
 #{{{ read module lists  & write seq lists
 tag = 'degB'
 tag = 'degA'
+tag = 'degA_nr'
 tag = 'dmodB'
 tag = 'dmodA'
+tag = 'dmodA_nr'
 #tag = 'var2'
 fi = glue("{dird}/17_cluster/50_modules/{tag}.rds")
 md = readRDS(fi)
@@ -160,25 +162,48 @@ BMW_tc = tc1 %>% bind_rows(tc2) %>% mutate(scope=scope) %>% select(-me)
 BMW_tl = tl1 %>% bind_rows(tl2) %>% mutate(scope=scope)
 BMW_tk = tk1 %>% bind_rows(tk2) %>% mutate(scope=scope)
 #}}}
+#{{{ read in BMW_nr
+diri = glue("{dirw}/00_nf")
+tag = 'degA_nr'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc1 = r$tc %>% mutate(tag = tag)
+tl1 = r$tl %>% mutate(tag = tag)
+fi = glue("{diri}/degA/25.rds")
+tk1 = readRDS(fi) %>% mutate(tag = tag)
+#
+tag = 'dmodA_nr'
+fi = glue('{diri}/{tag}/08.tc.tl.rds')
+r = readRDS(fi)
+tc2 = r$tc %>% mutate(tag = tag)
+tl2 = r$tl %>% mutate(tag = tag)
+fi = glue("{diri}/dmodA/25.rds")
+tk2 = readRDS(fi) %>% mutate(tag = tag)
+#
+scope = 'BMW_nr'
+BMWn_tc = tc1 %>% bind_rows(tc2) %>% mutate(scope=scope) %>% select(-me)
+BMWn_tl = tl1 %>% bind_rows(tl2) %>% mutate(scope=scope)
+BMWn_tk = tk1 %>% bind_rows(tk2) %>% mutate(scope=scope)
+#}}}
 
 #{{{ merge B and BMW
 f_cfg = glue('{dirw}/config.xlsx')
 cfg = read_xlsx(f_cfg) %>% fill(tag, .direction='down') %>% select(tag,ocid,cid)
 #
-scopes = c('B','BMW')
-tc = rbind(B_tc, BMW_tc) %>% rename(ocid=cid) %>%
+scopes = c('B','BMW','BMW_nr')
+tc = rbind(B_tc, BMW_tc, BMWn_tc) %>% rename(ocid=cid) %>%
     inner_join(cfg, by=c('tag','ocid')) %>%
     mutate(scope = factor(scope, levels=scopes)) %>%
     arrange(scope, cid) %>%
     mutate(bid = str_c('b', str_pad(1:n(), width=2,pad='0'))) %>%
     select(bid, everything()) %>%
     select(bid,scope,cid,cond,note, ng,ng_c,gids,gids_c,ts)
-tl = rbind(B_tl, BMW_tl) %>% rename(ocid=cid) %>%
+tl = rbind(B_tl, BMW_tl, BMWn_tl) %>% rename(ocid=cid) %>%
     inner_join(cfg, by=c('tag','ocid')) %>%
     inner_join(tc %>% select(bid,scope,cid), by=c('scope','cid')) %>%
     arrange(bid, lid) %>%
     select(-ocid,-tag,-scope,-cid) %>% select(bid, everything())
-tk = rbind(B_tk, BMW_tk) %>% rename(ocid=cid) %>%
+tk = rbind(B_tk, BMW_tk, BMW_tk) %>% rename(ocid=cid) %>%
     inner_join(cfg, by=c('tag','ocid')) %>%
     inner_join(tc %>% select(bid,scope,cid), by=c('scope','cid')) %>%
     arrange(bid, lid, mid) %>%
@@ -261,12 +286,33 @@ tc = r$tc
 fo = glue("{dirw}/03.mtf.grp.rds")
 r3 = list(tc=tc, tl=tl, tk=tk)
 saveRDS(r3, fo)
+
+# hack r2 and r3 to update r3
+f2 = glue("{dirw}/02.rds")
+r2 = readRDS(f2)
+f3 = glue("{dirw}/03.mtf.grp.rds")
+r3 = readRDS(f3)
+tl12 = r3$tl %>% filter(bid < 'b23')
+tl3 = r3$tl %>% filter(bid > 'b11', bid < 'b23') %>%
+    mutate(bid=glue("b{as.integer(str_sub(bid,2,3))+11}")) %>%
+    select(-ng,-ng_c) %>%
+    inner_join(r2$tc %>% select(bid,ng,ng_c))
+tk12 = r3$tk %>% filter(bid < 'b23')
+tk3 = r3$tk %>% filter(bid > 'b11', bid < 'b23') %>%
+    mutate(bid=glue("b{as.integer(str_sub(bid,2,3))+11}")) %>%
+    separate(mid, c('bid2','lid2','i'), sep='_', remove=F) %>%
+    mutate(mid=glue("{bid}_{lid2}_{i}")) %>% select(-bid2,-lid2,-i)
+
+tc=r2$tc; tl = rbind(tl12,tl3); tk = rbind(tk12,tk3)
+r3 = list(tc=tc, tl=tl, tk=tk)
+f3 = glue("{dirw}/03.mtf.grp.rds")
+saveRDS(r3, f3)
 #}}}
 
 
 #{{{ summerize motifs found in each module/searching parameter - f4b-c
 fi = glue("{dirw}/03.mtf.grp.rds")
-r3 = readRDS(fi)
+r3 = readRDS(fi) %>% filter(scope %in% c('B','BMW'))
 #{{{ table stats
 tc0 = r3$tc %>% select(bid,scope)
 r3$tk %>% inner_join(tc0, by='bid') %>% count(scope)

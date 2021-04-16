@@ -1,5 +1,34 @@
 source('functions.R')
 dirw = glue('{dird}/17_cluster')
+#{{{ functions
+make_status_tibble0 <- function(tg, tg_c) tg %>% mutate(status=1) %>%
+    bind_rows(tg_c %>% mutate(status = 0)) %>%
+    mutate(status=factor(status,levels=c(1,0)))
+make_status_tibble <- function(gids, gids_c)
+    tibble(gid=c(gids, gids_c),
+           status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>%
+    mutate(status=factor(status,levels=c(1,0)))
+merge_top_ton <- function(top, ton, min_ng=50) {
+#{{{
+    ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
+    md = top %>% inner_join(ton1, by=c('cond')) %>%
+        filter(ng >= min_ng) %>%
+        select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
+        mutate(ts = map2(gids, gids_c, make_status_tibble))
+    md
+#}}}
+}
+get_nr_gids <- function(gids) {
+    #{{{
+    sample_w_seed <- function(xs, seed=31) {set.seed(seed); sample(xs, 1)}
+    tx = tibble(ggid=gids) %>% separate(ggid, c('gt','gid'), sep='_', remove=F) %>%
+        group_by(gid) %>% summarise(ggids = list(ggid)) %>% ungroup() %>%
+        arrange(gid) %>% mutate(i = 1:n()) %>%
+        mutate(ggid = map2_chr(ggids, i, sample_w_seed))
+    tx %>% pull(ggid)
+    #}}}
+}
+#}}}
 
 #{{{ prepare TC matrix
 yid = 'rn20a'
@@ -76,7 +105,7 @@ tcr = tc$raw %>% mutate(gid=glue("{gt}_{gid}")) %>% select(-gt)
 #}}}
 
 ######## create pos-neg gene lists ########
-#{{{ B/M/W DEG lists
+#{{{ degA & degA_nr - BMW DEGs
 tag = 'degA'
 top = deg %>% unnest(gids) %>%
     group_by(cond, drc) %>%
@@ -103,25 +132,23 @@ ton = deg48 %>% filter(cond2=='timeM', Genotype %in% gts3) %>%
     group_by(cond) %>% summarise(gids=list(gid)) %>% ungroup() %>%
     mutate(ng = map_int(gids, length)) %>%
     mutate(cond = factor(cond, levels=conds)) %>% arrange(cond) %>%
-    select(clid, cond, ng, gids)
+    select(cond, ng, gids)
 #}}}
 
-#{{{ build module gene list pairs
-min_ng = 50
-ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
-make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
-make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
-md = top %>% inner_join(ton1, by=c('cond')) %>%
-    filter(ng >= min_ng) %>%
-    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
-    mutate(ts = map2(gids, gids_c, make_status_tibble))
-#}}}
-
+md = merge_top_ton(top, ton)
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
+
+top2 = top %>% mutate(gids = map(gids, get_nr_gids)) %>%
+    mutate(ng=map_int(gids, length))
+ton2 = ton %>% mutate(gids = map(gids, get_nr_gids)) %>%
+    mutate(ng=map_int(gids, length))
+md2 = merge_top_ton(top2, ton2)
+fo = glue("{dirw}/50_modules/{tag}_nr.rds")
+saveRDS(md2, fo)
 #}}}
 
-#{{{ B73 DEG lists
+#{{{ degB - B DEGs
 tag = 'degB'
 top = deg %>% unnest(gids) %>% filter(str_detect(gids, '^B')) %>%
     group_by(cond, drc) %>%
@@ -147,22 +174,12 @@ ton = tb %>%
     select(cond, ng, gids)
 #}}}
 
-#{{{ build module gene list pairs
-min_ng = 50
-ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
-make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
-make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
-md = top %>% inner_join(ton1, by=c('cond')) %>%
-    filter(ng >= min_ng) %>%
-    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
-    mutate(ts = map2(gids, gids_c, make_status_tibble))
-#}}}
-
+md = merge_top_ton(top, ton)
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
 
-#{{{ DEG-based modules
+#{{{ dmodA & dmodA_nr - BWM modules
 #{{{ check ovlp w. DEG sets  - prepare t_deg
 drcs = c('up','down')
 t_deg = deg %>%
@@ -302,23 +319,25 @@ ton = tb %>%
     select(cond, ng, gids)
 #}}}
 
-#{{{ build module gene list pairs
-min_ng = 50
-ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
-make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
-make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
-md = top %>% inner_join(ton1, by=c('cond')) %>%
-    filter(ng >= min_ng) %>%
-    select(cid, cond, note, ng, ng_c, me, gids, gids_c) %>%
-    mutate(ts = map2(gids, gids_c, make_status_tibble))
-#}}}
-
+md = merge_top_ton(top, ton)
 tag = 'dmodA'
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
+
+tag = 'dmodA'
+fo = glue("{dirw}/50_modules/{tag}.rds")
+md = readRDS(fo)
+md2 = md %>%
+    mutate(gids = map(gids, get_nr_gids)) %>%
+    mutate(gids_c = map(gids_c, get_nr_gids)) %>%
+    mutate(ng=map_int(gids, length)) %>%
+    mutate(ng_c=map_int(gids_c, length)) %>%
+    mutate(ts = map2(gids, gids_c, make_status_tibble))
+fo = glue("{dirw}/50_modules/{tag}_nr.rds")
+saveRDS(md2, fo)
 #}}}
 
-#{{{ B73 DEG modules
+#{{{ dmodB - B modules
 fi = glue("{dirw}/50_modules/dmodA.rds")
 ti = readRDS(fi)
 top = ti %>% select(cid,cond,note,ng,me,gids) %>% unnest(gids) %>%
@@ -343,23 +362,13 @@ ton = tb %>%
     select(cond, ng, gids)
 #}}}
 
-#{{{ build module gene list pairs
-min_ng = 50
-ton1 = ton %>% select(cond,ng_c=ng,gids_c=gids)
-make_status_tibble <- function(tg, tg_c) tg %>% mutate(status=1) %>% bind_rows(tg_c %>% mutate(status = 0)) %>% mutate(status=factor(status,levels=c(1,0)))
-make_status_tibble <- function(gids, gids_c) tibble(gid=c(gids, gids_c), status=c(rep(1,length(gids)), rep(0, length(gids_c)))) %>% mutate(status=factor(status,levels=c(1,0)))
-md = top %>% inner_join(ton1, by=c('cond')) %>%
-    filter(ng >= min_ng) %>%
-    select(cid, cond, note, ng, ng_c, gids, gids_c) %>%
-    mutate(ts = map2(gids, gids_c, make_status_tibble))
-#}}}
-
+md = merge_top_ton(top, ton)
 tag = 'dmodB'
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
 
-#{{{ variable gene lists
+#{{{ var1 - variable gene lists
 #{{{
 conds = c('cold','heat')
 drcs = c('up','down')
@@ -403,7 +412,7 @@ fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
 
-#{{{ variable gene lists 2
+#{{{ var2 - variable gene lists 2
 fg = glue('{dird}/15_de/09.gene.status.rds')
 x = readRDS(fg)
 td1=x$td1; td2=x$td2

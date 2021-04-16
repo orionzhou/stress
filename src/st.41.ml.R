@@ -18,14 +18,17 @@ tk %>% mutate(mtfs = map(mtfs, 'mtf')) %>%
     mutate(fo = glue("{diro}/{bid}.meme")) %>%
     mutate(l = map2(mtfs, fo, write_meme, bkg=bkg, overwrite=T))
 
-tc12 = r5$tc %>% mutate(train=scope) %>% select(train,everything())
+# training scheme 1 (B), 2 (BMW_r) and 3 (BMW_nr)
+tc123 = r5$tc %>% mutate(train=scope) %>% select(train,everything())
+# training scheme 4 (variable)
+tbc = r5$tc %>% filter(scope=='BMW') %>% select(bid,cid)
 fi = glue("{dird}/17_cluster/50_modules/var1.rds")
-tc3 = readRDS(fi) %>% mutate(train='var', scope='BMW') %>%
-    inner_join(r5$tc %>% filter(scope=='BMW') %>% select(bid,cid), by='cid') %>%
+tc4 = readRDS(fi) %>% mutate(train='var', scope='BMW') %>%
+    inner_join(tbc, by='cid') %>%
     select(train, everything())
 
-trains = c('B','BMW','var')
-tc = tc12 %>% bind_rows(tc3) %>%# filter(cid %in% tk$cid) %>%
+trains = c('B','BMW','BMW_nr', 'var')
+tc = tc123 %>% bind_rows(tc4) %>%# filter(cid %in% tk$cid) %>%
     mutate(train = factor(train, levels=trains)) %>%
     arrange(train, cid) %>%
     mutate(tid = str_c('t', str_pad(1:n(), width=2,pad='0'))) %>%
@@ -269,9 +272,10 @@ nfeas1 = c('top100')
 mods1 = c('zoops')
 #}}}
 
+ctag = 'b1'; train = 'B'
 ctag = 'b2'; train = 'BMW'
 ctag = 'b3'; train = 'var'
-ctag = 'b1'; train = 'B'
+ctag = 'b4'; train = 'BMW_nr'
 #{{{
 tc1 = tc %>% filter(train == !!train)
 to1 = tc1 %>% select(tid,bid) %>%
@@ -931,7 +935,7 @@ get_acc2 <- function(ti) {
 pd3 = pd %>% select(-tag) %>% filter(str_detect(note, "all")) %>%
     mutate(drc = ifelse(str_detect(note, "all up"), "up", "down")) %>%
     mutate(pred=ifelse(drc=='down' & pred==1, -1, pred))
-to2 = td2 %>%
+to1 = td2 %>%
   left_join(ddeg2, by=c('cond','time','qry','tgt','gid','st')) %>%
   #filter(!is.na(reg) & reg == 'cis') %>%
   inner_join(pd3, by=c('cond','qry'='gt','gid')) %>% rename(qPred=pred) %>%
@@ -940,8 +944,23 @@ to2 = td2 %>%
   #group_by(bat,cond,drc,note,qry,tgt,time) %>% nest() %>% ungroup() %>%
   mutate(pred1 = smap2[as.character(qPred)]) %>%
   mutate(pred2 = smap2[as.character(tPred)]) %>%
-  mutate(pred = as.character(glue("A{pred1}B{pred2}"))) %>%
+  mutate(pred = as.character(glue("A{pred1}B{pred2}")))
+to2 = to1 %>%
   count(train,cid,cond,drc,note,qry,tgt,time, st, pred,reg)
+#}}}
+
+#{{{ write accurately predicted variable response gene list
+tv1 = to1 %>%
+    filter(tgt=='B73', pred %in% c("A=B+",'A=B-'), st %in% c('dA=B+','dA=B-'))
+tv2 = to1  %>%
+    filter(tgt=='B73', pred %in% c("A+B=",'A-B='), st %in% c('dA+B=','dA-B='))
+tv = tv1 %>% bind_rows(tv2) %>%
+    mutate(st = str_sub(as.character(st), 2, 5)) %>% filter(st==pred) %>%
+    select(train, cond,time,qry,tgt,gid,st,reg) %>%
+    arrange(train, cond, time, tgt, qry, gid)
+
+fo = glue("{dird}/71_share/08.variable.genes.tsv")
+write_tsv(tv, fo)
 #}}}
 
 #{{{ dde acc bar plot - f6b

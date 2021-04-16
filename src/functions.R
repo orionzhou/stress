@@ -9,6 +9,7 @@ require(ggforce)
 require(Rtsne)
 require(ggpubr)
 require(lubridate)
+require(universalmotif)
 options(dplyr.summarise.inform = F)
 dirg = '~/data/genome'
 dirp = "~/projects/stress"
