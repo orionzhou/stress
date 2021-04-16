@@ -13,7 +13,7 @@
 - [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules]()
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
 
-### Links to R/Python scripts:
+### Links to R / Python scripts:
 - [kmer.py](https://github.com/orionzhou/nf/blob/master/bin/kmer.py): kmer utilities, use `kmer.py -h` to find out more
 
 ```bash
@@ -75,6 +75,23 @@ available commands:
 - [merge.dreme.kmer.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.dreme.kmer.R): read multiple meme outputs after running DREME/STRME and save as a tibble in R
 - [merge.dreme.fimo.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.dreme.fimo.R): read multiple motif location outputs after running DREME/STRME and save as a tibble in R
 - [merge.dreme.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.dreme.R): read multiple DREME outputs save as a tibble in R
+
+```bash
+usage: /home/springer/zhoux379/git/nf/bin/mmm/merge.dreme.R
+       [-h] [-o output] [--meme meme] [--txt list] fi [fi ...]
+
+merge dreme outputs
+
+positional arguments:
+  fi           dreme output file(s)
+
+optional arguments:
+  -h, --help   show this help message and exit
+  -o output    output file [default: out.rds]
+  --meme meme  merged motifs in meme format [default: out.meme]
+  --txt list   motif ID list [default: out.txt]
+```
+
 - [ml_classification.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/ml_classification.R): train a machine learning model using RF/XGB/SVM algorithm, specifying holdout proportion, with down-sampling, using cross-validation, grid searching for hyperparameters in parallel, for detailed usage run `ml_classification.R -h`
 
 ```bash
