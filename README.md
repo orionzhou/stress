@@ -1,17 +1,16 @@
-This repository hosts code (primarily R and Python scripts) and data related to the cold/heat stress response project.
+##This repository hosts code (primarily R and Python scripts) and data related to the cold/heat stress response project.
 
-Directory architecture:
-
-`README.md`: (this file)
-`src/`: data processing, statistical testing, visualization (R)
-`nf.degA/`, `nf.degB/`, `nf.dmodA`, `nf.dmodB`, `nfb1-4`: nextflow pipeline configuration and results
+Directory structure:
+-`README.md`: (this file)
+-`src/`: data processing, statistical testing, visualization (R)
+-`nf.degA/`, `nf.degB/`, `nf.dmodA`, `nf.dmodB`, `nfb1-4`: nextflow pipeline configuration and results
 
 Links to datasets:
-- [Raw read count and normalized expression (Counts per Million) matrices for the inbred/hybrid experiment and the time-course inbred-only experiment]
-- [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment]
-- [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern]
-- [Gene lists for each co-expression module identified from the time-course experiment]
-- [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules]
+- [Raw read count and normalized expression (Counts per Million) matrices for the inbred/hybrid experiment and the time-course inbred-only experiment]()
+- [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment]()
+- [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern]()
+- [Gene lists for each co-expression module identified from the time-course experiment]()
+- [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules]()
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
 
 Links to R/Python scripts:
