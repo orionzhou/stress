@@ -19,8 +19,8 @@ Links to R/Python scripts:
   - `kmer.py locate`: find given kmers in sequence database and report locations
   - `kmer.py prepare_ml`: locate given kmers for given IDs in sequence db using various filters and prepare output for ML
   - `kmer.py getfasta`: extract fasta for given IDs in sequence db using various filters
-- [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite]
-- [streme.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/streme.py): wrapper around `STRME` from the [meme-suite], output a meme file with found motifs and a tabular file with the exact motif locations
+- [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite](https://meme-suite.org/meme/)
+- [streme.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/streme.py): wrapper around `STRME` from the [meme-suite](https://meme-suite.org/meme/), output a meme file with found motifs and a tabular file with the exact motif locations
 - [merge.fimo.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.fimo.R): read multiple FIMO outputs and save as a tibble in R
 - [merge.dreme.kmer.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.dreme.kmer.R): read multiple meme outputs after running DREME/STRME and save as a tibble in R
 - [merge.dreme.fimo.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/merge.dreme.fimo.R): read multiple motif location outputs after running DREME/STRME and save as a tibble in R
