@@ -1,11 +1,11 @@
-##This repository hosts code (primarily R and Python scripts) and data related to the cold/heat stress response project.
+## This repository hosts code (primarily R and Python scripts) and data related to the cold/heat stress response project.
 
-Directory structure:
+### Directory structure:
 - `README.md`: (this file)
 - `src/`: data processing, statistical testing, visualization (R)
 - `nf.degA/`, `nf.degB/`, `nf.dmodA`, `nf.dmodB`, `nfb1-4`: nextflow pipeline configuration and results
 
-Links to datasets:
+### Links to datasets:
 - [Raw read count and normalized expression (Counts per Million) matrices for the inbred/hybrid experiment and the time-course inbred-only experiment]()
 - [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment]()
 - [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern]()
@@ -13,24 +13,24 @@ Links to datasets:
 - [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules]()
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
 
-Links to R/Python scripts:
+### Links to R/Python scripts:
 - [kmer.py](https://github.com/orionzhou/nf/blob/master/bin/kmer.py): kmer utilities, use `kmer.py -h` to find out more
 
-    usage: kmer.py [-h] {locate,prepare_ml,getfasta} ...
-
-    kmer utilities
-
-    optional arguments:
-      -h, --help            show this help message and exit
-
-    available commands:
-      {locate,prepare_ml,getfasta}
-        locate              find given kmers in sequence database and report
-                            locations
-        prepare_ml          locate given kmers for given IDs in sequence db using
-                            various filters and prepare output for ML
-        getfasta            extract fasta for given IDs in sequence db using
-                            various filters
+>usage: kmer.py [-h] {locate,prepare_ml,getfasta} ...
+>
+>kmer utilities
+>
+>optional arguments:
+>  -h, --help            show this help message and exit
+>
+>available commands:
+>  {locate,prepare_ml,getfasta}
+>	locate              find given kmers in sequence database and report
+>						locations
+>	prepare_ml          locate given kmers for given IDs in sequence db using
+>						various filters and prepare output for ML
+>	getfasta            extract fasta for given IDs in sequence db using
+>						various filters
 
 - [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite](https://meme-suite.org/meme/)
 
