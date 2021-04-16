@@ -15,7 +15,7 @@
 
 ### Links to R/Python scripts:
 - [kmer.py](https://github.com/orionzhou/nf/blob/master/bin/kmer.py): kmer utilities, use `kmer.py -h` to find out more
-
+'''
     usage: kmer.py [-h] {locate,prepare_ml,getfasta} ...
 
     kmer utilities
@@ -31,7 +31,7 @@
                             various filters and prepare output for ML
         getfasta            extract fasta for given IDs in sequence db using
                             various filters
-
+'''
 - [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite](https://meme-suite.org/meme/)
 
     usage: fimo.py [-h] {locate,filter,bed2wide,prepare_ml} ...
