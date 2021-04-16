@@ -35,12 +35,12 @@ Links to R/Python scripts:
 - [fimo.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/fimo.py): wrapper around `FIMO` from the [meme-suite](https://meme-suite.org/meme/)
 
     usage: fimo.py [-h] {locate,filter,bed2wide,prepare_ml} ...
-
+    
     fimo utilities
-
+    
     optional arguments:
       -h, --help            show this help message and exit
-
+    
     available commands:
       {locate,filter,bed2wide,prepare_ml}
         locate              run fimo to find given motifs in input sequences
@@ -52,12 +52,12 @@ Links to R/Python scripts:
 - [streme.py](https://github.com/orionzhou/nf/blob/master/bin/mmm/streme.py): wrapper around `STRME` from the [meme-suite](https://meme-suite.org/meme/), output a meme file with found motifs and a tabular file with the exact motif locations
 
     usage: streme.py [-h] {addscore,xml2tsv,pipe} ...
-
+    
     STREME utilities
-
+    
     optional arguments:
       -h, --help            show this help message and exit
-
+    
     available commands:
       {addscore,xml2tsv,pipe}
         addscore            add score_thresh to STREME output
@@ -75,13 +75,13 @@ Links to R/Python scripts:
            [--fold_repeat FOLD_REPEAT] [--nlevel NLEVEL] [--downsample]
            [--seed SEED] [--response RESPONSE] [--cpu CPU]
            fi fo1
-
+    
     Run machine learning classification on given dataset
-
+    
     positional arguments:
       fi                    input dataset
       fo1                   output metrics file
-
+    
     optional arguments:
       -h, --help            show this help message and exit
       --perm PERM           number permutations [default: 1]
@@ -99,14 +99,14 @@ Links to R/Python scripts:
 - [ml_predict.R](https://github.com/orionzhou/nf/blob/master/bin/mmm/ml_predict.R): read a trained model and predict outcome of a new dataset, for detailed usage run `ml_predict.R -h`
 
     usage: /home/springer/zhoux379/git/nf/bin/mmm/ml_predict.R [-h] fm fi fo
-
+    
     Make predictions using trained model on given dataset
-
+    
     positional arguments:
       fm          (ML) model file
       fi          input dataset
       fo          output file to save predictions
-
+    
     optional arguments:
       -h, --help  show this help message and exit
 
