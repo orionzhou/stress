@@ -348,7 +348,7 @@ collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
 }
 tags = c("b3")
 tags = c("b1")
-tags = c("b1",'b2')
+tags = c("b1",'b2','b4')
 
 tm = tibble(tag = tags) %>%
   mutate(x = map(tag, collect_models, dirw=dirw)) %>%
@@ -819,7 +819,7 @@ fo = glue("{dirf}/sf11.pdf")
 ggsave(p, file=fo, width=10, height=7)
 #}}}
 
-#{{{ gather & save model predictions for all B/M/W genes
+#{{{ gather & save model predictions for all BMW genes
 #{{{ write all gene list
 fi = glue('{dird}/15_de/05.rds')
 x =  readRDS(fi)
