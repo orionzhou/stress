@@ -78,7 +78,7 @@ system(glue("liftover.R {fi} {fo} --aln $wgc/data/raw/Zmays_{gt}-Zmays_B73/aln.b
 # variable response
 #{{{ read
 #{{{ DEG
-fg = file.path(dird, '15_de/09.gene.status.rds')
+fg = glue('{dird}/15_de/09.gene.status.rds')
 x = readRDS(fg)
 td1=x$td1; td2=x$td2
 #
