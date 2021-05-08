@@ -21,14 +21,17 @@ fh = file.path(dird, 'samples.xlsx')
 th = read_xlsx(fh, sheet='merged') %>%
     mutate(Time = sprintf("%02d:%02d", hour(Time), minute(Time))) %>%
     mutate(Tissue = 'leaf') %>% rename(Replicate=Rep) %>%
-    select(SampleID,Tissue,Genotype,Treatment,Timepoint,Experiment,Replicate)
+    select(SampleID,Tissue,Genotype,Treatment,Timepoint,Experiment,Replicate) %>%
+    mutate(Genotype = ifelse(Genotype=='MS71', 'Ms71', Genotype))
 th2 = th %>%
     mutate(txt=str_c(Experiment, Treatment, Timepoint, sep='_')) %>%
-    select(SampleID, Tissue, Genotype, Treatment, Experiment, txt, Replicate)
+    select(SampleID, Tissue, Genotype, Treatment, Experiment, txt, Replicate) %>%
+    mutate(Genotype = ifelse(Genotype=='MS71', 'Ms71', Genotype))
 gts3 = c("B73",'Mo17','W22')
 gts6 = c("B73",'Mo17','W22','B73xMo17','W22xB73','W22xMo17')
-gts25 = str_split("B73 B97 CML322 CML333 CML52 CML69 DK105 EP1 F7 Il14H Ki11 Ki3 M162W M37W Mo17 Mo18W MS71 NC350 NC358 Oh43 Oh7B P39 PH207 Tx303 W22", " ")[[1]]
+gts25 = str_split("B73 B97 CML322 CML333 CML52 CML69 DK105 EP1 F7 Il14H Ki11 Ki3 M162W M37W Mo17 Mo18W Ms71 NC350 NC358 Oh43 Oh7B P39 PH207 Tx303 W22", " ")[[1]]
 gts31 = str_split("Mo17 W22 B97 CML52 CML69 CML103 CML228 CML247 CML277 CML322 CML333 HP301 Il14H Ki3 Ki11 Ky21 M37W M162W Mo18W Ms71 NC350 NC358 Oh7B Oh43 P39 Tx303 Tzi8 EP1 DK105 F7 PE0075", " ")[[1]]
+gts_nam = str_split("B97 CML52 CML69 CML103 CML228 CML247 CML277 CML322 CML333 HP301 Il14H Ki3 Ki11 Ky21 M37W M162W Mo18W Ms71 NC350 NC358 Oh7B Oh43 P39 Tx303 Tzi8", " ")[[1]]
 gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 gt_map2 = c('BxM'='B73xMo17','WxB'='W22xB73','WxM'='W22xMo17')
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)
