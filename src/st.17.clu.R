@@ -673,7 +673,7 @@ fo = glue("{dirf}/f3a.rds")
 saveRDS(pa, fo)
 #}}}
 
-#{{{ sf05 - module eigengene
+#{{{ sf06 - module eigengene
 fi = glue("{dirw}/12.clustering.rds")
 r = readRDS(fi)
 r1 = rbind(r$cold$tul, r$heat$tul) %>%
@@ -715,7 +715,7 @@ pa2 = plot_avg_expr(tp2, ncol=4, col.opt='h', tit='heat clusters', strip.compact
 p = pa1 + pa2 + plot_layout(ncol=2, widths=c(1,1))
 fo = glue("{dirw}/22.all.expr.pdf")
 ggsave(p, file=fo, width=9.5, height=7)
-fo = glue("{dirf}/sf05.pdf")
+fo = glue("{dirf}/sf06.pdf")
 ggsave(p, file=fo, width=9.5, height=7)
 #}}}
 

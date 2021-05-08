@@ -844,7 +844,7 @@ fo = glue('{dirw}/25.model.pred.rds')
 saveRDS(to, fo)
 #}}}
 
-#{{{ evaluate model performance for different gene categories
+#{{{ evaluate model performance for different gene categories - f6
 fp = glue('{dirw}/25.model.pred.rds')
 pd = readRDS(fp) %>%
     inner_join(tc %>% select(tid,train,bid,cid,cond,note), by=c('tid','bid')) %>%
@@ -871,7 +871,8 @@ xm = tc %>% filter(train=='BMW') %>% select(cid,ts) %>% unnest(ts) %>%
     separate(gid, c('gt','gid'), sep='_')
 #
 perm=10
-x = pd %>% mutate(pred=factor(pred,levels=c(1,0))) %>%
+x = pd %>% filter(tag %in% c("b1",'b4')) %>%
+    mutate(pred=factor(pred,levels=c(1,0))) %>%
     inner_join(xm, by=c('cid','gt','gid')) %>%
     select(-tag,-tid) %>%
     group_by(train,cid,cond,note,gt) %>% nest() %>% rename(pred=data) %>%
@@ -886,7 +887,8 @@ tp = x %>% filter(metric=='roc_auc') %>% rename(score=mean) %>%
   #mutate(gt = factor(gt, levels=rev(gts3))) %>%
   #filter(str_detect(note, 'all')) %>%
   mutate(cond_note = str_c(cond,note,sep=": ")) %>%
-  mutate(train = factor(train, levels=c('BMW','B'))) %>%
+  #mutate(train = factor(train, levels=c('BMW_nr','BMW','B'))) %>%
+  mutate(train = factor(train, levels=c('BMW_nr','B'))) %>%
   mutate(cond_note = as_factor(cond_note))
 tps = tp %>% distinct(cid,cond_note)
 pdg = position_dodge(width=.8)
@@ -895,7 +897,7 @@ p = ggplot(tp, aes(x=train, y=score)) +
   geom_col(aes(fill=gt), position=pdg, width=.7, alpha=.6) +
   geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=gt), width=.2, size=.3, position=pdg) +
   scale_x_discrete(expand=expansion(mult=c(.05,.1))) +
-  scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,0))) +
+  scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,.02))) +
   #coord_cartesian(ylim=c(.5,ymax)) +
   coord_flip(ylim= c(.5, ymax)) +
   scale_fill_manual(name='', values=pal_npg()(5)) +
@@ -903,7 +905,7 @@ p = ggplot(tp, aes(x=train, y=score)) +
   facet_wrap(cond_note ~ ., scale='free_y', ncol=1, strip.position='top') +
   otheme(legend.pos='top.center.out',legend.dir='h',legend.box='h',
          legend.title=F, legend.vjust=-1.5,
-         margin = c(.2,.2,.2,.2), xgrid=T, panel.border=F,
+         margin = c(.2,.0,.2,.2), xgrid=T, panel.border=F,
          strip.style='white', strip.compact=F, panel.spacing=.1,
          xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T) +
   theme(legend.justification=c(.5,-.8)) +
@@ -911,13 +913,11 @@ p = ggplot(tp, aes(x=train, y=score)) +
   theme(strip.text.y = element_text(angle=0,size=8))
 #}}}
 fo = glue("{dirw}/32.auroc.pdf")
-ggsave(p, file=fo, width=4, height=8)
-fo = glue("{dirf}/f6a.pdf")
-#ggsave(p, file=fo, width=4, height=8)
+ggsave(p, file=fo, width=4, height=10)
 saveRDS(p, glue("{dirf}/f6a.rds"))
 #}}}
 
-#{{{ accuracy in predicting variable genotype response - f6
+#{{{ accuracy in predicting variable genotype response - f6b-c
 #{{{ prepare
 smap = c("+"=1,"-"=-1,"="=0)
 smap2 = c('1'='+','-1'="-",'0'="=")
@@ -932,7 +932,8 @@ get_acc2 <- function(ti) {
     select(st, acc, lab)
   #}}}
 }
-pd3 = pd %>% select(-tag) %>% filter(str_detect(note, "all")) %>%
+pd3 = pd %>% filter(tag %in% c("b1",'b4')) %>%
+    select(-tag) %>% filter(str_detect(note, "all")) %>%
     mutate(drc = ifelse(str_detect(note, "all up"), "up", "down")) %>%
     mutate(pred=ifelse(drc=='down' & pred==1, -1, pred))
 to1 = td2 %>%
@@ -1037,11 +1038,9 @@ p = ggplot(tp) +
 p = plot_dde_bar(tp)
 fo = glue("{dirw}/36.dde.bar.pdf")
 ggsave(p, file=fo, width=4, height=7)
-fo = glue("{dirf}/f6b.pdf")
-ggsave(p, file=fo, width=4, height=7)
 #p = ggarrange(pa, pb, nrow=2, ncol=1, heights=c(1,1))
-saveRDS(p, glue("{dirf}/f6b.rds"))
 #}}}
+saveRDS(p, glue("{dirf}/f6b.rds"))
 
 #{{{ dde cis/trans acc bar plot - f6c
 #{{{ prepare
@@ -1105,10 +1104,8 @@ p = ggplot(tp) +
 p = plot_cis_bar(tp)
 fo = glue("{dirw}/38.dde.cis.pdf")
 ggsave(p, file=fo, width=4, height=7)
-fo = glue("{dirf}/f6c.pdf")
-ggsave(p, file=fo, width=4, height=7)
-saveRDS(p, glue("{dirf}/f6c.rds"))
 #}}}
+saveRDS(p, glue("{dirf}/f6c.rds"))
 
 #{{{ dde acc plot
 tp = to2 %>% rename(score=acc) %>%

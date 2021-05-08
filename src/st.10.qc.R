@@ -8,9 +8,9 @@ res = rnaseq_cpm(yid)
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
-#{{{ TC - sf04
+#{{{ TC - sf05
 ex = 'TC'
-th1 = th %>% filter(Experiment==ex) %>%
+th1 = th %>% filter(Experiment==ex, Timepoint != 8) %>%
     mutate(Genotype = factor(Genotype, levels=gts3)) %>%
     mutate(Treatment = factor(Treatment, levels=c("Control",'Cold','Heat'))) %>%
     mutate(has = sprintf("h%03d", Timepoint*10)) %>%
@@ -25,20 +25,20 @@ tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=6, height=8)
-fo = glue('{dirf}/sf04a.rds')
+fo = glue('{dirf}/sf05a.rds')
 saveRDS(p1a, fo)
 
 p1b = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.s.pdf",dirw,ex), p1b, width=6, height=8)
 
-p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=3,iter=1000, seed=12,
+p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=2,iter=1000, seed=12,
     var.shape='Treatment',var.col='Genotype',var.lab='has',#var.ellipse='grp',
     legend.pos='top.center.out', legend.dir='h', legend.box='h',legend.title=F,
     shapes=c(0,1,2), pal.col='aaas')
 fo = glue("{dirw}/22.tsne.{ex}.pdf")
 ggsave(fo, p2, width=5, height=5)
-fo = file.path(dirf, 'sf04b.rds')
+fo = file.path(dirf, 'sf05b.rds')
 saveRDS(p2, fo)
 
 th2 = th1 %>% filter(Genotype=='B73')
@@ -197,7 +197,8 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
@@ -210,10 +211,12 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
+    facet_wrap(~Genotype)
 fo = glue('{dirf}/sf01c.rds')
 saveRDS(p3, fo)
 
@@ -223,7 +226,8 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
@@ -236,7 +240,8 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
@@ -249,7 +254,8 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}

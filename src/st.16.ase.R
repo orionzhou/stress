@@ -236,7 +236,7 @@ ggsave(p, file = fp, width = 4.5, height = 6)
 #}}}
 #}}}
 
-#{{{ cis/trans for dDEGs - f2d-e, sf03
+#{{{ cis/trans for dDEGs - f2d-e, sf04
 #{{{ read
 fi = file.path(dird, '15_de/05.rds')
 r = readRDS(fi)
@@ -282,7 +282,7 @@ linecol = 'azure3'; lty = 'solid'
 cols9 = pal_simpsons()(10)
 #}}}
 
-#{{{ scatter plot - sf03a
+#{{{ scatter plot - sf04a
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
@@ -295,12 +295,12 @@ p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
            legend.vjust = -1.2, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
-fo = glue('{dirf}/sf03a.rds')
+fo = glue('{dirf}/sf04a.rds')
 saveRDS(p, fo)
 #}}}
 fp = glue('{dirw}/13.modex.pdf')
 ggsave(p, file = fp, width = 5, height = 7)
-#{{{ bar plot showing counts - sf03b
+#{{{ bar plot showing counts - sf04b
 tp1 = tp %>% count(cond, x, reg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -316,7 +316,7 @@ p = ggplot(tp1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            legend.vjust = -1.2, legend.box='h',
            xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
-fo = glue('{dirf}/sf03b.rds')
+fo = glue('{dirf}/sf04b.rds')
 saveRDS(p, fo)
 #}}}
 fp = glue('{dirw}/13.modex.cnt.pdf')

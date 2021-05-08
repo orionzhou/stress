@@ -276,176 +276,44 @@ saveRDS(pbz, fo)
 fo = glue('{dirw}/design.pdf')
 ggexport(p, filename=fo, width=5, height=7)
 
-#{{{ plot design
-tpx = tp0 %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
-    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
-    mutate(x=ifelse(Timepoint==25, 10, x))
-tpy = tp0 %>% distinct(y, Genotype)
-tp = tp0 %>% inner_join(tpx, by='Timepoint')
-tpa = tp %>% filter(Genotype!='...')
-tpb = tp %>% filter(Genotype=='...')
-tpr = tpa %>% mutate(txt=ifelse(ExpID=='HY', 'x3', 'x1'))
-cols11 = c(pal_aaas()(10), pal_simpsons()(5))
-darkB = 6 + 6 * 4/17; darkE = 6 + 14 * 4/17
-p_dsn = ggplot(tpa, aes(x, y)) +
-    geom_rect(aes(xmin=darkB,xmax=darkE,ymin=-Inf,ymax=Inf), fill='#D3D3D3') +
-    geom_point(aes(color=Genotype), size=5) +
-    geom_text(data=tpb, aes(x,y, label='...'), size=3) +
+
+#{{{ RNA+ATAC design
+gts3 = c("B73", "Mo17", 'B73xMo17')
+tiss5 = c("embryo_imbibed_seed","coleoptile_tip",
+          "seedling_leaf", "seedling_meristem","seedling_root")
+tiss18 = c("blade_v12", "flag_leaf",
+    "husk", "sheath", "auricle",
+    "floret", "tassel_stem",
+    "internode", "root_0DAP", "radicle_root",
+    "silk", "tassel", "spikelets", "ear",
+    "kernel_14DAP", "endosperm_14DAP", "embryo_27DAP", "endosperm_27DAP")
+tiss23 = c(tiss5, tiss18)
+tp = crossing(tissue=tiss23, genotype=gts3) %>%
+    mutate(tissue=factor(tissue, levels=tiss23)) %>%
+    mutate(genotype=factor(genotype,levels=gts3))
+tpx = tp %>% distinct(genotype) %>% arrange(genotype) %>% mutate(x=1:n())
+tpy = tp %>% distinct(tissue) %>% arrange(tissue) %>% mutate(y=n():1)
+tp = tp %>% inner_join(tpx, by='genotype') %>%
+    inner_join(tpy, by = 'tissue')
+tpr = tp %>% mutate(txt='x5')
+
+p = ggplot(tp, aes(x, y)) +
+    geom_point(aes(color=genotype), size=5) +
+    #geom_text(data=tpb, aes(x,y, label='...'), size=3) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
-    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
-    scale_color_manual(values=cols11) +
-    facet_wrap(~ExpTxt, ncol=1, scale='free_y') +
-    otheme(legend.pos='none', margin=c(.1,.3,.3,.3),
-           xtitle=T, ytitle=F, xtext=T, ytext=T, xtick=T, xgrid=T) +
+    geom_hline(yintercept=18.5,color='black',size=.5) +
+    scale_x_continuous(breaks=tpx$x, labels=tpx$genotype,
+                       expand=expansion(add=c(.5,.9)), position='top') +
+    scale_y_continuous(breaks=tpy$y, labels=tpy$tissue, expand=expansion(mult=c(.02,.02))) +
+    scale_color_aaas() +
+    annotate('text',x=4,y=21,size=2.5,hjust=.5,vjust=.5,label='Growth chamber') +
+    annotate('text',x=4,y=10,size=2.5,hjust=.5,vjust=.5,label='Field') +
+    otheme(legend.pos='none', margin=c(.3,.3,.3,.3),
+           xtitle=F, ytitle=F, xtext=T, ytext=T, xtick=F, xgrid=F) +
     theme(axis.text.y = element_text(color='black')) +
-    theme(legend.spacing=unit(1,'lines'), legend.key.size = unit(1,'lines'))
+    theme(plot.background=element_rect(fill=NA, color=NA))
+fo = glue('{dirw}/atac.design.pdf')
+ggexport(p, filename=fo, width=4, height=5)
 #}}}
-#{{{ #plot design [old]
-load_fonts()
-dirw = dird
-fas = c('\uf4d8', '\uf00d')
-fa1 = fas[1]; fa2 = fas[2]
-
-plot_design <- function(tp, tix, tiy, box.wd=.5, box.ht=.5, leg.pos.x=0, mar.left=3, x.off=.5, x3=F, leg.nrow=3, xlab=F) {
-    #{{{
-    ff='fas'; fa1='\uf4d8'; fa2='\uf00d'
-    ff='icm'; fa1='\ue900'; fa2='\uf05e'
-    tfa = tibble(Treatment=c('Control','Cold','Heat'),
-      faw = c('\uf6c4','\uf2dc','\uf185'),
-      fat = c('\uf2c9','\uf2cb','\uf2c7')) %>%
-        mutate(fawt = str_c(faw,fat,sep='')) %>% inner_join(tiy, by='Treatment')
-    tpb = tiy %>% mutate(ymin = y-.5, ymax=y+.5)
-    tpb2 = tp %>% distinct(x0, y0) %>%
-        mutate(xmin=x0-box.wd, xmax=x0+box.wd, ymin=y0-box.ht, ymax=y0+box.ht)
-    tpl = tp %>% filter(lost)
-    tpt = tp %>% filter(Timepoint==min(tp$Timepoint), Treatment=='Control')
-    xb = min(tpb2$xmin); xe = max(tpb2$xmax); yb = min(tpb2$ymin); ye = max(tpb2$ymax)
-    cols = pal_aaas()(10)
-    if(length(unique(tp$Genotype)) > 10)
-        cols = c(pal_aaas()(10),pal_simpsons()(15))[c(1:3,11:25,4:10)]
-    px = ggplot(tp) +
-        geom_rect(data=tpb, aes(xmin=xb,xmax=xe,ymin=ymin,ymax=ymax,fill=Treatment), alpha=.3) +
-        geom_rect(data=tpb2, aes(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax), fill=NA, color='black', size=.2) +
-        geom_text(aes(x, y, color=Genotype), label=fa1, family=ff, size=6, vjust=-4)+
-        geom_text(data=tpl, aes(x, y), label=fa2, color='black', alpha=.7, family='fas', size=5) +
-        geom_point(data=tix, aes(x,y=ye+.1), shape=17, size=2.5) +
-        geom_text(data=tiy, aes(x=xb-x.off, y=y+.1, label=Treatment), size=3, vjust=0) +
-        geom_text(data=tfa, aes(x=xb-x.off, y=y-.1, label=fawt),size=4,family='fas',vjust=1) +
-        scale_y_reverse(breaks=tiy$y, labels=tiy$Treatment, expand=c(0,0)) +
-        scale_x_continuous(name='Hours after Treatment', breaks=tix$x, labels=tix$Timepoint, expand=expand_scale(mult=c(0,.01))) +
-        expand_limits(y = c(yb-.2, ye)) +
-        expand_limits(x = xb - 2*x.off) +
-        scale_color_manual(values=cols) +
-        scale_fill_manual(values=c('springgreen','steelblue1','firebrick1')) +
-        otheme(legend.pos='none',legend.dir='v',legend.title=F,
-               margin = c(0,0,0,mar.left),
-               xtitle=xlab, xtext=T, ytext=F) +
-        theme(legend.position=c(leg.pos.x,.85), legend.justification=c(1,1), legend.spacing=unit(0,'lines'), legend.key.size = unit(0,'lines')) +
-        theme(panel.border = element_blank()) +
-        guides(fill='none', col=guide_legend(nrow=leg.nrow, label.vjust=1, label.hjust=0))
-    if(x3) px = px + geom_text(aes(x, y, color=Genotype), label='x3', size=2, hjust=-.6, vjust=0, show.legend=F)
-    px
-    #}}}
-}
-
-#{{{ TC
-fi = file.path(dird, 'samples.xlsx')
-gts = c('B73','Mo17','W22')
-trs = c("Control",'Cold','Heat')
-tms = c(0,.5,1,1.5,2,3,4,8,25)
-ti = crossing(Genotype=gts,Treatment=trs,Timepoint=tms) %>%
-    filter(Treatment == 'Control' | (Treatment!='Control' & Timepoint!=0)) %>%
-    mutate(lost=ifelse(Genotype=='W22' & Timepoint %in% c(1.5,3,8), T, F)) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
-    mutate(Treatment=factor(Treatment, levels=trs)) %>%
-    arrange(Treatment, Timepoint, Genotype)
-tix1 = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
-    mutate(x=ifelse(Timepoint==8, 6, Timepoint)) %>%
-    mutate(x=ifelse(Timepoint==25, 10, x))
-tiy1 = ti %>% distinct(Treatment) %>% mutate(y = 1:n())
-tig1 = ti %>% distinct(Genotype) %>% mutate(ox=0, oy= (1:n() - (1+n())/2)/n())
-tp1 = ti %>% inner_join(tix1, by='Timepoint') %>% rename(x0 = x) %>%
-    inner_join(tiy1, by=c('Treatment')) %>% rename(y0 = y) %>%
-    inner_join(tig1, by=c('Genotype')) %>%
-    mutate(x = x0+ox, y = y0+oy)
-#}}}
-#{{{ HY
-gts = c('B73','Mo17','W22','BxM', 'BxW','MxW')
-trs = c("Control",'Cold','Heat')
-tms = c(0,1,25)
-ti = crossing(Genotype=gts,Treatment=trs,Timepoint=tms) %>%
-    filter(Treatment == 'Control' | (Treatment!='Control' & Timepoint!=0)) %>%
-    mutate(lost = F) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
-    mutate(Treatment=factor(Treatment, levels=trs)) %>%
-    arrange(Treatment, Timepoint, Genotype)
-ti = crossing(Genotype=gts,Treatment=trs,Timepoint=tms) %>%
-    filter(Treatment == 'Control' | (Treatment!='Control' & Timepoint!=0)) %>%
-    mutate(lost = F) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
-    mutate(Treatment=factor(Treatment, levels=trs)) %>%
-    arrange(Treatment, Timepoint, Genotype)
-tix2 = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
-    mutate(x = Timepoint) %>%
-    mutate(x=ifelse(Timepoint==25, 4, x))
-tiy2 = ti %>% distinct(Treatment) %>% mutate(y = 1:n())
-n=2; ix = (1:n - (1+n)/2)/(2*n)
-n=3; iy = (1:n - (1+n)/2)/n
-tig2 = ti %>% distinct(Genotype) %>% arrange(Genotype) %>%
-    mutate(ox = rep(ix, each=3), oy = rep(iy, 2))
-tp2 = ti %>% inner_join(tix2, by='Timepoint') %>% rename(x0 = x) %>%
-    inner_join(tiy2, by=c('Treatment')) %>% rename(y0 = y) %>%
-    inner_join(tig2, by=c('Genotype')) %>%
-    mutate(x = x0+ox, y = y0+oy)
-#}}}
-#{{{ NM
-fi = file.path(dird, 'samples.xlsx')
-ti = read_xlsx(fi, 'NM')
-gts = unique(ti$Genotype)
-gts1 = c('B73','Mo17','W22')
-gts = c('B73','Mo17','W22', gts[! gts %in% gts1])
-trs = c("Control",'Cold')
-tms = c(1,25)
-ti = ti %>% select(SampleID,Genotype,Treatment,Timepoint) %>%
-    mutate(lost = ifelse(SampleID %in% c("NM11"), T, F)) %>%
-    mutate(Genotype=factor(Genotype, levels=gts)) %>%
-    mutate(Treatment=factor(Treatment, levels=trs)) %>%
-    arrange(Treatment, Timepoint, Genotype)
-tix3 = ti %>% distinct(Timepoint) %>% arrange(Timepoint) %>%
-    mutate(x=ifelse(Timepoint==25, 4, Timepoint))
-tiy3 = ti %>% distinct(Treatment) %>% mutate(y = 1:n())
-n=5; ix = (1:n - (1+n)/2)/n
-n=5; iy = (1:n - (1+n)/2)/n
-tig3 = ti %>% distinct(Genotype) %>% arrange(Genotype) %>%
-    mutate(ox = rep(ix, each=5), oy = rep(iy, 5))
-tp3 = ti %>% inner_join(tix3, by='Timepoint') %>% rename(x0 = x) %>%
-    inner_join(tiy3, by=c('Treatment')) %>% rename(y0 = y) %>%
-    inner_join(tig3, by=c('Genotype')) %>%
-    mutate(x = x0+ox, y = y0+oy)
-#}}}
-
-p1 = plot_design(tp1,tix1,tiy1,box.wd=.25,leg.pos.x=0,mar.left=3.2)
-fo = file.path(dirw, 'test.pdf')
-#ggsave(p1, file=fo, width=8, height=3)
-p2 = plot_design(tp2,tix2,tiy2,box.wd=.3,leg.pos.x=0,x.off=.2,mar.left=3.2,x3=T, leg.nrow=6)
-fo = file.path(dirw, 'test2.pdf')
-#ggsave(p2, file=fo, width=8, height=3)
-p3 = plot_design(tp3,tix3,tiy3,box.wd=.5,leg.pos.x=0,x.off=.2,mar.left=11.5,leg.nrow=9,xlab=T)
-fo = file.path(dirw, 'test3.pdf')
-#ggsave(p3, file=fo, width=8, height=3)
-
-fo = sprintf('%s/00.design.pdf', dirf)
-ggarrange(p1, p2, p3, common.legend = F,
-    nrow=3, ncol=1, heights=c(1,1,1),
-    labels=c("Experiment 1",'Experiment 2','Experiment 3'), label.x=-.075) %>%
-    ggexport(filename = fo, width=8, height=8)
-#}}}
-
-
-fo = glue('{dirw}/t.pdf')
-ggexport(p, filename=fo, width=5, height=4)
-
-
 
 
