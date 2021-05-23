@@ -14,7 +14,7 @@
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
 
 ### Links to R / Python scripts:
-- [cis_trans.py](https://github.com/orionzhou/demo/blob/master/cis_trans/README.md): Classify cis/trans inheritance pattern using inbred/hybrid expression, in `basic` mode or `differential` mode, `./cis_trans.R -h` to find out more
+- [cis_trans.R](https://github.com/orionzhou/demo/blob/master/cis_trans/README.md): Classify cis/trans inheritance pattern using inbred/hybrid expression, in `basic` mode or `differential` mode
   ```
     $ ./cis_trans.R -h
     usage: ./cis_trans.R [-h] [--mode MODE] [--min_rc MIN_RC] [--n_cpu N_CPU]
