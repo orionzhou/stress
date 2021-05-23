@@ -14,6 +14,30 @@
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
 
 ### Links to R / Python scripts:
+- [cis_trans.py](https://github.com/orionzhou/demo/blob/cis_trans/cis_trans.R): Classify cis/trans inheritance pattern using inbred/hybrid expression, in `basic` mode or `differential` mode, `./cis_trans.R -h` to find out more
+  ```
+    $ ./cis_trans.R -h
+    usage: ./cis_trans.R [-h] [--mode MODE] [--min_rc MIN_RC] [--n_cpu N_CPU]
+                         f_rc f_sf f_dsp fo
+
+    Classify cis/trans inheritance pattern using inbred/hybrid RNA-Seq read counts
+
+    positional arguments:
+      f_rc             read count table
+      f_sf             sample-wise size factor table
+      f_dsp            gene-wise dispersion table
+      fo               output file
+
+    optional arguments:
+      -h, --help       show this help message and exit
+      --mode MODE      cis/trans test mode, "basic" for steady-state cis/trans
+                       test and "diff" for control/treatment differential test
+                       [default: basic]
+      --min_rc MIN_RC  minimum read counts to filter low-expressed genes [default:
+                       10]
+      --n_cpu N_CPU    number of CPUs / threads to use for parallel processing
+                       (for spped up if you have many genes) [default: 1]
+  ```
 - [kmer.py](https://github.com/orionzhou/nf/blob/master/bin/kmer.py): kmer utilities, use `kmer.py -h` to find out more
 
 ```bash

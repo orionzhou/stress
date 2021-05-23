@@ -215,6 +215,7 @@ LL5 <- function(mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8) {
 }
 #}}}
 
+#{{{ compare motifs
 args = commandArgs(trailingOnly=T)
 n_cpu = as.integer(args[1])
 
@@ -240,5 +241,7 @@ mtfs0 = read_meme(fi)
 mtfs1 = c(mtfs_known[137], mtfs0)
 cmp1 = compare_motifs(mtfs1, 1, method="PCC", min.mean.ic=.0,
                       min.overlap=6, score.strat="a.mean")
+#}}}
+
 
 

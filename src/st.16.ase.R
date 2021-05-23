@@ -45,7 +45,7 @@ ggsave(p, file=fo, width=8, height=5)
 #}}}
 
 #{{{ organize data for tests
-yid = 'rn20a'; res = rnaseq_cpm(yid)
+yid = 'zm.rn20a'; res = rnaseq_cpm(yid)
 
 #{{{ get sizeFactor and dispersions using DESeq2
 require(DESeq2)
@@ -465,5 +465,94 @@ ggsave(p, file=fo, width=9, height=5)
 #}}}
 
 #}}}
+
+
+#{{{ create toy datasets for demo purposes
+#{{{ extract toy gids
+fo = glue('{dirw}/20.rds')
+r20 = readRDS(fo)
+gids1 = r20$ct_basic %>% filter(cond=='Cold25', cross=='B73xMo17') %>%
+    group_by(reg) %>% slice(11:12) %>% ungroup() %>% select(cond,cross,gid,reg) %>%
+    pull(gid)
+gids2 = r20$ct_stress %>%
+    filter(cond=='Cold25', condB=='Control25', cross=='B73xMo17') %>%
+    group_by(reg) %>% slice(1:2) %>% ungroup() %>% select(cond,cross,gid,reg) %>%
+    pull(gid)
+fo = file.path(dirw, '01.raw.rds')
+r01 = readRDS(fo)
+tg1 = r01$disp %>% filter(gid %in% gids1)
+tg2 = r01$disp %>% filter(gid %in% gids2)
+#}}}
+
+# read raw read counts
+yid = 'zm.rn20a'; res = rnaseq_cpm(yid)
+
+#{{{
+gtm = c('B73'='parA','Mo17'='parB','B73xMo17'='hyb')
+trm = c("Control"='ctrl', 'Cold'='trmt')
+toh = res$th %>% filter(Experiment=='HY',
+                        Genotype %in% c("B73",'Mo17','B73xMo17'),
+                        Treatment %in% c('Cold','Control'), Timepoint==25) %>%
+    select(SampleID, Genotype, Treatment) %>%
+    inner_join(res$tl %>% select(SampleID, sizeFactor), by='SampleID')
+toh1 = toh %>% filter(Treatment == 'Cold') %>%
+    arrange(SampleID) %>% group_by(Genotype) %>% mutate(r=1:n()) %>% ungroup() %>%
+    mutate(pa=gtm[Genotype]) %>% mutate(sid=glue("{pa}_rep{r}")) %>%
+    select(SampleID, sid, sizeFactor)
+toh2 = toh %>% mutate(pa=gtm[Genotype], cond=trm[Treatment]) %>%
+    arrange(SampleID) %>% group_by(pa,cond) %>% mutate(r=1:n()) %>% ungroup() %>%
+    mutate(sid=glue("{pa}_{cond}_rep{r}")) %>%
+    select(SampleID, sid, sizeFactor)
+
+tom1 = res$tm %>% filter(SampleID %in% toh1$SampleID, gid %in% gids1) %>%
+    select(SampleID, gid, ReadCount) %>%
+    inner_join(toh1 %>% select(-sizeFactor), by='SampleID') %>%
+    select(-SampleID) %>% spread(sid, ReadCount) %>%
+    select(gid, starts_with('parA'), starts_with('parB'))
+tom2 = res$tm %>% filter(SampleID %in% toh2$SampleID, gid %in% gids2) %>%
+    select(SampleID, gid, ReadCount) %>%
+    inner_join(toh2 %>% select(-sizeFactor), by='SampleID') %>%
+    select(-SampleID) %>% spread(sid, ReadCount) %>%
+    select(gid, starts_with('parA_ctrl'), starts_with('parA_trmt'),
+        starts_with('parB_ctrl'), starts_with('parB_trmt'))
+tom1b = res$ase_gene %>% filter(SampleID %in% toh1$SampleID, gid %in% gids1) %>%
+    select(SampleID, gid, hybA=allele1, hybB=allele2) %>%
+    inner_join(toh1 %>% select(-sizeFactor), by='SampleID') %>%
+    filter(str_starts(sid, 'hyb')) %>%
+    select(-SampleID) %>% gather(gt, rc, -gid, -sid) %>%
+    separate(sid, c('sid','r'), sep='_') %>%
+    mutate(sid = glue("{gt}_{r}")) %>% select(-r,-gt) %>% spread(sid, rc) %>%
+    select(gid, starts_with('hybA'), starts_with('hybB'))
+tom2b = res$ase_gene %>% filter(SampleID %in% toh2$SampleID, gid %in% gids2) %>%
+    select(SampleID, gid, hybA=allele1, hybB=allele2) %>%
+    inner_join(toh2 %>% select(-sizeFactor), by='SampleID') %>%
+    filter(str_starts(sid, 'hyb')) %>%
+    select(-SampleID) %>% gather(gt, rc, -gid, -sid) %>%
+    separate(sid, c('sid','cond','r'), sep='_') %>%
+    mutate(sid = glue("{gt}_{cond}_{r}")) %>% select(-r,-gt,-cond) %>% spread(sid, rc) %>%
+    select(gid, starts_with('hybA_ctrl'), starts_with("hybA_trmt"),
+           starts_with('hybB_ctrl'), starts_with('hybB_trmt'))
+#}}}
+to1 = tom1 %>% inner_join(tom1b, by='gid')
+to2 = tom2 %>% inner_join(tom2b, by='gid')
+
+th1 = toh1 %>% select(sid, sizeFactor) %>% arrange(sid) 
+th2 = toh2 %>% select(sid, sizeFactor) %>% arrange(sid) 
+
+diro = '~/git/demo/ase'
+fo = glue("{diro}/t01_readCount.tsv")
+write_tsv(to1, fo)
+fo = glue("{diro}/t01_sizeFactor.tsv")
+write_tsv(th1, fo)
+fo = glue("{diro}/t01_dispersion.tsv")
+write_tsv(tg1, fo)
+fo = glue("{diro}/t02_readCount.tsv")
+write_tsv(to2, fo)
+fo = glue("{diro}/t02_sizeFactor.tsv")
+write_tsv(th2, fo)
+fo = glue("{diro}/t02_dispersion.tsv")
+write_tsv(tg2, fo)
+#}}}
+
 
 

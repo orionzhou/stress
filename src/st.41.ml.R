@@ -326,7 +326,7 @@ epis1 = c('umr')
 nfeas1 = c('top100')
 mods1 = c('zoops')
 #}}}
-collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
+collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi=c('raw','umr'),
                            nfea='top100', mod='zoops') {
   #{{{
   fi = glue("{dirw}/00_nf/{tag}.cfg.rds")
@@ -337,12 +337,13 @@ collect_models <- function(tag, dirw, bin='TSS:-/+2k', epi='umr',
     unnest(metric) %>% spread(metric, estimate) %>%
     dplyr::rename(f1=f_meas, auroc=roc_auc, auprc=pr_auc) %>%
     inner_join(th, by='did')
-  best = th %>% filter(bin==!!bin,epi==!!epi, nfea==!!nfea, mod==!!mod) %>%
-      inner_join(ml, by=c('did'='sid')) %>%
-      filter(!is.na(fit)) %>% select(did,tid,bid,fit,metric)
   vis = ml %>% select(did=sid, perm, vis) %>%
     unnest(vis) %>%
     inner_join(th, by='did')
+  best = th %>%
+      filter(bin %in% !!bin, epi %in% !!epi, nfea %in% !!nfea, mod %in% !!mod) %>%
+      inner_join(ml, by=c('did'='sid')) %>%
+      filter(!is.na(fit)) %>% select(did,tid,bid,bin,epi,nfea,mod,fit,metric)
   list(metric=metric, best=best, vis=vis)
   #}}}
 }
@@ -359,12 +360,12 @@ fm = glue('{dirw}/11.models.rds')
 saveRDS(tm, fm)
 # write models
 tb = tm %>% select(tag, best) %>% unnest(best) %>%
-    select(tag,tid,bid)
+    select(tag,tid,bid,did,bin,epi,nfea,mod)
 fb = glue('{dirw}/12.best.models.tsv')
 write_tsv(tb, fb)
 # write models
 tb = tm %>% select(tag, best) %>% unnest(best)
-tb %>% mutate(fo = glue("{dirw}/23_models/{tid}.rds")) %>%
+tb %>% mutate(fo = glue("{dirw}/23_models/{tid}_{epi}.rds")) %>%
     mutate(map2(fit, fo, saveRDS))
 #}}}
 
@@ -825,7 +826,7 @@ fi = glue('{dird}/15_de/05.rds')
 x =  readRDS(fi)
 deg48 = x$deg48; deg12 = x$deg12
 md = deg12 %>% pluck('ds',1) %>% select(gid) %>%
-    crossing(gt = gts3) %>% mutate(status = 1) %>%
+    crossing(gt = gts32) %>% mutate(status = 1) %>%
     mutate(gid = glue("{gt}_{gid}")) %>%
     select(gid, status)
 

@@ -3,7 +3,7 @@ dirw = glue('{dird}/45_nam')
 setwd(dirw)
 tgl = gcfg$gene %>% select(gid,chrom,start,end,srd)
 tga = read_loci() %>% select(gid,symbol,note)
-txdb = load_txdb('Zmays_B73', primary=T)
+txdb = load_txdb('B73', primary=F)
 #{{{ functions
 require(cluster)
 read_vnt <- function(chrom,beg,end,
@@ -641,5 +641,327 @@ fo = glue("{dirf}/sf13b.rds")
 saveRDS(tp$p[[1]], fo)
 #}}}
 
+
+#{{{ eval model pred in gts26 cold_25h panel
+#{{{ write gene list
+x0 = rd5 %>% select(drc,gid,t_clu1) %>% unnest(t_clu1) %>%
+    mutate(gt = ifelse(gt=='MS71', 'Ms71', gt)) %>%
+    mutate(status = ifelse((drc=='up' & clu==1) | (drc=='down' & clu==-1), 1, 0)) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    select(drc, gid, status)
+
+fo = glue("{dirw}/31.genes.rds")
+saveRDS(x0, fo)
+to = x0 %>% distinct(gid) %>% mutate(status=1)
+fo = glue("{dirw}/31.genes.tsv")
+write_tsv(to, fo)
+#}}}
+
+#{{{ extract models
+fi = glue('{dird}/41_ml/06.tk.tc.rds')
+r6 = readRDS(fi)
+fb = glue('{dird}/41_ml/12.best.models.tsv')
+tb = read_tsv(fb)
+tm = tb %>% inner_join(r6$tc, by=c('bid','tid')) %>%
+    select(-gids, -gids_c, -ts) %>%
+    filter(cond=='cold', str_starts(note, 'all'))
+
+fo = glue("{dirw}/32.models.rds")
+saveRDS(tm, fo)
+to = tm %>% select(tag,tid,bid,epi)
+fo = glue("{dirw}/32.models.tsv")
+write_tsv(to, fo)
+#}}}
+
+# run j39 fimo.py prepare_ml
+# run j39 ml_predict
+
+fi = glue("{dirw}/32.models.rds")
+tm = readRDS(fi)
+to = tm %>%# select(tag, tid, bid) %>%
+    mutate(fi = glue("{dirw}/37_ml_out/{tag}_{tid}_{epi}.tsv")) %>%
+    mutate(pred = map(fi, read_tsv)) %>% select(-fi) %>%
+    mutate(drc = ifelse(str_detect(note, 'down'), 'down', 'up')) %>%
+    select(tid,bid,epi,train,drc,pred) %>% unnest(pred)
+
+fg = glue("{dirw}/31.genes.rds")
+tg = readRDS(fg)
+
+pred = tg %>% inner_join(to, by=c('drc','gid')) %>%
+    separate(gid, c('gt','gid'), sep='_') %>% select(-prob) %>%
+    inner_join(rd5 %>% select(drc,st,gid,t_clu1) %>% unnest(t_clu1),
+        by=c('drc','gid','gt')) %>%
+    mutate(mdl=glue("{train}_{epi}")) %>%
+    select(gid,drc,st, gt, log2fc,clu,status, mdl, pred) %>%
+    spread(mdl, pred)
+pred %>% print(n=30,width=Inf)
+
+to3 = pred %>% rename(pred=B_umr) %>%
+    count(gid, drc, status, pred) %>%
+    mutate(p = glue("n{status}{pred}")) %>%
+    select(-status, -pred) %>%
+    spread(p, n) %>%
+    replace_na(list(n00=0,n01=0,n10=0,n11=0)) %>%
+    mutate(acc = n00/(n00+n01)/2 + n11/(n10+n11)/2)
+to3 %>% filter(acc >= .8) %>% print(n=40)
+
+gid='Zm00001d017363'
+pred %>% filter(gid==!!gid) %>% select(-gid,-BMW_nr_raw,-BMW_nr_umr) %>% print(n=30)
+
+fo = glue('{dirw}/25.model.pred.rds')
+saveRDS(pred, fo)
+#}}}
+
+#{{{ identify signif. associated motifs
+fi = glue('{dirw}/32.models.rds')
+ti = readRDS(fi) %>%
+    mutate(fi=glue("{dirw}/36_ml_in/{bid}_{epi}.tsv")) %>%
+    mutate(ti = map(fi, read_tsv)) %>%
+    select(train,cond,note,epi,ti)
+fi = glue('{dirw}/25.model.pred.rds')
+pred = readRDS(fi)
+
+spread2 <- function(ti) ti %>% select(-status) %>% separate(gid,c('gt','gid'), sep='_') %>% gather(mid, pav, -gid, -gt)
+ti2 = ti %>% mutate(drc=ifelse(str_detect(note,'down'), 'down', 'up')) %>%
+    filter(train=='B') %>%
+    mutate(x = map(ti, spread2)) %>%
+    select(epi,drc,x) %>% unnest(x)
+
+#{{{ model performance
+tk = pred %>% select(drc,gid, gt, status,raw=B_raw, umr=B_umr) %>%
+    gather(epi, pred, -drc,-gid,-status,-gt) %>%
+    group_by(gt, epi) %>%
+    summarise(n_tot=n(), n1=sum(status==pred)/n_tot) %>% ungroup() %>%
+    select(-n_tot) %>% spread(epi, n1) %>% print(n=40)
+
+tk = pred %>% select(drc,gid,status,gt,raw=B_raw, umr=B_umr) %>%
+    gather(epi, pred, -drc,-gid,-status,-gt) %>%
+    count(epi, gid, drc, status, pred) %>%
+    mutate(p = glue("n{status}{pred}")) %>% select(-status, -pred) %>%
+    spread(p, n) %>%
+    replace_na(list(n00=0,n01=0,n10=0,n11=0)) %>%
+    mutate(acc = n00/(n00+n01)/2 + n11/(n10+n11)/2) %>% filter(!is.na(acc)) %>%
+    arrange(epi, desc(acc)) %>% print(n=40)
+
+tk %>% count(epi, acc > 0.9)
+tk %>% count(epi, acc > 0.8)
+#}}}
+
+#{{{ motif association
+tj = ti2 %>% inner_join(pred, by=c('drc','gid','gt')) %>%
+    count(epi, gid, drc, mid, status, pav) %>%
+    mutate(p = glue("n{status}{pav}")) %>%
+    select(-status, -pav) %>%
+    spread(p, n) %>%
+    replace_na(list(n00=0,n01=0,n10=0,n11=0)) %>%
+    mutate(acc = n00/(n00+n01)/2 + n11/(n10+n11)/2) %>% filter(!is.na(acc))
+
+tj2 = tj %>% arrange(epi, gid, drc, desc(acc)) %>%
+    group_by(epi, gid, drc) %>% dplyr::slice(1:1) %>% ungroup() %>%
+    arrange(epi, desc(acc)) %>% print(n=40)
+tj3 = tj2 %>% filter(n00+n01 >= 3, n10+n11>=3, acc >.9) %>% print(n=40)
+
+tj2 %>% count(epi, acc > 0.9)
+tj2 %>% count(epi, acc > 0.8)
+#}}}
+#}}}
+
+
+#{{{ final synteny plots
+fi = glue('{dirw}/25.model.pred.rds')
+pred = readRDS(fi)
+fx = glue("{dirg}2/syntelog/maize.gene.model.rds")
+tg = readRDS(fx)
+#{{{ functions
+require(Biostrings)
+require(DECIPHER)
+require(ape)
+require(ggtree)
+require(tidytree)
+make_syn  <- function(name1, name2, msa) {
+    #{{{ extract synteny blocks and mismatch positions from alignment
+    x = unmasked(msa)
+    y = RemoveGaps(x[c(name1, name2)], 'common')
+    y1 = as.character(y[1])
+    y2 = as.character(y[2])
+    h0 = as.character(compareStrings(y2,y1))
+    h = str_replace_all(h0, "[ATCGN?]", '*')
+    h2=unlist(strsplit(h, split = ""))
+    j = tibble(v = rle(h2)$values, aSize = rle(h2)$lengths) %>%
+        mutate(aEnd=cumsum(aSize), aBeg = aEnd-aSize) %>%
+        mutate(tSize = ifelse(v=='+', 0, aSize)) %>%
+        mutate(qSize = ifelse(v=='-', 0, aSize)) %>%
+        mutate(tEnd=cumsum(tSize), tBeg=tEnd-tSize) %>%
+        mutate(qEnd=cumsum(qSize), qBeg=qEnd-qSize) %>%
+        select(v, aBeg,aEnd,aSize,tBeg,tEnd,tSize,qBeg,qEnd,qSize)
+    get_tpos <- function(v, aSize, tBeg, tEnd)
+        ifelse(v=='+', list(rep(tBeg, aSize)), list((tBeg+1):tEnd))
+    get_qpos <- function(v, aSize, qBeg, qEnd)
+        ifelse(v=='-', list(rep(qBeg, aSize)), list((qBeg+1):qEnd))
+    j2 = j %>%
+        mutate(tpos = pmap(list(v, aSize, tBeg, tEnd), get_tpos)) %>%
+        mutate(qpos = pmap(list(v, aSize, qBeg, qEnd), get_qpos))
+    tposs = unlist(j2$tpos)
+    qposs = unlist(j2$qpos)
+    mm = str_locate_all(h0, "\\?")[[1]] %>% as_tibble() %>%
+        mutate(qPos = qposs[start], tPos = tposs[start]) %>%
+        select(aPos=start,tPos,qPos)
+    list(aln = j, mm = mm)
+    #}}}
+}
+plot_syn <- function(ty, msa) {
+    #{{{
+    #{{{ prepare syn tible
+    labs = ty %>% arrange(desc(y)) %>% pull(lab)
+    to = tibble(tgt=labs[1:nl-1], qry=labs[2:nl]) %>%
+        mutate(x = map2(tgt,qry, make_syn, msa=msa)) %>%
+        mutate(syn = map(x, 'aln'), mm = map(x, 'mm')) %>%
+        select(tgt, qry, syn, mm)
+    #
+    tp = to %>% select(tgt,qry,syn) %>% unnest(syn) %>%
+        filter(v == '*') %>%
+        inner_join(ty %>% select(lab,y), by=c('tgt'='lab')) %>% rename(y1=y) %>%
+        inner_join(ty %>% select(lab,y), by=c('qry'='lab')) %>% rename(y2=y) %>%
+        mutate(tBeg=tBeg + 1, qBeg = qBeg + 1) %>%
+        mutate(i = 1:n())
+    tp1 = tp %>% select(i, y=y1, tBeg, tEnd) %>%
+        gather(type, pos, -i, -y) %>% mutate(y=y-.1)
+    tp2 = tp %>% select(i, y=y2, qBeg, qEnd) %>%
+        gather(type, pos, -i, -y) %>% mutate(y=y+.1)
+    coordmap = c("tBeg"=1,'tEnd'=2,'qEnd'=3,'qBeg'=4)
+    tp = tp1 %>% rbind(tp2) %>% mutate(i2 = coordmap[type]) %>% arrange(i, i2)
+    #}}}
+    #
+    p_syn = ggplot(tp) +
+        geom_polygon(aes(x=pos,y=y,group=i), fill='royalblue', alpha=.2,
+                     size=0,color=NA) +
+        coord_cartesian(xlim = c(0,4000)) +
+        scale_x_continuous(breaks=c(0,2000,4000), labels=c('-2k','TSS','+2k'),
+                           expand=expansion(mult=c(.01,.02)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.01))) +
+        otheme(xtext=T,xtick=T,ytext=T,ytick=T, panel.border=F,
+            margin=c(.2,.5,.2,0))
+    p_syn
+    #}}}
+}
+add_gene_track <- function(gid, tg, ty, p, ht.exon=.05, ht.cds=.1) {
+    #{{{
+    tg1 = tg %>% filter(gid==!!gid) %>% inner_join(ty, by='gt') %>%
+        mutate(beg = beg+2000, end = end+2000)
+    tgr = tg1 %>% group_by(gt, gid,y) %>%
+        summarise(beg=min(beg), end=max(end)) %>% ungroup()
+    tge = tg1 %>% filter(type=='exon')
+    tgc = tg1 %>% filter(type=='CDS')
+    col.intron='grey'; col.exon='grey'; col.cds='royalblue'
+    arw = arrow(length=unit(.1,'cm'), angle=30, ends='last',type="open")
+    p +
+        geom_segment(data=tgr,aes(x=beg,xend=end,y=y,yend=y),col=col.intron,size=.5) +
+        geom_rect(data=tge,aes(xmin=beg,xmax=end,ymin=y-ht.exon,ymax=y+ht.exon),fill=col.exon,color=NA,alpha=1) +
+        geom_rect(data=tgc,aes(xmin=beg,xmax=end,ymin=y-ht.cds,ymax=y+ht.cds),fill=col.cds,color=NA,alpha=1) +
+        geom_segment(data=tgr,aes(x=2000,xend=2100,y=y+ht.cds*1.1,yend=y+ht.cds*1.1),
+                     color='black', size=.2, arrow=arw) +
+        geom_rect(xmin=1999,xmax=2001,ymin=-Inf,ymax=Inf, fill='yellow', alpha=.2)
+    #}}}
+}
+#
+combo_plot  <- function(gid, tg, ty, msa, tree, pred) {
+    #{{{
+    # tree plot
+    ty2 = ty %>% select(taxa=lab, gt)
+    p_tree = ggtree(tree) %<+% ty2 +
+        #geom_tiplab(aes(label=gt), hjust=0, align=T) +
+        scale_x_continuous(expand=expansion(mult=c(.05,.005))) +
+        scale_y_continuous(expand=expansion(mult=c(.01,.05))) +
+        otheme(panel.border=F, margin=c(.2,.2,.2,0))
+    #
+    p1 = plot_syn(ty, msa)
+    p = add_gene_track(gid,tg,ty,p1) +
+        geom_segment(data=umr, aes(x=start,xend=end,y=y-.1,yend=y-.1), color='green',
+                     size=.5, alpha=1) +
+        geom_point(data=mtf,aes(x=pos, y=y-.1),col='red',size=1)
+    #
+#{{{ log2fc plot (p2 + p3)
+lfc = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr) %>%
+    right_join(ty, by='gt') %>%
+    mutate(txt = ifelse(is.na(log2fc), 'NA', round(log2fc)))
+ymin0 = min(lfc$log2fc, na.rm=T); ymax0 = max(lfc$log2fc, na.rm=T)
+lfc.mean = (ymin0 + ymax0) / 2
+lfc = lfc %>% mutate(txt.col = ifelse(is.na(log2fc), ymax0, log2fc))
+t_na = lfc %>% filter(is.na(log2fc)) %>% mutate(pos=(ymin0+ymax0)/2)
+ymin = ymin0; ymax = ymax0
+ymin = ifelse(ymin < 0, ceiling(ymin), floor(ymin))
+ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
+p2 = ggplot(lfc) +
+    #geom_hline(yintercept=0, color='gray', alpha=.4) +
+    geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
+    #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
+    geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
+    scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
+    scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.1,.1))) +
+    scale_color_manual(values=c('white','black')) +
+    scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
+    otheme(xtitle=T, legend.pos='none', panel.border=F,
+        margin=c(.4,0,.2,0))
+p3 = ggplot(lfc) +
+    #geom_tile(aes(x=0, y=y, fill=as.factor(B_umr)), width=.4, height=.4) +
+    geom_text(aes(x=0, y=y, label=B_umr), hjust=.5,vjust=.5,size=2) +
+    scale_x_continuous(name='model', expand=expansion(mult=c(.02,.02)), position='top') +
+    scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.3,.2))) +
+    scale_fill_manual(values=c('white','black')) +
+    otheme(xtitle=T, legend.pos='none', panel.border=F,
+        margin=c(.4,.5,.2,.3))
+#}}}
+    #
+    ggarrange(p_tree, p, p2, p3, nrow=1, ncol=4,
+              widths=c(1,5,.3,.5))
+    #}}}
+}
+#}}}
+
+tj3 %>% print(n=40)
+
+j=21
+#{{{ prepare data for one gene then read in
+gid=tj3$gid[[j]]; mid=tj3$mid[[j]]; bid=str_split(mid,'_')[[1]][1]
+tt = tibble(gid=!!gid, gt=gts32_ph207) %>% mutate(gid=glue("{gt}_{gid}")) %>%
+    mutate(beg=0, end=4000) %>% select(gid, beg, end)
+write_tsv(tt, file="t1.txt", col_names=F)
+system(glue("fasta.py extract ../21_seq/02.fas t1.txt > t1.fas"))
+system(glue("muscle -in t1.fas -out t2.fas -tree2 t2.nwk"))
+system(glue("fimo.py locate --motif {mid} 00_nf/03_motif_lists/{bid}.meme t1.fas t2.mtf.txt"))
+system(glue("grep {gid} ../21_seq/15.UMR.bed > t3.umr.bed"))
+#
+diri = dirw
+#{{{ read aln, tree, build ty 
+fi = glue("{diri}/t2.fas")
+msa = readDNAMultipleAlignment(filepath=fi, format='fasta')
+fi = glue("{diri}/t2.nwk")
+tree = read.tree(fi)
+labs = with(subset(fortify(tree), isTip), label[order(y, decreasing=T)])
+nl = length(labs)
+ty = tibble(lab = labs, y = nl:1) %>%
+    separate(lab, c('gt','extra'), sep='_', remove=F) %>%
+    select(gt, lab, y)
+#}}}
+#{{{ read motif coords, umr and acr
+fi = glue("{diri}/t2.mtf.txt")
+mtf = read_tsv(fi, col_names=c("sid",'beg','end')) %>%
+    separate('sid',c('mid','sid'), sep='%') %>%
+    separate('sid',c('gt','extra'), sep='_') %>%
+    mutate(pos = (beg+end)/2) %>%
+    select(gt, pos) %>%
+    inner_join(ty, by='gt')
+fi = glue("{diri}/t3.umr.bed")
+umr = read_tsv(fi, col_names=c('gid','start','end')) %>% mutate(start=start+1) %>%
+    separate("gid", c("gt",'gid'), sep='_') %>%
+    select(gt, start, end) %>%
+    inner_join(ty, by='gt')
+#}}}
+#}}}
+#
+fo = glue("{diri}/test.pdf")
+combo_plot(gid, tg, ty, msa, tree, pred) %>%
+    ggexport(filename=fo, width=7, height=6)
+#}}}
 
 
