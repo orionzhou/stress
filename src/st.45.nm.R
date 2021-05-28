@@ -759,7 +759,7 @@ tj = ti2 %>% inner_join(pred, by=c('drc','gid','gt')) %>%
 tj2 = tj %>% arrange(epi, gid, drc, desc(acc)) %>%
     group_by(epi, gid, drc) %>% dplyr::slice(1:1) %>% ungroup() %>%
     arrange(epi, desc(acc)) %>% print(n=40)
-tj3 = tj2 %>% filter(n00+n01 >= 3, n10+n11>=3, acc >.9) %>% print(n=40)
+tj3 = tj2 %>% filter(n00+n01 >= 3, n10+n11>=3, acc >.9) %>% arrange(epi,gid) %>% print(n=40)
 
 tj2 %>% count(epi, acc > 0.9)
 tj2 %>% count(epi, acc > 0.8)
@@ -767,11 +767,14 @@ tj2 %>% count(epi, acc > 0.8)
 #}}}
 
 
-#{{{ final synteny plots
+#{{{ final synteny plots - f7 & sf13
 fi = glue('{dirw}/25.model.pred.rds')
 pred = readRDS(fi)
 fx = glue("{dirg}2/syntelog/maize.gene.model.rds")
 tg = readRDS(fx)
+fi = glue('{dirw}/../41_ml/06.tk.tc.rds')
+r06 = readRDS(fi)
+loci = read_loci()
 #{{{ functions
 require(Biostrings)
 require(DECIPHER)
@@ -863,8 +866,67 @@ add_gene_track <- function(gid, tg, ty, p, ht.exon=.05, ht.cds=.1) {
         geom_rect(xmin=1999,xmax=2001,ymin=-Inf,ymax=Inf, fill='yellow', alpha=.2)
     #}}}
 }
-#
-combo_plot  <- function(gid, tg, ty, msa, tree, pred) {
+mtf_title <- function(bid, gid, pred, tk, loci, font.size=3) {
+    #{{{ #plot title (motif + gene ID + alias + annotation)
+    x = tk %>% filter(bid==!!bid) %>% pull(mtfs) %>% pluck(1) %>%
+        filter(mid==!!mid)
+    m.pwm = x$mtf[[1]]; m.name = ifelse(x$known, x$fname, 'unknown motif')
+    g.name = loci %>% filter(gid==!!gid) %>%
+        mutate(name = ifelse(is.na(symbol2), gid, glue("{gid} ({symbol2})"))) %>%
+        mutate(name = ifelse(is.na(note), glue("{name} (unknown)"), glue("{name}: {note}"))) %>%
+        pluck('name', 1)
+    # acc
+    hy = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr,status) %>%
+        filter(!is.na(status), !is.na(B_umr))
+    acc = sum(hy$status==hy$B_umr) / nrow(hy)
+    #
+    tit = glue("{m.name}; {g.name}; model accuracy = {number(acc,accuracy=.01)}")
+    p01 = view_motifs(m.pwm, method="PCC",min.mean.ic=0,min.overlap=6) +
+        otheme(panel.border=F, margin=c(.2,.2,0,1))
+    p02 = ggplot() +
+        annotate('text', x=0, y=0, label=tit, size=font.size, hjust=.5, vjust=.5) +
+        #scale_x_continuous(limits=c(0,3),expand=expansion(mult=c(.01,.01))) +
+        #scale_y_continuous(limits=c(0,1), expand=expansion(add=c(.2,0))) +
+        otheme(panel.border=F, margin=c(.2,.2,0,.2))
+    p0 = ggarrange(p01, p02, nrow=1, ncol=2, widths=c(1,3))
+    p0
+    #}}}
+}
+plot_lfc <- function(gid, ty, pred) {
+#{{{ log2fc plot (p2 + p3)
+    lfc = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr) %>%
+        right_join(ty, by='gt') %>%
+        mutate(txt = ifelse(is.na(log2fc), 'NA', number(log2fc,accuracy=.01)))
+    ymin0 = min(lfc$log2fc, na.rm=T); ymax0 = max(lfc$log2fc, na.rm=T)
+    lfc.mean = (ymin0 + ymax0) / 2
+    lfc = lfc %>% mutate(txt.col = ifelse(is.na(log2fc), ymax0, log2fc))
+    t_na = lfc %>% filter(is.na(log2fc)) %>% mutate(pos=(ymin0+ymax0)/2)
+    ymin = ymin0; ymax = ymax0
+    ymin = ifelse(ymin < 0, ceiling(ymin), floor(ymin))
+    ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
+    p2 = ggplot(lfc) +
+        #geom_hline(yintercept=0, color='gray', alpha=.4) +
+        geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
+        #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
+        geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
+        scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.1,.1))) +
+        scale_color_manual(values=c('white','black')) +
+        scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
+        otheme(xtitle=T, legend.pos='none', panel.border=F,
+            margin=c(.4,0,.2,0))
+    p3 = ggplot(lfc) +
+        #geom_tile(aes(x=0, y=y, fill=as.factor(B_umr)), width=.4, height=.4) +
+        geom_text(aes(x=0, y=y, label=B_umr), hjust=.5,vjust=.5,size=2) +
+        scale_x_continuous(name='model', expand=expansion(mult=c(.02,.02)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.3,.2))) +
+        scale_fill_manual(values=c('white','black')) +
+        otheme(xtitle=T, legend.pos='none', panel.border=F,
+            margin=c(.4,.5,.2,.3))
+    ggarrange(p2, p3, nrow=1, ncol=2, widths=c(3,5))
+#}}}
+}
+combo_plot  <- function(gid, tg, ty, msa, mtf, tree, pred, p_msa, p0) {
     #{{{
     # tree plot
     ty2 = ty %>% select(taxa=lab, gt)
@@ -875,52 +937,24 @@ combo_plot  <- function(gid, tg, ty, msa, tree, pred) {
         otheme(panel.border=F, margin=c(.2,.2,.2,0))
     #
     p1 = plot_syn(ty, msa)
-    p = add_gene_track(gid,tg,ty,p1) +
+    pg = add_gene_track(gid,tg,ty,p1) +
         geom_segment(data=umr, aes(x=start,xend=end,y=y-.1,yend=y-.1), color='green',
                      size=.5, alpha=1) +
         geom_point(data=mtf,aes(x=pos, y=y-.1),col='red',size=1)
     #
-#{{{ log2fc plot (p2 + p3)
-lfc = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr) %>%
-    right_join(ty, by='gt') %>%
-    mutate(txt = ifelse(is.na(log2fc), 'NA', round(log2fc)))
-ymin0 = min(lfc$log2fc, na.rm=T); ymax0 = max(lfc$log2fc, na.rm=T)
-lfc.mean = (ymin0 + ymax0) / 2
-lfc = lfc %>% mutate(txt.col = ifelse(is.na(log2fc), ymax0, log2fc))
-t_na = lfc %>% filter(is.na(log2fc)) %>% mutate(pos=(ymin0+ymax0)/2)
-ymin = ymin0; ymax = ymax0
-ymin = ifelse(ymin < 0, ceiling(ymin), floor(ymin))
-ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
-p2 = ggplot(lfc) +
-    #geom_hline(yintercept=0, color='gray', alpha=.4) +
-    geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
-    #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
-    geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
-    scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
-    scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.1,.1))) +
-    scale_color_manual(values=c('white','black')) +
-    scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
-    otheme(xtitle=T, legend.pos='none', panel.border=F,
-        margin=c(.4,0,.2,0))
-p3 = ggplot(lfc) +
-    #geom_tile(aes(x=0, y=y, fill=as.factor(B_umr)), width=.4, height=.4) +
-    geom_text(aes(x=0, y=y, label=B_umr), hjust=.5,vjust=.5,size=2) +
-    scale_x_continuous(name='model', expand=expansion(mult=c(.02,.02)), position='top') +
-    scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.3,.2))) +
-    scale_fill_manual(values=c('white','black')) +
-    otheme(xtitle=T, legend.pos='none', panel.border=F,
-        margin=c(.4,.5,.2,.3))
-#}}}
+    p_lfc = plot_lfc(gid, ty, pred)
     #
-    ggarrange(p_tree, p, p2, p3, nrow=1, ncol=4,
-              widths=c(1,5,.3,.5))
+    pb = ggarrange(p_tree, pg, p_msa, p_lfc, nrow=1, ncol=4, widths=c(1,5,.5,.8))
+    ggarrange(p0, pb, nrow=2, heights=c(1,20))
     #}}}
 }
 #}}}
 
 tj3 %>% print(n=40)
 
-j=21
+js=c(2,4,6:10,15:17,21)
+
+for (j in js[4:length(js)]) {
 #{{{ prepare data for one gene then read in
 gid=tj3$gid[[j]]; mid=tj3$mid[[j]]; bid=str_split(mid,'_')[[1]][1]
 tt = tibble(gid=!!gid, gt=gts32_ph207) %>% mutate(gid=glue("{gt}_{gid}")) %>%
@@ -942,6 +976,13 @@ nl = length(labs)
 ty = tibble(lab = labs, y = nl:1) %>%
     separate(lab, c('gt','extra'), sep='_', remove=F) %>%
     select(gt, lab, y)
+#{{{ rewrite MSA with ordered genotypes
+ty2 = ty %>% arrange(y)
+msa2 = DNAStringSet(msa)[ty$lab]
+names(msa2) = ty$gt
+fo = glue("{dirw}/t2_reorder.fas")
+writeXStringSet(msa2, fo, format='fasta')
+#}}}
 #}}}
 #{{{ read motif coords, umr and acr
 fi = glue("{diri}/t2.mtf.txt")
@@ -949,7 +990,7 @@ mtf = read_tsv(fi, col_names=c("sid",'beg','end')) %>%
     separate('sid',c('mid','sid'), sep='%') %>%
     separate('sid',c('gt','extra'), sep='_') %>%
     mutate(pos = (beg+end)/2) %>%
-    select(gt, pos) %>%
+    select(gt, beg, end, pos) %>%
     inner_join(ty, by='gt')
 fi = glue("{diri}/t3.umr.bed")
 umr = read_tsv(fi, col_names=c('gid','start','end')) %>% mutate(start=start+1) %>%
@@ -957,11 +998,67 @@ umr = read_tsv(fi, col_names=c('gid','start','end')) %>% mutate(start=start+1) %
     select(gt, start, end) %>%
     inner_join(ty, by='gt')
 #}}}
+#{{{ motif MSA plot
+require(ggmsa)
+get_msa_coord1 <- function(name, msa) {
+    #{{{
+    y1 = as.character(msa[name])
+    y2 = str_replace_all(y1, "[ATCGN]", '1')
+    y2 = str_replace_all(y2, "[-]", '0')
+    y3 = as.integer(unlist(strsplit(y2, split = "")))
+    cumsum(y3)
+    #}}}
+}
+get_msa_coord <- function(ty, msa) {
+    #{{{
+    ty %>%
+        mutate(poss = map(lab, get_msa_coord1, msa=unmasked(msa))) %>%
+        select(gt, poss) %>% spread(gt, poss) %>%
+        unnest(everything()) %>% mutate(i=1:n()) %>% select(i, everything())
+    #}}}
+} 
+coord = get_msa_coord(ty, msa)
+#
+gtm = pred %>% filter(gid==!!gid, status==1) %>% mutate(lfc=abs(log2fc)) %>% 
+    select(gt, lfc) %>% inner_join(mtf, by='gt') %>% arrange(desc(lfc))
+b = gtm %>% pluck('beg',1)
+e = gtm %>% pluck('end',1)
+gtm = gtm %>% pluck('gt', 1)
+c1 = coord %>% filter(get(gtm) >= b, get(gtm) <= e)
+cb = min(c1$i); ce = max(c1$i)
+#
+fi = glue("{dirw}/t2_reorder.fas")
+x = readDNAStringSet(fi)
+tm = tidy_msa(x, cb, ce) %>% as_tibble() %>% select(gt=1,i=2,nt=3) %>%
+    inner_join(ty, by='gt')
+#p_msa = ggmsa(fi, start=cb, end=ce, color="Clustal", seq_name=F, font=NULL)
+cols5 = pal_tron()(5)[c(5,1:4)]
+p_msa = ggplot(tm, aes(x=i,y=y,label=nt)) +
+    geom_tile(aes(fill=nt), width=1) +
+    geom_text(size=2) +
+    scale_x_continuous(expand=expansion(mult=c(0,0))) +
+    scale_y_continuous(expand=expansion(mult=c(0,0))) +
+    scale_fill_manual(values=cols5) +
+    otheme(legend.pos='none', panel.border=F, margin=c(1,.1,.4,0))
+#ggsave(p, file=glue("{dirw}/t2.pdf"), width=7, height=8)
+#}}}
+p0 = mtf_title(bid, gid, pred, r06$tk, loci, font.size=3)
 #}}}
 #
-fo = glue("{diri}/test.pdf")
-combo_plot(gid, tg, ty, msa, tree, pred) %>%
-    ggexport(filename=fo, width=7, height=6)
+fo = glue("{diri}/z{j}-{gid}.pdf")
+combo_plot(gid, tg, ty, msa, mtf, tree, pred, p_msa, p0) %>%
+    ggexport(filename=fo, width=8, height=7)
+}
+
 #}}}
 
+
+fi = glue("{dirw}/t2.vcf")
+ti = read_tsv(fi, skip=3)
+vcf = ti %>% select(i=POS, ref=REF, alt=ALT, ends_with("4000")) %>%
+    set_names(str_replace_all, glue("_{gid}-1-4000"), '') %>%
+    print(width=Inf)
+vcf %>% filter(i >= 337, i <= 347) %>%
+    select(i,ref,alt,ty$gt) %>%
+    print(width=Inf)
 

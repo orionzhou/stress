@@ -792,6 +792,19 @@ to = deg48 %>% filter(cond2=='timeM') %>%
     select(Genotype,cond,gid,log2fc,padj)
 fo = glue('{dird}/71_share/05.de.tsv')
 write_tsv(to, fo)
+
+merge_gids <- function(l1, l2) unique(c(l1,l2))
+to = td1 %>% mutate(gt=Genotype,cond=Treatment,time=Timepoint) %>%
+    filter(gt %in% gts3) %>%
+    select(gt,cond,drc,time,gids) %>% spread(time, gids) %>%
+    mutate(gids = map2(`1`,`25`, merge_gids)) %>%
+    mutate(cond = glue("{str_to_lower(cond)}_{drc}")) %>%
+    select(gt, cond, gids) %>% unnest(gids) %>% rename(gid=gids) %>%
+    group_by(cond, gid) %>% summarise(n_gt = n(), gts = paste(gt, collapse=',')) %>%
+    ungroup() %>%
+    arrange(cond, desc(n_gt))
+fo = glue("{dird}/71_share/05.stable.variable.DE.tsv")
+write_tsv(to, fo)
 #}}}
 
 ######## BELOW ARE DEPRECATED ########
