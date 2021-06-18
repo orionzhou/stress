@@ -1,7 +1,7 @@
 source('functions.R')
 dirw = glue('{dird}/21_seq')
 setwd(dirw)
-xref = read_xref()
+xref = read_xref(opt='v4')
 
 #{{{ prepare promoter db for B/M/W/
 fi = glue("{dird}/21_seq/regions.xlsx")
@@ -46,7 +46,7 @@ tt = tss %>% crossing(tr) %>%
     mutate(start=pmax(0, start), end=pmin(end, size)) %>%
     select(gt, chrom, start, end, srd, gid, bin) %>%
     arrange(gt, chrom,start,end) %>%
-    mutate(sid = sprintf("s%06d", 1:n()))
+    mutate(sid = sprintf("s%08d", 1:n()))
 tt %>% mutate(size=end-start) %>% count(bin,size)
 tl1 = tt %>% filter(srd == '+') %>% arrange(gid, chrom, start) %>%
     group_by(gid) %>% mutate(i = 1:n()) %>% ungroup()
@@ -87,19 +87,23 @@ system("fasta.py size 02.fas 02.sizes")
 system("fasta-get-markov -dna 02.fas 02.bg")
 
 tb0 = tl %>% distinct(gid) %>% mutate(cid = 1:n())
-tb = tl %>% inner_join(tb0, by='gid') %>%
+tb1 = tl %>% inner_join(tb0, by='gid') %>%
     mutate(chrom = glue("{gt}_{chrom}")) %>%
-    mutate(start2=0, end2=end-start) %>%
-    mutate(start2 = ifelse(i==2, start2+4050, start2)) %>%
-    mutate(end2=ifelse(i==2, end2+4050, end2)) %>%
+    mutate(start2=0, end2=end-start, len=end2-start2)
+tb2a = tb1 %>% filter(i==1)
+tb2as = tb2a %>% select(gid, off=len)
+tb2b = tb1 %>% filter(i==2) %>% inner_join(tb2as, by='gid') %>%
+    mutate(start2 = start2+off+50) %>%
+    mutate(end2 = end2+off+50) %>% select(-off)
+tb2 = tb2a %>% bind_rows(tb2b) %>%
     arrange(chrom,start,end) %>%
     select(chrom,start,end, srd, gid,start2,end2, cid)
-write_tsv(tb, '10.bed', col_names = F)
+write_tsv(tb2, '10.bed', col_names = F)
 #
 system(glue("chain.py fromBed 10.bed 01.sizes 02.sizes 10.reverse.chain"))
 system("chainSwap 10.reverse.chain 10.forward.chain")
 #}}}
 
-# create UMR/ACL BED
+# create UMR/ACR BED
 
 

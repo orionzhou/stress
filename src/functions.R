@@ -33,8 +33,8 @@ gts25 = str_split("B73 B97 CML322 CML333 CML52 CML69 DK105 EP1 F7 Il14H Ki11 Ki3
 gts31 = str_split("Mo17 W22 B97 CML52 CML69 CML103 CML228 CML247 CML277 CML322 CML333 HP301 Il14H Ki3 Ki11 Ky21 M37W M162W Mo18W Ms71 NC350 NC358 Oh7B Oh43 P39 Tx303 Tzi8 EP1 DK105 F7 PE0075", " ")[[1]]
 gts_nam = str_split("B97 CML52 CML69 CML103 CML228 CML247 CML277 CML322 CML333 HP301 Il14H Ki3 Ki11 Ky21 M37W M162W Mo18W Ms71 NC350 NC358 Oh7B Oh43 P39 Tx303 Tzi8", " ")[[1]]
 gts32 = c("B73",gts31)
-gts31_ph207 = c(gts31, 'PH207')
-gts32_ph207 = c(gts32, 'PH207')
+gts31_ph207 = c(gts31[1:2], 'PH207', gts31[3:31])
+gts32_ph207 = c(gts32[1:3], 'PH207', gts32[4:32])
 gt_map = list('B'='B73','M'='Mo17','W'='W22','BMW'=gts3)
 gt_map2 = c('BxM'='B73xMo17','WxB'='W22xB73','WxM'='W22xMo17')
 cols100 = colorRampPalette(rev(brewer.pal(n = 6, name = "RdYlBu")))(100)

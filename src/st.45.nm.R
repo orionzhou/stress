@@ -6,23 +6,6 @@ tga = read_loci() %>% select(gid,symbol,note)
 txdb = load_txdb('B73', primary=F)
 #{{{ functions
 require(cluster)
-read_vnt <- function(chrom,beg,end,
-                     fv='~/projects/wgc/data/05_maize_merged/08.vcf.gz',
-                     gts=gts31) {
-    #{{{
-    cmd = glue("bcftools view -r {chrom}:{beg}-{end} {fv} | bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT[\\t%GT]\n' > tmp.tsv")
-    system(cmd)
-    if (file.info('tmp.tsv')$size == 0) return(tibble())
-    gt_map = c('0/0'=0, '1/1'=1, './.'=NA)
-    tv = read_tsv('tmp.tsv', col_names=c('chrom','pos','ref','alt',gts),
-        col_types=str_c(c('c','i','c','c', rep('c',length(gts))), sep='', collapse='')) %>%
-        mutate(B73 = '0/0') %>%
-        gather(sid, gt, -chrom, -pos, -ref, -alt) %>%
-        mutate(gt = gt_map[gt])
-    system("rm tmp.tsv")
-    tv
-    #}}}
-}
 tstat <- function(x, drc) {
     #{{{
     thresh = ifelse(drc == 'down', -1, 1)
@@ -48,7 +31,7 @@ td3 = td2 %>% filter(st %in% c("dA+B=", "dA=B+", "dA-B=", 'dA=B-')) %>%
     mutate(drc = ifelse(str_detect(st, '-'), 'down', 'up')) %>%
     distinct(cond,time,drc,gid)
 td1s = td1 %>% arrange(cond,time,gt,gid,st) %>%
-    group_by(cond,time,gt,gid) %>% slice(1) %>% ungroup()
+    group_by(cond,time,gt,gid) %>% dplyr::slice(1) %>% ungroup()
 td4 = td3 %>% crossing(gt = gts3) %>%
     left_join(td1s, by = c('cond','time','gt','gid'))
 td4s = td4 %>% mutate(drc1=str_to_upper(str_sub(drc,1,1))) %>%
@@ -62,13 +45,14 @@ td = td4 %>% inner_join(td4s, by=c('cond','time','drc','gid')) %>%
 
 #{{{ read in NM matrix and run mclust - sf12a
 #{{{ read in
-yid = 'rn20a'
+yid = 'zm.rn20a'
 res = rnaseq_cpm(yid)
 th = res$th; tm = res$tm
 #
 th1 = th %>% filter(Experiment=='NM') %>%
     select(sid=SampleID, gt=Genotype, cond=Treatment, time=Timepoint) %>%
-    mutate(cond = str_to_lower(cond))
+    mutate(cond = str_to_lower(cond)) %>%
+    mutate(gt = ifelse(gt=='MS71', 'Ms71', gt))
 #
 rr = tm %>% select(gid, sid=SampleID, cpm=CPM) %>%
     inner_join(th1, by ='sid') %>%
@@ -92,6 +76,7 @@ fc2 = rd %>% filter(gt %in% gts3, time==25) %>%
 tp = fc1 %>% inner_join(fc2, by=c('gid','gt')) %>%
     filter(!is.nan(log2fc.nm), is.finite(log2fc.nm)) %>%
     rename(x=log2fc.hy, y=log2fc.nm)
+lfc.fix = tp %>% rename(lfc.hy=x,lfc.nm=y) %>% mutate(time=25)
 #
 tpl = tp %>% group_by(gt) %>% nest() %>% ungroup() %>%
     mutate(fit = map(data, ~ lm(y~x, data=.x))) %>%
@@ -124,6 +109,10 @@ saveRDS(p, fo)
 #}}}
 
 #{{{ mclust
+# replace lfc.nm with lfc.hy
+#x = rd %>% left_join(lfc.fix, by=c('gid','gt','time')) %>%
+    #mutate(log2fc = ifelse(is.na(lfc.hy), log2fc, lfc.hy)) %>%
+    #select(-lfc.hy,-lfc.nm)
 rd2 = td %>% inner_join(rd, by=c('time','gid')) %>%
     arrange(drc,time,gid,gt) %>%
     group_by(drc,time,st,gid) %>% summarise(log2fcs = list(log2fc)) %>%
@@ -174,7 +163,7 @@ rd3 = rd2 %>% mutate(i=1:n()) %>%
 #}}}
 
 #{{{ refine mclust results
-refine_bimod <- function(clu, t_clu) {
+refine_bimod0 <- function(clu, t_clu) {
     #{{{
     pb$tick()
     assign_clu <- function(x) tibble(clu=c(-1,0,1), d=c(x+1,x,x-1)) %>%
@@ -192,11 +181,30 @@ refine_bimod <- function(clu, t_clu) {
            clu1=list(clu), t_clu1=list(t_clu))
     #}}}
 }
+assign_clu <- function(x, drc) {
+    #{{{
+    cent = ifelse(drc=='down', -1, 1)
+    tibble(clu=c(0,1), d=c(x,x-cent)) %>%
+        mutate(d = abs(d)) %>% arrange(d) %>% pluck('clu',1)
+    #}}}
+}
+refine_bimod <- function(drc, clu, t_clu) {
+    #{{{
+    pb$tick()
+    clu = clu %>% mutate(nclu = map2_dbl(avg, drc, assign_clu))
+    t_clu = t_clu %>%
+        inner_join(clu %>% select(clu,nclu), by='clu') %>%
+        select(-clu) %>% rename(clu=nclu)
+    n0 = sum(t_clu$clu==0)
+    n1 = sum(t_clu$clu==1) 
+    tibble(n0=!!n0, n1=!!n1, t_clu1=list(t_clu))
+    #}}}
+}
 rd4 = rd3 %>% filter(nc>=2)
 pb <- progress_bar$new(total=nrow(rd4))
 rd4 = rd4 %>%
-    mutate(x = map2(clu,t_clu, refine_bimod)) %>% unnest(x)
-rd5 = rd4 %>% filter(time==25, (drc=='down' & dn) | (drc=='up' & up), nc1>=2)
+    mutate(x = pmap(list(drc,clu,t_clu), refine_bimod)) %>% unnest(x)
+rd5 = rd4 %>% filter(time==25, n0>0,n1>0)
 #}}}
 
 r = list(rd3=rd3, rd4=rd4, rd5=rd5)
@@ -304,20 +312,33 @@ ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
     mutate(st = factor(st, levels=levels(td2$st))) %>%
     select(cond,time,qry,tgt,gid,st,reg)
 #}}}
-#{{{ local association test - sf12
+#{{{ local association test - sf
 #{{{
 i=37
 drc=x$drc[i]; t_clu=x$t_clu1[[i]]
 chrom=x$chrom[i]; start=x$start[i]; end=x$end[[i]]
-vnt_scan <- function(t_clu,drc, chrom,start,end) {
+fet <- function(x00,x01,x10,x11) fisher.test(matrix(c(x00,x10,x01,x11), nrow=2))$p.value
+read_vnt <- function(chrom,beg,end,
+                     fv='~/projects/wgc/data/05_maize_v4/08.vcf.gz',
+                     gts=gts31_ph207) {
+    #{{{
+    cmd = glue("bcftools view -r {chrom}:{beg}-{end} {fv} | bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT[\\t%GT]\n' > tmp.tsv")
+    system(cmd)
+    if (file.info('tmp.tsv')$size == 0) return(tibble())
+    gt_map = c('0/0'=0, '1/1'=1, './.'=NA)
+    tv = read_tsv('tmp.tsv', col_names=c('chrom','pos','ref','alt',gts),
+        col_types=str_c(c('c','i','c','c', rep('c',length(gts))), sep='', collapse='')) %>%
+        mutate(B73 = '0/0') %>%
+        gather(sid, gt, -chrom, -pos, -ref, -alt) %>%
+        mutate(gt = gt_map[gt])
+    system("rm tmp.tsv")
+    tv
+    #}}}
+}
+vnt_scan <- function(t_clu, chrom,start,end) {
     #{{{
     #pb$tick()
-    if (drc == 'down') {
-        pheno = t_clu %>% mutate(clu=ifelse(clu==-1, 1, 0))
-    } else {
-        pheno = t_clu %>% mutate(clu=ifelse(clu==1, 1, 0))
-    }
-    pheno = pheno %>% select(sid=gt,clu)
+    pheno = t_clu %>% select(sid=gt,clu)
     vnt = read_vnt(chrom,start,end)
     if(nrow(vnt)==0) return(tibble())
     vnt0 = vnt %>% distinct(chrom,pos,ref,alt) %>%
@@ -347,7 +368,7 @@ vnt_scan <- function(t_clu,drc, chrom,start,end) {
     if (file.info("plink.blocks")$size == 0) {
         tb = tibble()
     } else {
-    fi = "plink.blocks.det"
+        fi = "plink.blocks.det"
         tb = read_delim(fi, delim=' ', trim_ws=T, col_names=T) %>%
             select(snps=SNPS) %>% mutate(bid=1:n()) %>%
             mutate(snps = map(snps, str_split, pattern="[\\|]")) %>%
@@ -369,51 +390,33 @@ vnt_scan <- function(t_clu,drc, chrom,start,end) {
     tibble(vnt=list(vnt), p=list(p), block=list(tb), nsig=nsig, nsig.fdr=nsig.fdr)
     #}}}
 }
-fet <- function(x00,x01,x10,x11) fisher.test(matrix(c(x00,x10,x01,x11), nrow=2))$p.value
-vnt_scan0 <- function(t_clu, chrom,start,end) {
-    #{{{
-    pb$tick()
-    vnt = read_vnt(chrom,start,end)
-    if(nrow(vnt)==0) return(tibble())
-    y = vnt %>% filter(!is.na(gt)) %>% inner_join(t_clu, by=c('sid'='gt'))
-    y1 = y %>% group_by(chrom,pos,ref,alt) %>% nest() %>% rename(v=data) %>% ungroup()
-    ys = y %>% group_by(chrom,pos,ref,alt) %>%
-        summarise(x00=sum(gt==0 & clu==0), x01=sum(gt==0 & clu==1),
-        x10 = sum(gt==1 & clu==0), x11 = sum(gt==1 & clu==1)) %>%
-        ungroup() %>%
-        mutate(p.raw=pmap_dbl(list(x00,x01,x10,x11), fet)) %>%
-        mutate(p.adj=p.adjust(p.raw)) %>%
-        inner_join(y1, by=c('chrom','pos','ref','alt'))
-    ys
-    #}}}
-}
 
 x = rd5 %>%# slice(1:2) %>% #filter(gid == !!gid) %>%
     inner_join(tgl, by='gid') %>%
     mutate(start = start - 2000, end = end + 2000)
 #pb <- progress_bar$new(total=nrow(x))
-x = x %>%
-    mutate(data = pmap(list(t_clu1,drc, chrom,start,end), vnt_scan)) %>%
+la = x %>%
+    mutate(data = pmap(list(t_clu1, chrom,start,end), vnt_scan)) %>%
     select(drc,time,st,gid,data) %>% unnest(data)
 
-fo = glue("{dirw}/05.test.rds")
-saveRDS(x, fo)
+fo = glue("{dirw}/51.assoc.rds")
+saveRDS(la, fo)
 #}}}
 
-fi = glue("{dirw}/05.test.rds")
-ti = readRDS(fi)
-ti %>% count(drc, nsig > 0)
+fi = glue("{dirw}/51.assoc.rds")
+la = readRDS(fi)
+la %>% count(drc, nsig > 0)
 
 # add reg
 ddeg3 = ddeg2 %>% filter(cond=='cold',tgt=='B73') %>% select(time,gid,reg)
-ti2 = ti %>%
+ti2 = la %>%
     mutate(time=as.integer(time)) %>%
     mutate(sig = ifelse(nsig > 0,'sig','insig')) %>%
     left_join(ddeg3, by=c("time",'gid')) %>%
     filter(!is.na(reg))
 ti2 %>% count(reg, sig) %>% spread(sig,n) %>% mutate(prop=sig/(sig+insig))
 
-#{{{ plot cis/trans prop - sf12b
+#{{{ plot cis/trans prop - 
 regs = c("bkg","cis","cis+trans",'trans','conserved','unexpected')
 sigs = c('sig','insig')
 tp = ti2 %>% count(reg, sig) %>% rename(tag1=reg, tag2=sig) %>%
@@ -425,8 +428,6 @@ p = cmp_proportion1(tp, ytext=T, xangle=15, lab.size=2) +
 #}}}
 fo = glue("{dirw}/17.reg.pdf")
 ggsave(p, file=fo, width=4, height=4)
-fo = glue("{dirf}/sf12b.rds")
-saveRDS(p, fo)
 
 # add symbol & note
 ti3 = ti2 %>% inner_join(tga, by='gid')
@@ -436,7 +437,7 @@ j %>% filter(nsig>0,reg %in% c('cis','cis+trans')) %>%
     select(gid,p,nsig,reg,symbol) %>% print(n=40,width=Inf)
 #}}}
 
-#{{{ sf13
+#{{{ old sf13
 #{{{ read
 fi = glue('{dirw}/01.mclust.rds')
 r = readRDS(fi)
@@ -646,7 +647,7 @@ saveRDS(tp$p[[1]], fo)
 #{{{ write gene list
 x0 = rd5 %>% select(drc,gid,t_clu1) %>% unnest(t_clu1) %>%
     mutate(gt = ifelse(gt=='MS71', 'Ms71', gt)) %>%
-    mutate(status = ifelse((drc=='up' & clu==1) | (drc=='down' & clu==-1), 1, 0)) %>%
+    mutate(status = clu) %>%
     mutate(gid = glue("{gt}_{gid}")) %>%
     select(drc, gid, status)
 
@@ -748,6 +749,7 @@ tk %>% count(epi, acc > 0.8)
 #}}}
 
 #{{{ motif association
+pred1 = pred %>% group_by(drc, gid) %>% summarise(gts = list(gt)) %>% ungroup()
 tj = ti2 %>% inner_join(pred, by=c('drc','gid','gt')) %>%
     count(epi, gid, drc, mid, status, pav) %>%
     mutate(p = glue("n{status}{pav}")) %>%
@@ -756,37 +758,131 @@ tj = ti2 %>% inner_join(pred, by=c('drc','gid','gt')) %>%
     replace_na(list(n00=0,n01=0,n10=0,n11=0)) %>%
     mutate(acc = n00/(n00+n01)/2 + n11/(n10+n11)/2) %>% filter(!is.na(acc))
 
+get_lfc  <- function(gid, pav, pred) {
+    #{{{
+    pred %>% filter(gid == !!gid) %>%
+        select(gt,clu,log2fc,B_raw,B_umr) %>%
+        mutate(txt = ifelse(is.na(log2fc), 'NA', number(log2fc,accuracy=.01))) %>%
+        left_join(pav, by='gt') %>%
+        mutate(tag_de = ifelse(clu==1, "x", "")) %>%
+        mutate(tag_mtf = ifelse(pav==1, "x", ""))
+    #}}}
+}
 tj2 = tj %>% arrange(epi, gid, drc, desc(acc)) %>%
-    group_by(epi, gid, drc) %>% dplyr::slice(1:1) %>% ungroup() %>%
-    arrange(epi, desc(acc)) %>% print(n=40)
-tj3 = tj2 %>% filter(n00+n01 >= 3, n10+n11>=3, acc >.9) %>% arrange(epi,gid) %>% print(n=40)
-
+    group_by(epi, gid, drc) %>% dplyr::slice(1:1) %>% ungroup()
+mtf_pav = ti2 %>% inner_join(tj2 %>% select(epi,gid,drc,mid), by=c('epi','drc','gid','mid')) %>%
+    group_by(epi,gid,drc,mid) %>% nest() %>% rename(pav=data) %>% ungroup()
+tj2 = tj2 %>% inner_join(mtf_pav, by=c('epi','drc','gid','mid')) %>%
+    inner_join(pred1, by=c('gid','drc')) %>%
+    mutate(lfc = map2(gid, pav, get_lfc, pred=pred)) %>% select(-pav) %>%
+    arrange(epi, desc(acc)) %>% print(n=20)
+tj2 %>% mutate(n_gt=map_dbl(gts,length)) %>% count(n_gt-n00-n01-n10-n11)
 tj2 %>% count(epi, acc > 0.9)
 tj2 %>% count(epi, acc > 0.8)
+
+fo = glue("{dirw}/61.mtf.assoc.rds")
+saveRDS(tj2, fo)
 #}}}
 #}}}
 
+#{{{ final synteny plots - f7 & sf
+#{{{ read & functions
+require(Biostrings)
+require(DECIPHER)
+get_fasta <- function(gid, gts, beg=0, end=4000, db=glue("{dird}/21_seq/02.fas")) {
+    #{{{
+    pre = glue("tmp.gf.{sample(10000, 1)}")
+    tt = tibble(gid=!!gid, gt=gts) %>% mutate(sid=glue("{gt}_{gid}")) %>%
+        mutate(beg=!!beg, end=!!end) %>% select(sid, beg, end)
+    write_tsv(tt, file=glue("{pre}.bed"), col_names=F)
+    system(glue("fasta.py extract {db} {pre}.bed > {pre}.fa"))
+    y = readDNAStringSet(glue("{pre}.fa"))
+    snames = tibble(sid = names(y)) %>%
+        separate(sid, c("sid",'other'), sep='-', extra='merge') %>%
+        separate(sid, c('gt', 'gid'), sep='_') %>%
+        pull(gt)
+    names(y) = snames
+    #
+    system(glue("rm {pre}.*"))
+    y
+    #}}}
+}
+msa_tree <- function(seqs) {
+    #{{{
+    pre = glue("tmp.msa.{sample(10000, 1)}")
+    writeXStringSet(seqs, glue('{pre}.fa'))
+    system(glue("muscle -in {pre}.fa -out {pre}.2.fa -tree2 {pre}.2.nwk"))
+    msa = readDNAMultipleAlignment(filepath=glue("{pre}.2.fa"), format='fasta')
+    tree = read.tree(glue("{pre}.2.nwk"))
+    labs = with(subset(fortify(tree), isTip), label[order(y, decreasing=T)])
+    nl = length(labs)
+    ty = tibble(lab = labs, y = nl:1) %>%
+        separate(lab, c('gt','extra'), sep='_', remove=F) %>%
+        select(gt, lab, y)
+    #
+    system(glue("rm {pre}.*"))
+    list(msa=msa, tree=tree, ty=ty)
+    #}}}
+}
+get_mtf_loc <- function(mid, seqs, mtf_dir=glue("{dird}/41_ml/00_nf/03_motif_lists")) {
+    #{{{
+    pre = glue("tmp.mtf.{sample(10000, 1)}")
+    writeXStringSet(seqs, glue('{pre}.fa'))
+    bid = stringr::str_split(mid,'_')[[1]][1]
+    system(glue("fimo.py locate --motif {mid} {mtf_dir}/{bid}.meme {pre}.fa {pre}.txt"))
+    mtf = read_tsv(glue("{pre}.txt"), col_names=c("sid",'beg','end')) %>%
+        separate('sid',c('mid','sid'), sep='%') %>%
+        separate('sid',c('gt','extra'), sep='_') %>%
+        mutate(pos = (beg+end)/2) %>%
+        select(gt, beg, end, pos)
+    #
+    system(glue("rm {pre}.*"))
+    mtf
+    #}}}
+}
+get_umr_loc <- function(gid, umr=glue("{dird}/21_seq/15.UMR.bed")) {
+    #{{{
+    pre = glue("tmp.umr.{sample(10000, 1)}")
+    system(glue("grep {gid} {umr} > {pre}.bed"))
+    umr = read_tsv(glue("{pre}.bed"), col_names=c('gid','start','end')) %>%
+        mutate(start=start+1) %>%
+        separate("gid", c("gt",'gid'), sep='_') %>%
+        select(gt, start, end)
+    system(glue("rm {pre}.*"))
+    umr
+    #}}}
+}
+fi = glue("{dirw}/61.mtf.assoc.rds")
+ta = readRDS(fi)
+#}}}
 
-#{{{ final synteny plots - f7 & sf13
-fi = glue('{dirw}/25.model.pred.rds')
-pred = readRDS(fi)
-fx = glue("{dirg}2/syntelog/maize.gene.model.rds")
-tg = readRDS(fx)
+#{{{ extract seqs & motifs - 62.rds
+ta2 = ta %>% filter(epi=='raw', acc >= .8)
+ta2 = ta2 %>%
+    #dplyr::slice(1:2) %>%
+    mutate(seqs = map2(gid, gts, get_fasta)) %>%
+    mutate(mtf = map2(mid,seqs, get_mtf_loc))
+
+fo = glue("{dirw}/62.seqs.mtf.rds")
+saveRDS(ta2, fo)
+#}}}
+
+#{{{ characterize motif variation - 63.rds
 fi = glue('{dirw}/../41_ml/06.tk.tc.rds')
 r06 = readRDS(fi)
 loci = read_loci()
-#{{{ functions
-require(Biostrings)
-require(DECIPHER)
-require(ape)
-require(ggtree)
-require(tidytree)
-make_syn  <- function(name1, name2, msa) {
-    #{{{ extract synteny blocks and mismatch positions from alignment
-    x = unmasked(msa)
-    y = RemoveGaps(x[c(name1, name2)], 'common')
-    y1 = as.character(y[1])
-    y2 = as.character(y[2])
+#
+fi = glue("{dirw}/62.seqs.mtf.rds")
+ta2 = readRDS(fi)
+ti = ta2
+j=3; mtf=ti$mtf[[j]]; seqs=ti$seqs[[j]]; gts=ti$gts[[j]]; lfc=ti$lfc[[j]]
+mtf_aln  <- function(n1, n2, tb, te, seqs) {
+    #{{{
+    cat(n1, n2, '\n')
+    pw = pairwiseAlignment(seqs[[n1]],seqs[[n2]], type='local')
+    toff = start(pattern(pw)); qoff = start(subject(pw))
+    y1 = as.character(pattern(pw))
+    y2 = as.character(subject(pw))
     h0 = as.character(compareStrings(y2,y1))
     h = str_replace_all(h0, "[ATCGN?]", '*')
     h2=unlist(strsplit(h, split = ""))
@@ -796,7 +892,181 @@ make_syn  <- function(name1, name2, msa) {
         mutate(qSize = ifelse(v=='-', 0, aSize)) %>%
         mutate(tEnd=cumsum(tSize), tBeg=tEnd-tSize) %>%
         mutate(qEnd=cumsum(qSize), qBeg=qEnd-qSize) %>%
-        select(v, aBeg,aEnd,aSize,tBeg,tEnd,tSize,qBeg,qEnd,qSize)
+        select(v, aBeg,aEnd,aSize,tBeg,tEnd,tSize,qBeg,qEnd,qSize) %>%
+        mutate(tBeg = toff+tBeg-1, tEnd=tBeg+tSize) %>%
+        mutate(qBeg = qoff+qBeg-1, qEnd=qBeg+qSize)
+    get_tpos <- function(v, aSize, tBeg, tEnd)
+        ifelse(v=='+', list(rep(tBeg, aSize)), list((tBeg+1):tEnd))
+    get_qpos <- function(v, aSize, qBeg, qEnd)
+        ifelse(v=='-', list(rep(qBeg, aSize)), list((qBeg+1):qEnd))
+    j2 = j %>%
+        mutate(tpos = pmap(list(v, aSize, tBeg, tEnd), get_tpos)) %>%
+        mutate(qpos = pmap(list(v, aSize, qBeg, qEnd), get_qpos))
+    tposs = unlist(j2$tpos)
+    qposs = unlist(j2$qpos)
+    mm = str_locate_all(h0, "\\?")[[1]] %>% as_tibble() %>%
+        mutate(qPos = qposs[start], tPos = tposs[start]) %>%
+        select(aPos=start,tPos,qPos)
+    ab = which(tposs == tb)[1] 
+    ae = which(tposs == te)[1] 
+    tseq = str_sub(y1, ab, ae); qseq=str_sub(y2,ab,ae)
+    mm1 = mm %>% filter(aPos >= ab, aPos <= ae)
+    if(nrow(mm1) > 0) {
+        for (i in 1:nrow(mm1)) {
+            mp = mm1$aPos[i] - ab + 1
+            str_sub(qseq,mp,mp) <- str_to_lower(str_sub(qseq,mp,mp))
+        }
+    }
+    qb=qposs[ab]; qe=qposs[ae]
+    ins=str_count(tseq,'-')
+    del=str_count(qseq,'-')
+    tibble(tseq=tseq,qseq=qseq,qb=qb,qe=qe, mm=nrow(mm1),ins=ins,del=del)
+    #}}}
+}
+make_msa <- function(seqs) {
+    #{{{
+    pre = glue("tmp.msa.{sample(10000, 1)}")
+    writeXStringSet(seqs, glue('{pre}.fa'))
+    system(glue("muscle -in {pre}.fa -out {pre}.2.fa"))
+    msa = readDNAMultipleAlignment(filepath=glue("{pre}.2.fa"), format='fasta')
+    msa = DNAStringSet(msa)
+    #
+    system(glue("rm {pre}.*"))
+    msa
+    #}}}
+}
+mark_mm  <- function(tseq, qseq) {
+    #{{{ mark mismatch and indel in query seqs
+    h0 = as.character(compareStrings(qseq,tseq))
+    h2 = unlist(strsplit(h0, split = ""))
+    th2 = tibble(p=1:length(h2), op = h2) %>%
+        filter(op %in% c("?", "+"))
+    if (nrow(th2) > 0) {
+        for (p in th2$p) {
+            str_sub(qseq,p,p) <- str_to_lower(str_sub(qseq,p,p))
+        }
+    }
+    qseq
+    #}}}
+}
+check_mtf <- function(j, mtf, seqs, gts) {
+    #{{{
+    cat(j, '\n')
+    mtf0 = mtf %>% mutate(dst = abs(pos-2000)) %>% arrange(dst)
+    i=1; gt0 = mtf0$gt[[i]]; b0 = mtf0$beg[[i]]; e0 = mtf0$end[[i]]
+    seq0 = seqs[[gt0]][b0:e0]
+    aln = tibble(gt0=!!gt0, gt1=gts[! gts %in% gt0]) %>%
+        filter(gt1 %in% names(seqs)) %>%
+        mutate(tb=b0, te=e0) %>%
+        mutate(x = pmap(list(gt0,gt1,tb,te), mtf_aln, seqs=seqs)) %>%
+        unnest(x)
+    #
+    aln_na = aln %>% filter(is.na(tseq))
+    aln2 = aln %>% filter(!is.na(tseq))
+    if (length(unique(aln2$tseq)) > 1) {
+        ss = aln2 %>% select(gt=gt1, seq=qseq) %>%
+            bind_rows(aln2 %>% dplyr::slice(1) %>% select(gt=gt0, seq=tseq)) %>%
+            mutate(seq=str_replace(seq,'-',''))
+        ss0 = ss$seq; names(ss0) = ss$gt
+        ss1 = DNAStringSet(ss0)
+        ss2 = make_msa(ss1)
+        ss3 = as.character(ss2)
+        aln2 = aln2 %>% mutate(tseq = ss3[gt0], qseq=ss3[gt1])
+    }
+    aln2 = aln2 %>% mutate(qseq = map2_chr(tseq, qseq, mark_mm))
+    aln2 %>% bind_rows(aln_na) %>% arrange(gt1)
+    #}}}
+}
+var_type <- function(aln) {
+    #{{{
+    aln = aln %>% replace_na(list(mm=0, ins=0, del=1))
+    mm = sum(aln$mm) > 0
+    indel = sum(aln$ins) + sum(aln$del) > 0
+    ifelse(mm, ifelse(indel, 'snp+indel', 'snp'), ifelse(indel, 'indel', 'none'))
+    #}}}
+}
+grab_mtf_gene <- function(mid, gid, lfc, kmer, loci) {
+    #{{{ #get motif and gene info (motif + gene ID + alias + annotation)
+    bid = stringr::str_split(mid,'_')[[1]][1]
+    x = kmer %>% filter(bid==!!bid) %>% pluck('mtfs', 1) %>%
+        filter(mid==!!mid)
+    m.pwm = x$mtf[[1]]; m.name = ifelse(x$known, x$fname, 'unknown motif')
+    #
+    g.name = loci %>% filter(gid==!!gid) %>% pluck('symbol2', 1)
+    g.note = loci %>% filter(gid==!!gid) %>% pluck('note', 1)
+    # acc
+    hy = lfc %>% rename(status=clu)
+    acc.raw = sum(hy$status==hy$B_raw, na.rm=T) / sum(!is.na(hy$B_raw))
+    acc.umr = sum(hy$status==hy$B_umr, na.rm=T) / sum(!is.na(hy$B_umr))
+    #
+    #tit = glue("{m.name}; {g.name}; model accuracy = {number(acc,accuracy=.01)}")
+    tibble(mname=m.name, pwm=list(m.pwm), gname=g.name, gnote=g.note,
+           acc.raw=acc.raw, acc.umr=acc.umr)
+    #}}}
+}
+ta3 = ta2 %>% mutate(j=row_number()) %>%
+    #dplyr::slice(6) %>%
+    mutate(aln = pmap(list(j, mtf, seqs, gts), check_mtf)) %>%
+    select(-epi,-j) %>% mutate(vt = map_chr(aln, var_type)) %>%
+    mutate(x = pmap(list(mid,gid,lfc), grab_mtf_gene, kmer=r06$tk, loci=loci)) %>%
+    unnest(x)
+
+fi = glue("{dirw}/51.assoc.rds")
+la = readRDS(fi)
+la1 = la %>% select(gid,drc,nsig)
+ta4 = ta3 %>% left_join(la1, by=c('gid','drc'))
+
+fo = glue("{dirw}/63.mtf.stat.rds")
+saveRDS(ta4, fo)
+fo = glue("{dirw}/63.mtf.stat.tsv")
+to = ta4 %>% select(gid,gname,gnote,drc,mid,mname,vt,n00,n01,n10,n11,
+                    acc.mtf=acc,acc.raw,acc.umr,plink.nsig=nsig)
+write_tsv(to, fo, na='')
+#}}}
+
+#{{{ prepare for synteny plot - 65.rds
+fi = glue("{dirw}/63.mtf.stat.rds")
+ti = readRDS(fi)
+tk = ti %>% filter(n00+n01 >= 3, n10+n11>=3, acc >.9) %>% arrange(gid) %>%
+    print(n=40, width=Inf) %>%
+    mutate(x = map(seqs, msa_tree)) %>%
+    mutate(msa = map(x, 'msa'), tree = map(x, 'tree'), ty = map(x, 'ty')) %>%
+    select(-x) %>%
+    mutate(umr = map(gid, get_umr_loc))
+
+fo = glue("{dirw}/65.plot.data.rds")
+saveRDS(tk, fo)
+#}}}
+
+#{{{ read & functions
+fx = glue("{dirg}2/syntelog/maize.genes.v4.rds")
+tg = readRDS(fx)
+#
+fi = glue("{dirw}/65.plot.data.rds")
+tk = readRDS(fi)
+
+make_syn  <- function(name1, name2, seqs) {
+    #{{{ extract synteny blocks and mismatch positions from alignment
+    require(Biostrings)
+    #x = unmasked(msa)
+    #s1 = RemoveGaps(x[name1])[[1]]
+    #s2 = RemoveGaps(x[name2])[[1]]
+    pw = pairwiseAlignment(seqs[[name1]], seqs[[name2]], type='local')
+    toff = start(pattern(pw)); qoff = start(subject(pw))
+    y1 = as.character(pattern(pw))
+    y2 = as.character(subject(pw))
+    h0 = as.character(compareStrings(y2,y1))
+    h = str_replace_all(h0, "[ATCGN?]", '*')
+    h2=unlist(strsplit(h, split = ""))
+    j = tibble(v = rle(h2)$values, aSize = rle(h2)$lengths) %>%
+        mutate(aEnd=cumsum(aSize), aBeg = aEnd-aSize) %>%
+        mutate(tSize = ifelse(v=='+', 0, aSize)) %>%
+        mutate(qSize = ifelse(v=='-', 0, aSize)) %>%
+        mutate(tEnd=cumsum(tSize), tBeg=tEnd-tSize) %>%
+        mutate(qEnd=cumsum(qSize), qBeg=qEnd-qSize) %>%
+        select(v, aBeg,aEnd,aSize,tBeg,tEnd,tSize,qBeg,qEnd,qSize) %>%
+        mutate(tBeg = toff+tBeg-1, tEnd=tBeg+tSize) %>%
+        mutate(qBeg = qoff+qBeg-1, qEnd=qBeg+qSize)
     get_tpos <- function(v, aSize, tBeg, tEnd)
         ifelse(v=='+', list(rep(tBeg, aSize)), list((tBeg+1):tEnd))
     get_qpos <- function(v, aSize, qBeg, qEnd)
@@ -812,12 +1082,12 @@ make_syn  <- function(name1, name2, msa) {
     list(aln = j, mm = mm)
     #}}}
 }
-plot_syn <- function(ty, msa) {
+plot_syn <- function(ty, seqs) {
     #{{{
     #{{{ prepare syn tible
     labs = ty %>% arrange(desc(y)) %>% pull(lab)
-    to = tibble(tgt=labs[1:nl-1], qry=labs[2:nl]) %>%
-        mutate(x = map2(tgt,qry, make_syn, msa=msa)) %>%
+    to = tibble(tgt=labs[1:nrow(ty)-1], qry=labs[2:nrow(ty)]) %>%
+        mutate(x = map2(tgt,qry, make_syn, seqs=seqs)) %>%
         mutate(syn = map(x, 'aln'), mm = map(x, 'mm')) %>%
         select(tgt, qry, syn, mm)
     #
@@ -866,22 +1136,13 @@ add_gene_track <- function(gid, tg, ty, p, ht.exon=.05, ht.cds=.1) {
         geom_rect(xmin=1999,xmax=2001,ymin=-Inf,ymax=Inf, fill='yellow', alpha=.2)
     #}}}
 }
-mtf_title <- function(bid, gid, pred, tk, loci, font.size=3) {
+mtf_title <- function(gid, gname,gnote, pwm,mname, acc, font.size=3) {
     #{{{ #plot title (motif + gene ID + alias + annotation)
-    x = tk %>% filter(bid==!!bid) %>% pull(mtfs) %>% pluck(1) %>%
-        filter(mid==!!mid)
-    m.pwm = x$mtf[[1]]; m.name = ifelse(x$known, x$fname, 'unknown motif')
-    g.name = loci %>% filter(gid==!!gid) %>%
-        mutate(name = ifelse(is.na(symbol2), gid, glue("{gid} ({symbol2})"))) %>%
-        mutate(name = ifelse(is.na(note), glue("{name} (unknown)"), glue("{name}: {note}"))) %>%
-        pluck('name', 1)
-    # acc
-    hy = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr,status) %>%
-        filter(!is.na(status), !is.na(B_umr))
-    acc = sum(hy$status==hy$B_umr) / nrow(hy)
+    glab = ifelse(is.na(gname), gid, glue("{gid} ({gname})"))
+    glab = ifelse(is.na(gnote), glue("{glab} (unknown)"), glue("{glab}: {gnote}"))
     #
-    tit = glue("{m.name}; {g.name}; model accuracy = {number(acc,accuracy=.01)}")
-    p01 = view_motifs(m.pwm, method="PCC",min.mean.ic=0,min.overlap=6) +
+    tit = glue("{mname}; {glab}; model accuracy = {number(acc,accuracy=.01)}")
+    p01 = view_motifs(pwm, method="PCC",min.mean.ic=0,min.overlap=6) +
         otheme(panel.border=F, margin=c(.2,.2,0,1))
     p02 = ggplot() +
         annotate('text', x=0, y=0, label=tit, size=font.size, hjust=.5, vjust=.5) +
@@ -892,11 +1153,35 @@ mtf_title <- function(bid, gid, pred, tk, loci, font.size=3) {
     p0
     #}}}
 }
-plot_lfc <- function(gid, ty, pred) {
-#{{{ log2fc plot (p2 + p3)
-    lfc = pred %>% filter(gid == !!gid) %>% select(st,gt,log2fc,B_raw,B_umr) %>%
-        right_join(ty, by='gt') %>%
-        mutate(txt = ifelse(is.na(log2fc), 'NA', number(log2fc,accuracy=.01)))
+plot_msa <- function(aln, ty) {
+    #{{{
+    tseq = aln %>% filter(!is.na(tseq)) %>% pluck('tseq', 1)
+    if( is.null(tseq) ) {
+        ggplot() + geom_blank()
+    } else {
+    gap = str_c(rep('-', nchar(tseq)), collapse='')
+    aln = aln %>% replace_na(list(tseq=gap, qseq=gap))
+    ts0 = aln %>% dplyr::slice(1) %>% select(gt=gt0, seq=tseq)
+    ts1 = aln %>% select(gt=gt1, seq=qseq)
+    str_explode <- function(s) tibble(nt=unlist(str_split(s,''))) %>% mutate(i=1:n())
+    ts = ts0 %>% bind_rows(ts1) %>%
+        mutate(x = map(seq, str_explode)) %>% select(gt, x) %>% unnest(x) %>%
+        mutate(high = nt %in% letters[1:26]) %>%
+        inner_join(ty, by='gt')
+    cols2 = c('white', pal_simpsons()(1))
+    ggplot(ts) +
+        geom_tile(aes(x=i, y=y, fill=high)) +
+        geom_text(aes(x=i, y=y, label=nt), size=2) +
+        scale_x_continuous(expand=expansion(mult=c(.01,.01))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(0,.02))) +
+        scale_fill_manual(values=cols2) +
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.05,.2,0))
+    }
+    #}}}
+}
+plot_lfc <- function(gid, ty, lfc) {
+#{{{ log2fc
+    lfc = lfc %>% right_join(ty, by='gt')
     ymin0 = min(lfc$log2fc, na.rm=T); ymax0 = max(lfc$log2fc, na.rm=T)
     lfc.mean = (ymin0 + ymax0) / 2
     lfc = lfc %>% mutate(txt.col = ifelse(is.na(log2fc), ymax0, log2fc))
@@ -904,30 +1189,45 @@ plot_lfc <- function(gid, ty, pred) {
     ymin = ymin0; ymax = ymax0
     ymin = ifelse(ymin < 0, ceiling(ymin), floor(ymin))
     ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
-    p2 = ggplot(lfc) +
+    p.a = ggplot(lfc) +
         #geom_hline(yintercept=0, color='gray', alpha=.4) +
         geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
         #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
         geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
         scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.1,.1))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.02))) +
         scale_color_manual(values=c('white','black')) +
         scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
-        otheme(xtitle=T, legend.pos='none', panel.border=F,
-            margin=c(.4,0,.2,0))
-    p3 = ggplot(lfc) +
-        #geom_tile(aes(x=0, y=y, fill=as.factor(B_umr)), width=.4, height=.4) +
-        geom_text(aes(x=0, y=y, label=B_umr), hjust=.5,vjust=.5,size=2) +
+        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
+        theme(axis.title.x = element_text(size=7))
+    p.b = ggplot(lfc) +
+        geom_text(aes(x=0, y=y, label=tag_de), hjust=.5,size=2.5) +
+        scale_x_continuous(name='DE', expand=expansion(mult=c(.02,.02)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
+        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
+        theme(axis.title.x = element_text(size=7))
+    p.c = ggplot(lfc) +
+        geom_text(aes(x=0, y=y, label=tag_mtf), hjust=.5,size=2.5) +
+        scale_x_continuous(name='mtf', expand=expansion(mult=c(.02,.02)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
+        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
+        theme(axis.title.x = element_text(size=7))
+    p.d = ggplot(lfc) +
+        geom_text(aes(x=0, y=y, label=B_raw), size=2) +
         scale_x_continuous(name='model', expand=expansion(mult=c(.02,.02)), position='top') +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(add=c(.3,.2))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
         scale_fill_manual(values=c('white','black')) +
-        otheme(xtitle=T, legend.pos='none', panel.border=F,
-            margin=c(.4,.5,.2,.3))
-    ggarrange(p2, p3, nrow=1, ncol=2, widths=c(3,5))
+        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,.2,0,0)) +
+        theme(axis.title.x = element_text(size=7))
+    ggarrange(p.a, p.b, p.c, p.d, nrow=1, ncol=4, widths=c(3,1.5,1.5,3.5), align='v')
 #}}}
 }
-combo_plot  <- function(gid, tg, ty, msa, mtf, tree, pred, p_msa, p0) {
+combo_plot  <- function(gid,gname,gnote,pwm,mname,acc, ty, seqs, mtf, tree,aln, lfc, fp, tg) {
     #{{{
+    require(ape)
+    require(ggtree)
+    require(tidytree)
+    p0 = mtf_title(gid, gname,gnote, pwm,mname, acc, font.size=3)
     # tree plot
     ty2 = ty %>% select(taxa=lab, gt)
     p_tree = ggtree(tree) %<+% ty2 +
@@ -936,129 +1236,60 @@ combo_plot  <- function(gid, tg, ty, msa, mtf, tree, pred, p_msa, p0) {
         scale_y_continuous(expand=expansion(mult=c(.01,.05))) +
         otheme(panel.border=F, margin=c(.2,.2,.2,0))
     #
-    p1 = plot_syn(ty, msa)
+    p1 = plot_syn(ty, seqs)
+    mtf2 = mtf %>% inner_join(ty, by='gt')
+    umr2 = umr %>% inner_join(ty, by='gt')
     pg = add_gene_track(gid,tg,ty,p1) +
-        geom_segment(data=umr, aes(x=start,xend=end,y=y-.1,yend=y-.1), color='green',
+        geom_segment(data=umr2, aes(x=start,xend=end,y=y-.1,yend=y-.1), color='green',
                      size=.5, alpha=1) +
-        geom_point(data=mtf,aes(x=pos, y=y-.1),col='red',size=1)
+        geom_point(data=mtf2,aes(x=pos, y=y-.1),col='red',size=1)
     #
-    p_lfc = plot_lfc(gid, ty, pred)
+    p_lfc = plot_lfc(gid, ty, lfc)
     #
-    pb = ggarrange(p_tree, pg, p_msa, p_lfc, nrow=1, ncol=4, widths=c(1,5,.5,.8))
-    ggarrange(p0, pb, nrow=2, heights=c(1,20))
+    p_msa = plot_msa(aln, ty)
+    pb = ggarrange(p_tree, pg, p_msa, p_lfc, nrow=1, ncol=4, widths=c(1,5,.5,1))
+    #pb = ggarrange(p_tree, pg, p_lfc, nrow=1, ncol=3, widths=c(1,5,1))
+    ggarrange(p0, pb, nrow=2, heights=c(1,20)) %>%
+        ggexport(filename=fp, width=8, height=7)
     #}}}
 }
 #}}}
 
-tj3 %>% print(n=40)
+i=10
+gid=tk$gid[[i]]; gname=tk$gname[[i]]; gnote=tk$gnote[[i]]; pwm=tk$pwm[[i]];
+mid=tk$mid[[i]]; mname=tk$mname[[i]]; acc=tk$acc.raw[[i]]; ty=tk$ty[[i]];
+aln=tk$aln[[i]]; lfc=tk$lfc[[i]];
+seqs=tk$seqs[[i]]; tree=tk$tree[[i]]; mtf=tk$mtf[[i]]; umr=tk$umr[[i]]
+fp = glue("{dirw}/z{i}-{gid}.pdf")
+combo_plot(gid,gname,gnote,pwm,mname,acc, ty,seqs,mtf,tree,aln,lfc,fp, tg=tg)
 
-js=c(2,4,6:10,15:17,21)
+tk %>% mutate(i = row_number()) %>%# dplyr::slice(11:n()) %>%
+    mutate(fp = glue("{dirw}/z{i}-{gid}.pdf")) %>% print(width=Inf) %>%
+    mutate(j = pmap(list(gid,gname,gnote,pwm,mname,acc.raw,ty,seqs,mtf,tree,aln,lfc,fp), combo_plot, tg=tg))
+#}}}
 
-for (j in js[4:length(js)]) {
-#{{{ prepare data for one gene then read in
-gid=tj3$gid[[j]]; mid=tj3$mid[[j]]; bid=str_split(mid,'_')[[1]][1]
-tt = tibble(gid=!!gid, gt=gts32_ph207) %>% mutate(gid=glue("{gt}_{gid}")) %>%
-    mutate(beg=0, end=4000) %>% select(gid, beg, end)
-write_tsv(tt, file="t1.txt", col_names=F)
-system(glue("fasta.py extract ../21_seq/02.fas t1.txt > t1.fas"))
-system(glue("muscle -in t1.fas -out t2.fas -tree2 t2.nwk"))
-system(glue("fimo.py locate --motif {mid} 00_nf/03_motif_lists/{bid}.meme t1.fas t2.mtf.txt"))
-system(glue("grep {gid} ../21_seq/15.UMR.bed > t3.umr.bed"))
-#
-diri = dirw
-#{{{ read aln, tree, build ty 
-fi = glue("{diri}/t2.fas")
-msa = readDNAMultipleAlignment(filepath=fi, format='fasta')
-fi = glue("{diri}/t2.nwk")
-tree = read.tree(fi)
-labs = with(subset(fortify(tree), isTip), label[order(y, decreasing=T)])
-nl = length(labs)
-ty = tibble(lab = labs, y = nl:1) %>%
-    separate(lab, c('gt','extra'), sep='_', remove=F) %>%
-    select(gt, lab, y)
-#{{{ rewrite MSA with ordered genotypes
-ty2 = ty %>% arrange(y)
-msa2 = DNAStringSet(msa)[ty$lab]
-names(msa2) = ty$gt
-fo = glue("{dirw}/t2_reorder.fas")
-writeXStringSet(msa2, fo, format='fasta')
-#}}}
-#}}}
-#{{{ read motif coords, umr and acr
-fi = glue("{diri}/t2.mtf.txt")
-mtf = read_tsv(fi, col_names=c("sid",'beg','end')) %>%
-    separate('sid',c('mid','sid'), sep='%') %>%
-    separate('sid',c('gt','extra'), sep='_') %>%
-    mutate(pos = (beg+end)/2) %>%
-    select(gt, beg, end, pos) %>%
-    inner_join(ty, by='gt')
-fi = glue("{diri}/t3.umr.bed")
-umr = read_tsv(fi, col_names=c('gid','start','end')) %>% mutate(start=start+1) %>%
-    separate("gid", c("gt",'gid'), sep='_') %>%
-    select(gt, start, end) %>%
-    inner_join(ty, by='gt')
-#}}}
-#{{{ motif MSA plot
-require(ggmsa)
-get_msa_coord1 <- function(name, msa) {
-    #{{{
-    y1 = as.character(msa[name])
-    y2 = str_replace_all(y1, "[ATCGN]", '1')
-    y2 = str_replace_all(y2, "[-]", '0')
-    y3 = as.integer(unlist(strsplit(y2, split = "")))
-    cumsum(y3)
-    #}}}
+
+#{{{ find syntenic regions in other genotypes
+pre = glue("tmp.lo.{sample(10000,1)}")
+fo = glue("{pre}.bed")
+to = mtf %>% mutate(gid=glue("{gt}_{gid}")) %>% mutate(beg=beg-1) %>%
+    select(gid, beg, end)
+write_tsv(to, fo, col_names=F)
+fchain = glue("{dird}/21_seq/10.forwrad.chain")
+system(glue("liftOver {pre}.bed {fchain} {pre}.2.bed {pre}.3.unmap"))
+ti = read_tsv(glue("{pre}.2.bed"), col_names=c("sid",'beg','end')) %>%
+    separate('sid',c('gt','chrom'), sep='_')
+
+if (! 'B73' %in% ti$gt) {
+    gt = ti %>% pluck('gt',2)
+    to = ti %>% dplyr::slice(1) %>% select(chrom,beg,end)
+    write_tsv(to, glue("{pre}.5.bed"), col_names=F)
+    fchain = glue("$wgc/data/raw/Zmays_{gt}-Zmays_B73/q.chain")
+    system(glue("CrossMap.py bed {fchain} {pre}.5.bed {pre}.6.bed"))
+    tb = read_tsv(glue("{pre}.6.bed"), col_names=c("chrom",'beg','end')) %>%
+        mutate(chrom=str_replace(chrom, "^chr", '')) %>%
+        group_by(1) %>% summarise(chrom=chrom[1], beg=min(beg), end=max(end)) %>%
+        ungroup()
 }
-get_msa_coord <- function(ty, msa) {
-    #{{{
-    ty %>%
-        mutate(poss = map(lab, get_msa_coord1, msa=unmasked(msa))) %>%
-        select(gt, poss) %>% spread(gt, poss) %>%
-        unnest(everything()) %>% mutate(i=1:n()) %>% select(i, everything())
-    #}}}
-} 
-coord = get_msa_coord(ty, msa)
-#
-gtm = pred %>% filter(gid==!!gid, status==1) %>% mutate(lfc=abs(log2fc)) %>% 
-    select(gt, lfc) %>% inner_join(mtf, by='gt') %>% arrange(desc(lfc))
-b = gtm %>% pluck('beg',1)
-e = gtm %>% pluck('end',1)
-gtm = gtm %>% pluck('gt', 1)
-c1 = coord %>% filter(get(gtm) >= b, get(gtm) <= e)
-cb = min(c1$i); ce = max(c1$i)
-#
-fi = glue("{dirw}/t2_reorder.fas")
-x = readDNAStringSet(fi)
-tm = tidy_msa(x, cb, ce) %>% as_tibble() %>% select(gt=1,i=2,nt=3) %>%
-    inner_join(ty, by='gt')
-#p_msa = ggmsa(fi, start=cb, end=ce, color="Clustal", seq_name=F, font=NULL)
-cols5 = pal_tron()(5)[c(5,1:4)]
-p_msa = ggplot(tm, aes(x=i,y=y,label=nt)) +
-    geom_tile(aes(fill=nt), width=1) +
-    geom_text(size=2) +
-    scale_x_continuous(expand=expansion(mult=c(0,0))) +
-    scale_y_continuous(expand=expansion(mult=c(0,0))) +
-    scale_fill_manual(values=cols5) +
-    otheme(legend.pos='none', panel.border=F, margin=c(1,.1,.4,0))
-#ggsave(p, file=glue("{dirw}/t2.pdf"), width=7, height=8)
 #}}}
-p0 = mtf_title(bid, gid, pred, r06$tk, loci, font.size=3)
-#}}}
-#
-fo = glue("{diri}/z{j}-{gid}.pdf")
-combo_plot(gid, tg, ty, msa, mtf, tree, pred, p_msa, p0) %>%
-    ggexport(filename=fo, width=8, height=7)
-}
-
-#}}}
-
-
-fi = glue("{dirw}/t2.vcf")
-ti = read_tsv(fi, skip=3)
-vcf = ti %>% select(i=POS, ref=REF, alt=ALT, ends_with("4000")) %>%
-    set_names(str_replace_all, glue("_{gid}-1-4000"), '') %>%
-    print(width=Inf)
-vcf %>% filter(i >= 337, i <= 347) %>%
-    select(i,ref,alt,ty$gt) %>%
-    print(width=Inf)
 
