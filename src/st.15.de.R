@@ -3,7 +3,6 @@ dirw = glue('{dird}/15_de')
 #{{{ functions
 stresses = c("Control","Cold","Heat")
 drcs = c('up', 'down')
-fmax=10
 run_matplotlib_venn3 <- function(s1, s2, s3, labs=LETTERS[1:3]) {
     #{{{
     require(venneuler)
@@ -345,7 +344,7 @@ p = ggplot(tp) +
     otheme(legend.pos='none', strip.style='white', panel.spacing='.1',
            xtext=T, xtick=T) +
     theme(axis.text.x = element_text(angle = 20, hjust=.8, vjust=1.1)) +
-    guides(color=F,fill=F)
+    guides(color='none',fill='none')
 fo = file.path(dirw, '10.deg.pdf')
 ggsave(p, filename=fo, width=5, height=8)
 saveRDS(p, file.path(dirf, 'f1d.rds'))
@@ -367,7 +366,7 @@ fo = file.path(dirw, '10.deg.venn.pdf')
 ggsave(pv, filename=fo, width=12, height=8)
 #}}}
 
-#{{{ simple gt venn graph - f2a, sf02a
+#{{{ simple gt venn graph - f2a, sf04a
 #{{{ preprocsss
 drcs = c('up','down')
 td2 = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -401,13 +400,13 @@ p = ggplot(tpc) +
     facet_wrap(~ pan, scale='free', ncol=2) +
     scale_color_manual(values=cols3) +
     otheme(legend.pos='top.center.out', strip.style='white',
-           legend.dir='h', legend.vjust=-.7)
+           legend.dir='h', legend.vjust=-1)
 fo = sprintf('%s/11.gt.venn.pdf', dirw)
 ggsave(p, filename=fo, width=4, height=4.5)
 fo = glue("{dirf}/f2a.rds")
 saveRDS(p, fo)
 #}}}
-#{{{ all panel venn- sf02a
+#{{{ all panel venn- sf04a
 tp = td3 %>%
     mutate(pan = str_c(cond,str_to_title(drc), sep=': ')) %>%
     arrange(drc,cond)
@@ -424,12 +423,12 @@ p = ggplot(tpc) +
            legend.dir='h', legend.vjust=-.7)
 fo = sprintf('%s/11.gt.venn.all.pdf', dirw)
 ggsave(p, filename=fo, width=4, height=8)
-fo = glue("{dirf}/sf02a.rds")
+fo = glue("{dirf}/sf04a.rds")
 saveRDS(p, fo)
 #}}}
 #}}}
 
-#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf02b
+#{{{ log2fc heatmap of DEGs in 1/2 genotypes - sf04b
 #{{{ preprocess
 drcs = c('up','down')
 ty = td1 %>% mutate(cond=sprintf("%s_%dh", Treatment, Timepoint)) %>%
@@ -467,7 +466,7 @@ ty2 = ty %>%
 ty2 %>% count(cond, drc, nDE) %>% print(n=4)
 #}}}
 
-#{{{ heatmap plot - sf02b
+#{{{ heatmap plot - sf04b
 fmax=5
 drc = 'up'
 tp = ty2 %>% filter(drc==!!drc) %>%
@@ -496,7 +495,7 @@ p1 = ggplot() +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1, size=7))
 fp = glue("{dirw}/12.heatmap.pdf")
 ggsave(p1, file = fp, width = 8, height = 8)
-fo = glue("{dirf}/sf02b.rds")
+fo = glue("{dirf}/sf04b.rds")
 saveRDS(p1, fo)
 #}}}
 
@@ -557,17 +556,18 @@ ggsave(p1, file = fp, width = 8, height = 10)
 #}}}
 #}}}
 
-#{{{ genotypic difference in cold/heat response - f2b-c, sf03
+#{{{ genotypic difference in cold/heat response - f2b-c, sf05
 #{{{ multi-panel scatter plot
+fmax=10
 tp = td %>% filter(ddrc != 0, deg != 'A=B=')
 linecol = 'azure3'; lty = 'solid'
 cols9 = brewer.pal(10, "Paired")[c(2,4,6,8,9,7,5,3,1)]
 cols9 = pal_npg()(10)[c(1:7,10)]
 tx = tibble(deg = c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-',
-                    'A+B-','A-B+','A=B='),
-             x = c(1:3, 5:7, 9:11))
+                    'A+B-','A-B+'),
+             x = c(1:3, 5:7, 9:10))
 
-#{{{ scatter plot - sf03a
+#{{{ scatter plot - sf05a
 p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
@@ -581,8 +581,8 @@ p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
-    guides(color=guide_legend(nrow=2), shape=F)
-fo = glue("{dirf}/sf03a.rds")
+    guides(color=guide_legend(nrow=2), shape='none')
+fo = glue("{dirf}/sf05a.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.pdf")
@@ -625,7 +625,7 @@ p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=F,
            legend.spacing.x=.05, legend.vjust=-.6, legend.box='h',
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
-    guides(color=guide_legend(nrow=2), shape=F)
+    guides(color=guide_legend(nrow=2), shape='none')
 fo = glue("{dirf}/f2b.rds")
 saveRDS(p, fo)
 #}}}
@@ -805,6 +805,62 @@ to = td1 %>% mutate(gt=Genotype,cond=Treatment,time=Timepoint) %>%
     arrange(cond, desc(n_gt))
 fo = glue("{dird}/71_share/05.stable.variable.DE.tsv")
 write_tsv(to, fo)
+#}}}
+
+#{{{ table S2 - GO table
+fi = glue('{dirw}/05.rds')
+x = readRDS(fi)
+deg48 = x$deg48; deg12 = x$deg12; td = x$td
+#{{{ pre-process
+td1 = deg48 %>%
+    select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
+    gather(drc, gids, -Treatment,-Genotype,-Timepoint,-cond2) %>%
+    spread(cond2, gids) %>%
+    dplyr::rename(gids0 = time0, gids1 = timeM) %>%
+    mutate(gids = map2(gids0, gids1, intersect)) %>%
+    mutate(n0 = map_int(gids0, length)) %>%
+    mutate(n1 = map_int(gids1, length)) %>%
+    mutate(n = map_int(gids, length))
+#}}}
+tgo = read_go()
+
+tg = td1 %>% filter(Genotype == 'B73') %>%
+    select(cond=Treatment, drc, time=Timepoint, gids) %>%
+    unnest(gids) %>% distinct(cond,drc,gids) %>% group_by(cond,drc) %>%
+    summarise(gids=list(gids)) %>% ungroup() %>%
+    mutate(cond = glue("{str_to_lower(cond)} {drc}-regulated")) %>% select(-drc)
+
+gids = tg$gids[[1]]
+to = tg %>% mutate(ds = map(gids, go_enrich, tgo=tgo)) %>%
+    select(cond,ds) %>% unnest(ds) %>%
+    filter((cond=='cold up-regulated' & gotype=='F') | (cond=='heat up-regulated' & gotype=='P')) %>% select(cond,ratioInSample,ratioInPop,pval=pval.raw, goname) %>%
+    filter(pval < .05, str_detect(cond, 'up')) %>% print(n=40)
+
+x = to %>%
+    mutate(goname = str_sub(goname, 1, 80)) %>%
+    mutate(pval = scientific(pval)) %>%
+    select(Class=cond, Pval=pval, GO=goname) %>%
+    kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
+        format.args = list(big.mark = ",")) %>%
+    collapse_rows(1, latex_hline='major', valign='top', longtable_clean_cut=T) %>%
+    kable_styling(latex_options = c("striped", "hold_position"),
+        full_width=F, font_size = 9, position='left')
+fo = file.path(dirf, 'st2.rds')
+saveRDS(x, file=fo)
+#}}}
+
+#{{{ table S3
+fi = glue("{dirw}/st3.xlsx")
+ti = read_xlsx(fi, skip=1)
+colnames(ti)[1] = 'Condition'
+
+x = ti %>%
+    kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
+        format.args = list(big.mark = ",")) %>%
+    kable_styling(latex_options = c("striped", "hold_position"),
+        full_width=F, font_size = 9, position='left')
+fo = file.path(dirf, 'st3.rds')
+saveRDS(x, file=fo)
 #}}}
 
 ######## BELOW ARE DEPRECATED ########

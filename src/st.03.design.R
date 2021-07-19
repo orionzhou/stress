@@ -208,18 +208,17 @@ p2 = p +
     theme(axis.text.y=element_text(color=NA)) +
     theme(axis.title.x=element_blank()) +
     theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
-p2z = p +
-    ggtitle('Control') + theme(plot.title=element_text(size=9, margin=margin(0,0,0,0))) +
-    theme(axis.text.y=element_text(color=NA)) +
-    theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
+p0z = p0 + theme(axis.title.x=element_text(size=7, color=NA))
+p1z = p1 + theme(axis.title.x=element_text(size=7, color=NA))
+p2z = p2 + theme(axis.title.x=element_text(size=7))
 #
 p = ggdraw() +
     draw_plot(p0, 0,.1,.9,.9)+
     draw_plot(p1,.05,.05,.9,.9)+
     draw_plot(p2,.1,0,.9,.9)
 pz = ggdraw() +
-    draw_plot(p0, 0,.1,.9,.9)+
-    draw_plot(p1,.05,.05,.9,.9)+
+    draw_plot(p0z, 0,.1,.9,.9)+
+    draw_plot(p1z,.05,.05,.9,.9)+
     draw_plot(p2z,.1,0,.9,.9)
 #}}}
 pb=p
@@ -270,9 +269,9 @@ p = ggarrange(p_temp, pa, pb, pc, labels=LETTERS[1:4],
               ncol=1, heights=c(1,.7,.9,1), widths=c(1.3,1))
 
 fo = glue('{dirf}/f1a.rds')
-saveRDS(p_temp, fo)
-fo = glue('{dirf}/f1b.rds')
 saveRDS(pbz, fo)
+fo = glue('{dirf}/f1b.rds')
+saveRDS(p_temp, fo)
 fo = glue('{dirw}/design.pdf')
 ggexport(p, filename=fo, width=5, height=7)
 

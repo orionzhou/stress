@@ -4,11 +4,11 @@ require(kableExtra)
 
 yid = 'zm.rn20a'
 res = rnaseq_cpm(yid)
-#th = res$th
+th = res$th
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
-#{{{ TC - sf05
+#{{{ TC - sf07
 ex = 'TC'
 th1 = th %>% filter(Experiment==ex, Timepoint != 8) %>%
     mutate(Genotype = factor(Genotype, levels=gts3)) %>%
@@ -25,7 +25,7 @@ tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
 p1a = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='pearson',var.col='Genotype',
     expand.x=.3)
 ggsave(sprintf("%s/21.hclust.%s.p.pdf",dirw,ex), p1a, width=6, height=8)
-fo = glue('{dirf}/sf05a.rds')
+fo = glue('{dirf}/sf07a.rds')
 saveRDS(p1a, fo)
 
 p1b = plot_hclust(tm1,th1,pct.exp=.7,cor.opt='spearman',var.col='Genotype',
@@ -38,7 +38,7 @@ p2 = plot_tsne(tm1,th1,pct.exp=.6,perp=2,iter=1000, seed=12,
     shapes=c(0,1,2), pal.col='aaas')
 fo = glue("{dirw}/22.tsne.{ex}.pdf")
 ggsave(fo, p2, width=5, height=5)
-fo = file.path(dirf, 'sf05b.rds')
+fo = file.path(dirf, 'sf07b.rds')
 saveRDS(p2, fo)
 
 th2 = th1 %>% filter(Genotype=='B73')
@@ -216,7 +216,6 @@ p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
-    facet_wrap(~Genotype)
 fo = glue('{dirf}/sf01c.rds')
 saveRDS(p3, fo)
 
@@ -298,12 +297,12 @@ ggsave(fo, p2, width=6, height=6)
 #}}}
 
 #{{{ st1
-exps = c("TC",'HY','NM')
+exps = c('TC'="2 (time course)",'HY'='1 (inbreds + hybrids)','NM'='3 (genotype panel)')
 conds = c("Control",'Cold','Heat')
 gts = unique(c(gts6,gts25))
 tp = res$bamstat %>%
     inner_join(th, by=c('sid'='SampleID')) %>%
-    mutate(Experiment=factor(Experiment, levels=exps)) %>%
+    mutate(Experiment=factor(exps[Experiment])) %>%
     mutate(Treatment=factor(Treatment, levels=conds)) %>%
     mutate(Genotype=factor(Genotype, levels=gts)) %>%
     arrange(Experiment, Treatment, Timepoint, Genotype) %>%
@@ -316,9 +315,10 @@ tp = res$bamstat %>%
     mutate(pair=number(pair,big.mark=',')) %>%
     mutate(pair_map=number(pair_map,big.mark=',')) %>%
     mutate(pair_map_hq=number(pair_map_hq,big.mark=',')) %>%
+    mutate(rate = glue("{pair_map_hq} ({rate})")) %>%
     select(Experiment,Treatment,Timepoint,Genotype,
         `Total Reads`=pair, `Mapped Reads`=pair_map,
-        `Uniquely Mapped`=pair_map_hq, `Unique Mapping Rate`=rate) %>%
+        `Uniquely Mapped`=rate) %>%
     print(width=Inf)
 
 x = tp %>%
@@ -331,3 +331,17 @@ fo = file.path(dirf, 'st1.rds')
 saveRDS(x, file=fo)
 #}}}
 
+#{{{ zach's st5
+fi = glue("{dirw}/st5.xlsx")
+ti = read_xlsx(fi)
+
+x = ti %>% select(-cid) %>%
+    rename(GeneID=gid, `Response pattern`=`Heat Responsive`) %>%
+    kbl(format='latex', escape=T, longtable=F, booktabs=T, linesep="",
+        format.args = list(big.mark = ",")) %>%
+    #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
+    kable_styling(latex_options = c("striped", "hold_position"),
+        full_width=F, font_size = 9, position='left')
+fo = file.path(dirf, 'st5.rds')
+saveRDS(x, file=fo)
+#}}}

@@ -104,6 +104,71 @@ tc = readRDS(fi)
 tcr = tc$raw %>% mutate(gid=glue("{gt}_{gid}")) %>% select(-gt)
 #}}}
 
+#{{{ sf02-03
+fi = glue("{dird}/06_tf_list/10.stress.tf.tsv")
+tt = read_tsv(fi) %>% select(cond=stress,gid,name) %>%
+    group_by(cond,gid) %>% slice(1) %>% ungroup() %>%
+    mutate(name = str_replace(name, '[,/].*', '')) %>% filter(name!='')
+ti = deg %>% filter(drc=='up') %>%
+    unnest(gids) %>% select(cond,time=Timepoint,gid=gids) %>%
+    separate(gid, c('gt','gid'), sep='_') %>% filter(gt=='B73') %>% select(-gt) %>%
+    distinct(cond,time,gid) %>% arrange(cond,gid, time) %>%
+    group_by(cond,gid) %>% summarise(time=str_c(time,collapse=',')) %>%
+    ungroup()
+
+#{{{ heat
+cond = 'heat'
+tt1 = tt %>% filter(cond=='heat', str_detect(name,'hsf') | str_detect(name,'HSF')) %>%
+    mutate(name = str_to_upper(name))
+ti2 = tt1 %>% left_join(ti, by=c('cond','gid')) %>% replace_na(list(time='unk')) %>%
+    filter(time != 'unk' | name %in% glue("HSFTF{c(4,12,13,20)}")) %>%
+    print(n=80)
+
+tgrp = tibble(grp=c('1','25','1,25','unk'),
+              grp0=LETTERS[1:4], grp1=c("1h_only",'25h_only','1h_and_25h', 'non-DE'))
+tp0 = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
+    inner_join(tc$raw %>% filter(gt=='B73'), by=c('gid')) %>% select(-gt) %>%
+    filter(cond %in% c("control", !!cond)) %>% rename(grp=time) %>%
+    gather(time, value, -grp, -gid, -name, -cond) %>%
+    inner_join(tgrp, by='grp') %>%
+    mutate(pnl = glue("{grp0}. {grp1} | {name}")) 
+#}}}
+
+#{{{ cold
+cond = 'cold'
+tt1 = tt %>% filter(cond==!!cond) %>% mutate(name = str_to_upper(name))
+ti2 = tt1 %>% inner_join(ti, by=c('cond','gid')) %>% replace_na(list(time='unk')) %>%
+    group_by(name) %>% mutate(name = ifelse(row_number() == 1, name, glue("{name}_{row_number()}"))) %>% ungroup() %>%
+    print(n=80)
+
+tgrp = tibble(grp=c('1','25','1,25','unk'),
+              grp0=LETTERS[1:4], grp1=c("1h_only",'25h_only','1h_and_25h', 'non-DE'))
+tp0 = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
+    inner_join(tc$raw %>% filter(gt=='B73'), by=c('gid')) %>% select(-gt) %>%
+    filter(cond %in% c("control", !!cond)) %>% rename(grp=time) %>%
+    mutate(cond=factor(cond, levels=c("control", !!cond))) %>%
+    gather(time, value, -grp, -gid, -name, -cond) %>%
+    inner_join(tgrp, by='grp') %>%
+    mutate(pnl = glue("{grp0}. {grp1} | {name}")) 
+#}}}
+
+col1=ifelse(cond=='heat', 'red', 'blue')
+leg.pos = ifelse(cond=='cold', 'bottom.right', 'bottom.right')
+wd = ifelse(cond=='heat', 8, 10)
+ht = ifelse(cond=='heat', 6, 11)
+p = ggplot(tp0) +
+    geom_point(aes(x=time, y=value, color=cond), size=1) +
+    geom_line(aes(x=time, y=value, group=cond, color=cond)) +
+    scale_x_discrete(name='Hours After Stress', expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name='Counts Per Million (CPM)', expand=expansion(mult=c(.02,.05))) +
+    scale_color_manual(values=c("black",col1)) +
+    facet_wrap(~pnl, ncol=5, scale='free') +
+    otheme(xtext=F, xtitle=T, ytext=T, ytitle=T, strip.compact=F, 
+           legend.pos=leg.pos)
+fo = glue("{dirw}/15.tf.{cond}.pdf")
+ggsave(p, file=fo, width=wd, height=ht)
+#}}}
+
 ######## create pos-neg gene lists ########
 #{{{ degA & degA_nr - BMW DEGs
 tag = 'degA'
@@ -472,8 +537,96 @@ fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
 
+#{{{ dmodB2 - all B modules
+fi = glue("{dirw}/12.clustering.rds")
+r = readRDS(fi)
+me_cold = r$cold$tu %>% mutate(cond = 'cold')
+me_heat = r$heat$tu %>% mutate(cond = 'heat')
+
+conds = c('cold','heat')
+top = rbind(me_cold, me_heat) %>%
+    unnest(gids) %>% filter(str_detect(gids, '^B')) %>%
+    group_by(cond, cid, me) %>%
+    summarise(ng=length(unique(gids)), gids=list(unique(gids))) %>% ungroup() %>%
+    mutate(cond = factor(cond, levels=conds)) %>%
+    mutate(note=cid) %>% arrange(cond, cid) %>%
+    select(cid, cond, note, ng, gids, me)
+
+#{{{ create background/negtavie list
+tb = deg48 %>% filter(cond2=='timeM', Genotype == 'B73') %>%
+    rename(gt = Genotype) %>%
+    select(-up, -down) %>% unnest(ds)
+ton = tb %>%
+    mutate(cond = str_to_lower(Treatment)) %>%
+    mutate(nde = padj > .05 & abs(log2fc) <= log2(1.5)) %>%
+    filter(nde) %>%
+    count(gt, gid, cond) %>% rename(n_nde = n) %>%
+    filter(n_nde == 2) %>% select(-n_nde) %>%
+    mutate(gid = glue("{gt}_{gid}")) %>%
+    group_by(cond) %>% summarise(gids=list(unique(gid))) %>% ungroup() %>%
+    mutate(ng = map_int(gids, length)) %>%
+    select(cond, ng, gids)
+#}}}
+
+md = merge_top_ton(top, ton, min_ng=1) %>% print(n=50)
+tag = 'dmodB2'
+fo = glue("{dirw}/50_modules/{tag}.rds")
+saveRDS(md, fo)
+#}}}
 
 
+#{{{ f5 - module eigengene w. model prediction acc.
+fi = glue("{dirw}/12.clustering.rds")
+r = readRDS(fi)
+r1 = rbind(r$cold$tul, r$heat$tul) %>%
+    group_by(cid) %>% summarise(ng=length(gid), gids=list(gid)) %>% ungroup()
+
+f_cfg = glue('{dirw}/config.xlsx')
+cfg = read_xlsx(f_cfg) %>% filter(!is.na(idx)) %>%
+    mutate(pnl = glue("{str_sub(cond,0,1)}{str_sub(drc,0,1)}{idx}")) %>%
+    select(pnl, cond, drc, cid) %>%
+    mutate(cond = factor(cond)) %>%
+    mutate(drc = factor(drc, levels=c('up','down')))
+md1 = r1 %>% inner_join(cfg, by='cid') %>%
+    #inner_join(acc %>% select(cid,acc=txt), by='cid') %>%
+    select(cond,drc,pnl,cid,ng,gids) %>% arrange(cond, drc, pnl) %>%
+    mutate(pnl = glue("{pnl}: {ng}")) %>% mutate(pnl = as_factor(pnl))
+
+ti = r1 %>% inner_join(md1 %>% select(-gids), by='cid') %>% select(cid,cond,gids)
+ti0 = ti %>% mutate(cond='control')
+ti = ti %>% bind_rows(ti0) %>% unnest(gids) %>% rename(gid=gids)
+tpa = extract_avg_expr(ti, tcr)
+
+conds3 = c('cold','heat','control')
+isum <- function(gids, sep="\n") {
+    #{{{
+    x = tibble(gid=gids) %>% unnest(gid) %>%
+        separate(gid, c('gt','gid'), sep='_') %>%
+        count(gt) %>% mutate(txt = glue("{gt}: {n}"))
+    str_c(x$txt, collapse=sep)
+    #}}}
+}
+tp = md1 %>%
+    mutate(txt = map_chr(gids, isum, sep="\n")) %>%
+    select(drc,pnl,cid,txt) %>%
+    inner_join(tpa, by='cid') %>%
+    mutate(cond = factor(cond, levels=conds3))
+tp1 = tp %>% filter(str_detect(pnl, 'c'))
+tp2 = tp %>% filter(str_detect(pnl, 'h'))
+
+tit1 = 'Cold clusters: 7 up (cu1-cu7) + 9 down (cd1-cd9)'
+tit2 = 'Heat clusters: 6 up (hu1-hu6) + 7 down (hd1-hd7)'
+pa1 = plot_avg_expr(tp1, ncol=6, col.opt='c', tit=tit1, strip.compact=T)
+pa2 = plot_avg_expr(tp2, ncol=6, col.opt='h', tit=tit2, strip.compact=T, xtitle=T)
+p = pa1 + pa2 + plot_layout(nrow=2, heights=c(4.2,4))
+fo = glue("{dirw}/22.all.expr.pdf")
+ggsave(p, file=fo, width=7, height=8)
+fo = glue("{dirw}/22.all.expr.rds")
+saveRDS(p, fo)
+#}}}
+
+
+######## obsolete ########
 #{{{ [obsolete] WGCNA-based modules (all genes)
 gt = 'B73'
 #{{{ check ovlp w. DEG sets  - prepare t_deg
@@ -600,9 +753,7 @@ tag = 'wgcna'
 fo = glue("{dirw}/50_modules/{tag}.rds")
 saveRDS(md, fo)
 #}}}
-
-
-#{{{ f3a - module eigengene, create module gene IDs
+#{{{ [obsolete] old f3a - module eigengene, create module gene IDs
 tag = 'dmodA'
 fi = glue("{dirw}/50_modules/{tag}.rds")
 md = readRDS(fi)
@@ -672,54 +823,6 @@ ggsave(pa, file=fo, width=4, height=7)
 fo = glue("{dirf}/f3a.rds")
 saveRDS(pa, fo)
 #}}}
-
-#{{{ sf06 - module eigengene
-fi = glue("{dirw}/12.clustering.rds")
-r = readRDS(fi)
-r1 = rbind(r$cold$tul, r$heat$tul) %>%
-    group_by(cid) %>% summarise(ng=length(gid), gids=list(gid)) %>% ungroup()
-
-f_cfg = glue('{dirw}/config.xlsx')
-cfg = read_xlsx(f_cfg) %>% filter(!is.na(idx))
-md1 = r1 %>% left_join(cfg %>% select(cid,note,idx), by='cid') %>%
-    mutate(cond = ifelse(str_detect(cid,'^c'), 'cold','heat')) %>%
-    select(idx,cid,cond,note, ng, gids) %>% arrange(idx) %>%
-    mutate(note = ifelse(is.na(note), cid, note)) %>%
-    mutate(pnl = glue("{note}: {ng}")) %>%
-    mutate(pnl=as_factor(pnl))
-
-ti = r1 %>% left_join(md1 %>% select(-gids), by='cid') %>% select(cid,cond,gids)
-ti0 = ti %>% mutate(cond='control')
-ti = ti %>% bind_rows(ti0) %>% unnest(gids) %>% rename(gid=gids)
-tpa = extract_avg_expr(ti, tcr)
-
-conds3 = c('cold','heat','control')
-isum <- function(gids, sep="\n") {
-    #{{{
-    x = tibble(gid=gids) %>% unnest(gid) %>%
-        separate(gid, c('gt','gid'), sep='_') %>%
-        count(gt) %>% mutate(txt = glue("{gt}: {n}"))
-    str_c(x$txt, collapse=sep)
-    #}}}
-}
-tp = md1 %>%
-    mutate(txt = map_chr(gids, isum)) %>%
-    select(cid,pnl,txt) %>%
-    inner_join(tpa, by='cid') %>%
-    mutate(cond = factor(cond, levels=conds3))
-tp1 = tp %>% filter(str_detect(cid, 'c'))
-tp2 = tp %>% filter(str_detect(cid, 'h'))
-
-pa1 = plot_avg_expr(tp1, ncol=4, col.opt='c', tit='cold clusters', strip.compact=T)
-pa2 = plot_avg_expr(tp2, ncol=4, col.opt='h', tit='heat clusters', strip.compact=T)
-p = pa1 + pa2 + plot_layout(ncol=2, widths=c(1,1))
-fo = glue("{dirw}/22.all.expr.pdf")
-ggsave(p, file=fo, width=9.5, height=7)
-fo = glue("{dirf}/sf06.pdf")
-ggsave(p, file=fo, width=9.5, height=7)
-#}}}
-
-######## obsolete ########
 #{{{ # [old] wgcna-based DEG clustering
 #{{{ test run wgcna
 require(WGCNA)

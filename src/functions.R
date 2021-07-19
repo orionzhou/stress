@@ -20,7 +20,7 @@ gcfg = read_genome_conf()
 fh = file.path(dird, 'samples.xlsx')
 th = read_xlsx(fh, sheet='merged') %>%
     mutate(Time = sprintf("%02d:%02d", hour(Time), minute(Time))) %>%
-    mutate(Tissue = 'leaf') %>% rename(Replicate=Rep) %>%
+    mutate(Tissue = 'leaf') %>% dplyr::rename(Replicate=Rep) %>%
     select(SampleID,Tissue,Genotype,Treatment,Timepoint,Experiment,Replicate) %>%
     mutate(Genotype = ifelse(Genotype=='MS71', 'Ms71', Genotype))
 th2 = th %>%
@@ -373,7 +373,7 @@ extract_avg_expr <- function(ti, tcr) {
     ti4
     #}}}
 }
-plot_avg_expr <- function(tp, ncol=3, tit='', col.opt='', strip.compact=T) {
+plot_avg_expr <- function(tp, ncol=3, tit='', col.opt='', ...) {
     #{{{
     tpx = tp %>% distinct(x, xn) %>% arrange(xn)
     #tpp = tp %>% distinct(pnl, n) %>% arrange(desc(n))
@@ -384,20 +384,21 @@ plot_avg_expr <- function(tp, ncol=3, tit='', col.opt='', strip.compact=T) {
     if(col.opt == 'h') cols3 = pal_npg()(6)[c(1,4)]
     tpl = tp %>% arrange(cid, desc(y75)) %>%
         group_by(cid) %>% slice(1) %>% ungroup() %>%
-        mutate(x='h250') %>% select(cid,pnl,txt,x,y=y75)
+        mutate(x='h250') %>% select(pnl,txt,x,y=y75)
+    #tpc = tpl %>% mutate(x='h040')
     p = ggplot(tp, aes(x=x)) +
         geom_ribbon(aes(ymin=y25,ymax=y75,fill=cond,group=cond), alpha=.2) +
         geom_line(aes(y=y50, color=cond, group=cond)) +
-        geom_text(data=tpl, aes(x=x,y=y, label=txt), size=2, hjust=1, vjust=1) +
+        geom_text(data=tpl, aes(x=x,y=y, label=txt), size=2, hjust=1, vjust=.5) +
+        #geom_text(data=tpc, aes(x=x,y=y, label=acc), size=2, hjust=.5, vjust=0) +
         #scale_x_continuous(name="Hours", breaks=times, expand=expansion(mult=c(.05,.05))) +
         scale_x_discrete(name="Hours", breaks=tpx$x, labels=tpx$xn, expand=expansion(mult=c(.05,.05))) +
-        scale_y_continuous(expand=expansion(mult=c(.1,.1))) +
+        scale_y_continuous(expand=expansion(mult=c(.05,.3))) +
         facet_wrap(pnl~., ncol=ncol, scale='free_y') +
         scale_color_manual(values=cols3) +
         scale_fill_manual(values=cols3) +
         otheme(legend.pos='bottom.right', legend.dir='v',
-               panel.spacing=.1, strip.compact=strip.compact,
-               xtitle=T, xtext=T, xtick=T, margin=c(.2,.2,.2,.2))
+               panel.spacing=.1, xtext=T, xtick=T, margin=c(.2,.2,.2,.2), ...)
         #guides(color=F, fill=F)
     if (tit != '') p = p + ggtitle(tit) +
         theme(plot.title=element_text(hjust=.5, size=10))
@@ -561,9 +562,9 @@ get_tss <- function(genome) {
     ti %>% select(gid, chrom, pos=tss, srd)
     #}}}
 }
-eval_pred <- function(ti, seed=1, downsample=F) { # status, pred, prob
+eval_pred <- function(ti, seed=1, down_sample=F) { # status, pred, prob
   #{{{
-  if(downsample) ti = downsample(ti, seed=seed, colname='status')
+  if(down_sample) ti = downsample(ti, seed=seed, colname='status')
   metrics6 <- metric_set(sens,spec,precision,accuracy, f_meas, roc_auc, pr_auc)
   metrics6(ti, truth=status, estimate=pred, prob) %>%
     select(metric=.metric, estimate=.estimate)
