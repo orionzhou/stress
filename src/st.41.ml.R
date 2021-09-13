@@ -1127,8 +1127,9 @@ tv = tv1 %>% bind_rows(tv2) %>%
     mutate(st = str_sub(as.character(st), 2, 5)) %>% filter(st==pred) %>%
     select(train, cond,time,qry,tgt,gid,st,reg) %>%
     arrange(train, cond, time, tgt, qry, gid)
+tv %>% filter(cond=='heat') %>% distinct(gid)
 
-fo = glue("{dird}/71_share/08.variable.genes.tsv")
+fo = glue("{dird}/71_share/28.variable.genes.tsv")
 write_tsv(tv, fo)
 #}}}
 

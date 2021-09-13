@@ -568,6 +568,12 @@ tx = tibble(deg = c("A+B+",'A+B=','A=B+', 'A-B-','A-B=','A=B-',
                     'A+B-','A-B+'),
              x = c(1:3, 5:7, 9:10))
 
+#{{{ A+B= stats
+ts1 = tp %>% group_by(cond) %>%
+    summarise(n.tot = n(), n.cn = sum(deg %in% c('A+B=','A=B+','A-B=','A=B-'))) %>%
+    ungroup() %>% mutate(prop.cn = n.cn/n.tot)
+#}}}
+
 #{{{ scatter plot - sf05a
 p = ggplot(tp, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
@@ -588,7 +594,7 @@ saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.pdf")
 ggsave(p, file = fp, width = 8, height = 9.5)
-#{{{ bar plot showing counts - sf03b
+#{{{ bar plot showing counts - sf05b
 tp1 = tp %>% count(cond, x, deg)
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
@@ -604,7 +610,7 @@ p = ggplot(tp1) +
            legend.vjust = -.4, legend.box='h',
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=40, size=7, vjust=1.2, hjust=1))
-fo = glue("{dirf}/sf03b.rds")
+fo = glue("{dirf}/sf05b.rds")
 saveRDS(p, fo)
 #}}}
 fp = glue("{dirw}/15.ddeg.cnt.pdf")

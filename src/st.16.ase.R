@@ -282,6 +282,29 @@ linecol = 'azure3'; lty = 'solid'
 cols9 = pal_simpsons()(10)
 #}}}
 
+#{{{ detailed stats
+ts2 = tp %>% separate(cond, c('cond','gt'), sep='_') %>%
+    mutate(cond = str_replace(cond, 'Cold', 'Cold_')) %>%
+    mutate(cond = str_replace(cond, 'Heat', 'Heat_')) %>%
+    mutate(cond = glue("{cond}h: {qry} (A) vs {tgt} (B)"))
+ts2a = ts2 %>% count(cond) %>% rename(n.ase=n)
+ts2b = ts2 %>% count(cond, reg) %>% complete(cond,reg) %>%
+    replace_na(list(n=0)) %>%
+    group_by(cond) %>% mutate(ntot=sum(n)) %>% ungroup() %>%
+    mutate(n = glue("{n} ({percent(n/ntot,accuracy=1)})")) %>%
+    select(-ntot) %>% spread(reg, n)
+ts2 = ts2a %>% inner_join(ts2b, by='cond')
+to = ts1 %>% inner_join(ts2, by='cond') %>%
+    mutate(prop.ase = n.ase/n.tot) %>%
+    mutate(prop.cn=percent(prop.cn, accuracy=.1)) %>%
+    mutate(prop.ase=percent(prop.ase, accuracy=.1)) %>%
+    mutate(n.cn = glue("{n.cn} ({prop.cn})")) %>%
+    mutate(n.ase = glue("{n.ase} ({prop.ase})")) %>%
+    select(cond,n.tot, n.cn, n.ase, cis, trans, `cis+trans`, conserved, unexpected)
+fo = glue("{dird}/71_share/91.prop.cn.ase.tsv")
+write_tsv(to, fo)
+#}}}
+
 #{{{ scatter plot - sf06a
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
