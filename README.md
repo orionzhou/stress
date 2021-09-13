@@ -15,7 +15,9 @@
 - [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment](https://s3.msi.umn.edu/zhoup-stress/71_share/15.deg.tsv)
 - [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern](https://s3.msi.umn.edu/zhoup-stress/71_share/17.dDEG.reg.tsv)
 - [Gene lists for each co-expression module identified from the time-course experiment](https://s3.msi.umn.edu/zhoup-stress/71_share/19.coex.cluster.tsv)
-- [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules](https://s3.msi.umn.edu/zhoup-stress/71_share/)
+- Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules
+  - [21.motifs.tsv](https://s3.msi.umn.edu/zhoup-stress/71_share/21.motifs.tsv)
+  - [21.motifs.rds (with actual motifs, can be loaded into R using `readRDS()`)](https://s3.msi.umn.edu/zhoup-stress/71_share/21.motifs.rds)
 - [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/28.variable.genes.tsv)
 
 ### Links to R / Python scripts:

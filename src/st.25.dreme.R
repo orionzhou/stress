@@ -851,6 +851,14 @@ fo = glue("{dirw}/05.best.mtfs.tsv")
 write_tsv(tk2, fo)
 #}}}
 
+#{{{ pick best motifs for each gene list
+fi = glue("{dirw}/05.best.mtfs.rds")
+r = readRDS(fi)
+
+to = r$tc %>% select(bid, scope, cond,note) %>%
+    inner_join(r$tk, by='bid') %>% select(-bid, -n_mtf) %>%
+    unnest(mtfs) %>% select(-mid,-fid,-mtf,-pos,-ng,-neg,-ng_c)
+#}}}
 
 ### check enrichment of kmers in variable gene lists ###
 #{{{
