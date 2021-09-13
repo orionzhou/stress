@@ -1224,30 +1224,29 @@ plot_lfc <- function(gid, ty, lfc) {
         #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
         geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
         scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.02))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.04))) +
         scale_color_manual(values=c('white','black')) +
         scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
-        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
-        theme(axis.title.x = element_text(size=7))
+        otheme(legend.pos='none', panel.border=F, margin=c(0,0,0,0))
     p.b = ggplot(lfc) +
         geom_text(aes(x=0, y=y, label=tag_de), hjust=.5,size=2.5) +
         scale_x_continuous(name='DE', expand=expansion(mult=c(.02,.02)), position='top') +
         scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
         otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
-        theme(axis.title.x = element_text(size=7))
+        theme(axis.title.x=element_text(size=7, color='blue'))
     p.c = ggplot(lfc) +
         geom_text(aes(x=0, y=y, label=tag_mtf), hjust=.5,size=2.5) +
         scale_x_continuous(name='mtf', expand=expansion(mult=c(.02,.02)), position='top') +
         scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
         otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
-        theme(axis.title.x = element_text(size=7))
+        theme(axis.title.x=element_text(size=7, color='red'))
     p.d = ggplot(lfc) +
         geom_text(aes(x=0, y=y, label=B_raw), size=2) +
         scale_x_continuous(name='model', expand=expansion(mult=c(.02,.02)), position='top') +
         scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
         scale_fill_manual(values=c('white','black')) +
         otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,.2,0,0)) +
-        theme(axis.title.x = element_text(size=7))
+        theme(axis.title.x=element_text(size=7, color='black'))
     ggarrange(p.a, p.b, p.c, p.d, nrow=1, ncol=4, widths=c(3,1.5,1.5,3.5), align='v')
 #}}}
 }
@@ -1348,8 +1347,8 @@ tp = tk %>% mutate(i = row_number()) %>% filter(i %in% c(7,17)) %>%
     mutate(fp = glue("{dirw}/z{i}-{gid}.pdf")) %>% print(width=Inf) %>%
     mutate(p = pmap(list(gid,gname,gnote,pwm,mname,acc.raw,ty,seqs,mtf,tree,aln,lfc), combo_plot1, tg=tg))
 #tp %>% mutate(j = pmap(list(p, filename=fp), ggexport, width=8, height=7))
-saveRDS(tp$p[[2]], glue("{diro}/69.case.c.rds"))
-saveRDS(tp$p[[1]], glue("{diro}/69.case.d.rds"))
+saveRDS(tp$p[[2]], glue("{dird}/45_nam/69.case.c.rds"))
+saveRDS(tp$p[[1]], glue("{dird}/45_nam/69.case.d.rds"))
 
 tp = tk %>% mutate(i = row_number()) %>% filter(i %in% c(6,18)) %>%
     mutate(fp = glue("{dirw}/z{i}-{gid}.pdf")) %>% print(width=Inf) %>%
@@ -1551,7 +1550,8 @@ plot_mtf_msa <- function(aln, ty) {
         scale_x_continuous(expand=expansion(mult=c(.01,.01))) +
         scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(0,.02))) +
         scale_fill_manual(values=cols2) +
-        otheme(legend.pos='none', panel.border=F, margin=c(.2,.05,.2,0))
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.05,.2,0)) +
+        theme(axis.title.x = element_text(size=7))
     #}}}
 }
 plot_lfc0 <- function(gid, ty, lfc) {
@@ -1628,10 +1628,14 @@ require(Biostrings)
 fm = glue("{dirw}/70_cases/hsf.meme")
 pwm = read_meme(fm)
 
+fi1 = glue("{dirw}/70_cases/hsf1.rds")
+r1 = readRDS(fi1)
+fi2 = glue("{dirw}/70_cases/hsf2.rds")
+r2 = readRDS(fi2)
+
 # f7a
 gid = 'Zm00001d048532'
-fi1 = glue("{dirw}/70_cases/hsf1.rds")
-r1 = readRDS(fi1); r=r1
+r=r1
 p_tree=r$p.tree; p_aln=r$p.aln; seqs=r$seqs; ty=r$ty; msa=r$msa; tree=r$tree
 p_tree=p_tree+o_margin(1.2,.1,.5,.1)
 p_title = plot_title(anno_gene(gid, loci), pwm, 'HSF')
@@ -1647,8 +1651,7 @@ a = ggarrange(p_title,
 
 # f7b
 gid = 'Zm00001d039670'
-fi2 = glue("{dirw}/70_cases/hsf2.rds")
-r2 = readRDS(fi2); r=r2
+r=r2
 p_tree=r$p.tree; p_aln=r$p.aln; seqs=r$seqs; ty=r$ty; msa=r$msa; tree=r$tree
 p_tree=p_tree+o_margin(1.2,.1,.5,.1)
 p_title = plot_title(anno_gene(gid, loci), pwm, 'HSF')
@@ -1662,9 +1665,8 @@ b = ggarrange(p_title,
                         nrow=1, ncol=4, widths=c(.5,5,.5,.3)),
               nrow=2, heights=c(1,5))
 
-
-p3 = readRDS(glue("{dird}/45_nam/69.c.rds"))
-p4 = readRDS(glue("{dird}/45_nam/69.d.rds"))
+p3 = readRDS(glue("{dird}/45_nam/69.case.c.rds"))
+p4 = readRDS(glue("{dird}/45_nam/69.case.d.rds"))
 ab = ggarrange(a, b, nrow=1, ncol=2, widths=c(1,1), labels=LETTERS[1:2])
 cd = ggarrange(p3, p4, nrow=1, ncol=2, widths=c(1,1), labels=LETTERS[3:4])
 fo = glue("{dirf}/f7.pdf")

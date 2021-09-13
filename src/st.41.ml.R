@@ -540,13 +540,13 @@ tp = get_bar_stats(tp0, x='bin1', grp='bin2', pnl='cond_note')
 #{{{ sig
 tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
 tps1 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_chr(`-`, `-/+`, eval_signif)) %>%
+    mutate(sig = map2_dbl(`-`, `-/+`, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
-    mutate(xm = x, xb = x - .3, xe = x +.3, ysig = ymax + .03) %>%
+    mutate(xm = x, xb = x - .3, xe = x +.3, ysig = ymax + .04) %>%
     select(pnl,xm,xb,xe,ysig,sig)
 tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_chr(`+`, `-/+`, eval_signif)) %>%
+    mutate(sig = map2_dbl(`+`, `-/+`, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
     mutate(xm = x + .15, xb = x, xe = x +.3, ysig = ymax + .01) %>%
@@ -554,11 +554,13 @@ tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
 tps0b = tp %>% group_by(pnl) %>% summarise(ymax = max(avg+std)) %>% ungroup()
 tps3 = tp %>% filter(grp=='-/+') %>% select(-avg,-std) %>%
     spread(x, scores) %>%
-    mutate(sig = map2_chr(`500`, `2k`, eval_signif)) %>%
+    mutate(sig = map2_dbl(`500`, `2k`, ttest_signif)) %>%
     inner_join(tps0b, by=c('pnl')) %>%
-    mutate(xm = 1.75, xb = 1.25, xe = 2.25, ysig = ymax + .06) %>%
+    mutate(xm = 1.75, xb = 1.25, xe = 2.25, ysig = ymax + .07) %>%
     select(pnl,xm,xb,xe,ysig,sig)
-tps = rbind(tps1,tps2,tps3)
+tps = rbind(tps1,tps2,tps3) %>%
+    group_by(pnl) %>% mutate(sig = p.adjust(sig, method='BH')) %>% ungroup() %>%
+    mutate(sig = map_chr(sig, map_signif))
 #}}}
 #
 cols3 = pal_simpsons()(3)
@@ -608,18 +610,20 @@ tp = get_bar_stats(tp0, x='cond_note', grp='epi', pnl='bin_nfea_mod')
 #{{{ sig
 tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
 tps1 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_chr(all, umr, eval_signif)) %>%
+    mutate(sig = map2_dbl(all, umr, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
-    mutate(xm = x-.15, xb = x - .3, xe = x, ysig = ymax + .02) %>%
+    mutate(xm = x-.15, xb = x - .3, xe = x, ysig = ymax + .03) %>%
     select(pnl,xm,xb,xe,ysig,sig)
 tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_chr(umr, acrL, eval_signif)) %>%
+    mutate(sig = map2_dbl(umr, acrL, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
     mutate(xm = x+.15, xb = x, xe = x +.3, ysig = ymax + .01) %>%
     select(pnl,xm,xb,xe,ysig,sig)
-tps = rbind(tps1,tps2)
+tps = rbind(tps1,tps2) %>%
+    group_by(pnl) %>% mutate(sig = p.adjust(sig, method='BH')) %>% ungroup() %>%
+    mutate(sig = map_chr(sig, map_signif))
 #}}}
 cols3 = pal_aaas()(5)[c(1,3,2)]
 cols3 = pal_jco()(3)
@@ -801,8 +805,6 @@ tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
     mutate(cond_note = str_replace(cond_note, ": all", ''))
 
 get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
-pval2symbol <- function(pval) ifelse(pval > .05, 'NS', ifelse(pval>.01, '*', ifelse(pval>.001, '**', '***')))
-#
 tp0 = tp %>%
     filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
 tpt = tp0 %>% arrange(bid, desc(q50)) %>%
@@ -813,7 +815,7 @@ tpl = tp0 %>%
               spc=cor(i, avg, method='spearman'),
               p.raw=cor.test(i,avg, method='spearman')$p.value) %>%
     ungroup() %>%
-    mutate(txt = pval2symbol(p.raw)) %>%
+    mutate(txt = map_chr(p.raw, map_signif)) %>%
     mutate(txt = glue("{n} motifs\nrho = {number(spc,accuracy=.01)} ({txt})")) %>%
     print(n=20)
 

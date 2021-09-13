@@ -293,7 +293,8 @@ saveRDS(res, fo)
 ######## plot DEGs ########
 fi = glue('{dirw}/05.rds')
 x = readRDS(fi)
-deg48 = x$deg48; deg12 = x$deg12; td = x$td
+deg48 = x$deg48; deg12 = x$deg12;
+td = x$td %>% mutate(cond = glue("{stress}_{Timepoint}h: {qry} (A) vs {tgt} (B)"))
 #{{{ pre-process
 td1 = deg48 %>%
     select(Genotype,Treatment,Timepoint,cond2,up,down) %>%
@@ -610,8 +611,7 @@ fp = glue("{dirw}/15.ddeg.cnt.pdf")
 ggsave(p, file = fp, width = 6, height = 6)
 
 #{{{ scatter plot f2b
-tp1 = tp %>% filter(cond == "Cold_25h: Mo17 vs B73") %>%
-    mutate(cond = "Cold_25h: Mo17 (A) vs B73 (B)")
+tp1 = tp %>% filter(cond == "Cold_25h: Mo17 (A) vs B73 (B)")
 p = ggplot(tp1, aes(x=log2fc.q, y=log2fc.t)) +
     geom_vline(xintercept=0, linetype=lty, color=linecol) +
     geom_hline(yintercept=0, linetype=lty, color=linecol) +
@@ -784,14 +784,14 @@ saveRDS(r, fo)
 to = td2 %>% mutate(n_deg = map_int(gids, length)) %>%
     mutate(gid = map_chr(gids, str_c, collapse=',')) %>%
     select(-gids)
-fo = file.path(dirw, '05.deg.tsv')
+fo = glue('{dird}/71_share/15.deg.tsv')
 write_tsv(to, fo)
 
 to = deg48 %>% filter(cond2=='timeM') %>%
     mutate(cond=glue("{Treatment}_{Timepoint}h")) %>% unnest(ds) %>%
     select(Genotype,cond,gid,log2fc,padj)
-fo = glue('{dird}/71_share/05.de.tsv')
-write_tsv(to, fo)
+#fo = glue('{dird}/71_share/05.de.tsv')
+#write_tsv(to, fo)
 
 merge_gids <- function(l1, l2) unique(c(l1,l2))
 to = td1 %>% mutate(gt=Genotype,cond=Treatment,time=Timepoint) %>%

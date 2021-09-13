@@ -313,9 +313,9 @@ p = ggplot(tp1) +
     scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
     scale_fill_manual(name='Mode:', values=cols9) +
     facet_wrap(~cond, ncol=3) +
-    otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -1.2, legend.box='h',
-           xtick=F, xtext=F, xtitle=F, ytitle=T, ytick=T, ytext=T)
+    otheme(legend.pos='none',
+           xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
+    theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1))
 fo = glue('{dirf}/sf06b.rds')
 saveRDS(p, fo)
 #}}}
@@ -464,6 +464,17 @@ fo = file.path(dirw, '21.cases.pdf')
 ggsave(p, file=fo, width=9, height=5)
 #}}}
 
+#}}}
+
+#{{{ share dDEG and reg 
+fi = glue('{dirw}/20.rds')
+r = readRDS(fi)
+
+to = r$ddeg %>% filter(condB!='Control0') %>%
+    select(cond, qry, tgt, gid, deg, condB, reg)
+
+fo = glue("{dird}/71_share/17.dDEG.reg.tsv")
+write_tsv(to, fo)
 #}}}
 
 

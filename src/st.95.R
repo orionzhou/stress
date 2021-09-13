@@ -61,19 +61,19 @@ ggexport(filename="sf02.pdf", width=10.5, height=8)
 #}}}
 
 #{{{ Fig S5
-a = readRDS('sf03a.rds')
-b = readRDS('sf03b.rds')
+a = readRDS('sf05a.rds')
+b = readRDS('sf05b.rds')
 ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
           widths=c(2,2,2), heights=c(2,2)) %>%
-ggexport(filename="sf03.pdf", width=10, height=8)
+ggexport(filename="sf05.pdf", width=11, height=8)
 #}}}
 
 #{{{ Fig S6
-a = readRDS('sf04a.rds')
-b = readRDS('sf04b.rds')
+a = readRDS('sf06a.rds')
+b = readRDS('sf06b.rds')
 ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
           widths=c(2,2,2), heights=c(2,2)) %>%
-ggexport(filename="sf04.pdf", width=10, height=8)
+ggexport(filename="sf06.pdf", width=10, height=8)
 #}}}
 
 #{{{ Fig S7

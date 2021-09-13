@@ -2,9 +2,10 @@ source('functions.R')
 dirw = glue('{dird}/10_qc')
 require(kableExtra)
 
-yid = 'zm.rn20a'
-res = rnaseq_cpm(yid)
-th = res$th
+fi = "~/projects/s3/zhoup-nfo/archive/zm.rn20a/01.rds"
+res = readRDS(fi) 
+th = res$th %>%
+    mutate(Genotype = ifelse(Genotype=='MS71', 'Ms71', Genotype))
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
 
@@ -345,3 +346,50 @@ x = ti %>% select(-cid) %>%
 fo = file.path(dirf, 'st5.rds')
 saveRDS(x, file=fo)
 #}}}
+
+#{{{ share read count and CPM table
+diro = glue("{dird}/71_share")
+exps = c('TC'="2 (time course)",'HY'='1 (inbreds + hybrids)','NM'='3 (genotype panel)')
+conds = c("Control",'Cold','Heat')
+gts = unique(c(gts6,gts25))
+
+to1 = th %>% 
+    mutate(Experiment=factor(exps[Experiment])) %>%
+    mutate(Treatment=factor(Treatment, levels=conds)) %>%
+    mutate(Genotype=factor(Genotype, levels=gts)) %>%
+    arrange(Experiment, Treatment, Timepoint, Genotype, SampleID) %>%
+    #group_by(Experiment) %>% mutate(i = 1:n()) %>%
+    #ungroup() %>%
+    #mutate(Experiment = as.character(Experiment)) %>%
+    #mutate(Experiment=ifelse(i==1, Experiment, '')) %>%
+    mutate(Timepoint = as.character(Timepoint)) %>%
+    group_by(Experiment,Treatment,Timepoint,Genotype) %>%
+    mutate(Replicate=1:n()) %>% ungroup() %>%
+    select(Experiment,Treatment,Timepoint,Genotype, Replicate, SampleID) %>%
+    print(n=20)
+
+tor = res$tm %>% filter(SampleID %in% to1$SampleID) %>%
+    select(SampleID, gid, ReadCount) %>%
+    spread(SampleID, ReadCount)
+toc = res$tm %>%# filter(SampleID %in% to1$SampleID) %>%
+    select(SampleID, gid, CPM) %>%
+    spread(SampleID, CPM)
+tof = res$tm %>%# filter(SampleID %in% to1$SampleID) %>%
+    select(SampleID, gid, FPKM) %>%
+    spread(SampleID, FPKM)
+tot = res$tm %>%# filter(SampleID %in% to1$SampleID) %>%
+    select(SampleID, gid, TPM) %>%
+    spread(SampleID, TPM)
+
+fo = glue("{diro}/01.meta.tsv")
+write_tsv(to1, fo)
+fo = glue("{diro}/05.readcount.tsv.gz")
+write_tsv(tor, fo)
+fo = glue("{diro}/05.cpm.tsv.gz")
+write_tsv(toc, fo)
+fo = glue("{diro}/05.fpkm.tsv.gz")
+write_tsv(tof, fo)
+fo = glue("{diro}/05.tpm.tsv.gz")
+write_tsv(tot, fo)
+#}}}
+

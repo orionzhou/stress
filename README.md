@@ -6,12 +6,17 @@
 - `nf.degA/`, `nf.degB/`, `nf.dmodA`, `nf.dmodB`, `nfb1-4`: nextflow pipeline configuration and results
 
 ### Links to datasets:
-- [Raw read count and normalized expression (Counts per Million) matrices for the inbred/hybrid experiment and the time-course inbred-only experiment]()
-- [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment]()
-- [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern]()
-- [Gene lists for each co-expression module identified from the time-course experiment]()
-- [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules]()
-- [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/08.variable.genes.tsv)
+- [Sample meta table](https://s3.msi.umn.edu/zhoup-stress/71_share/01.meta.tsv)
+- Expression matrix of 46,430 genes in all 289 samples:
+  - [Raw read count matrix](https://s3.msi.umn.edu/zhoup-stress/71_share/05.readcount.tsv.gz)
+  - [Normalized CPM matrix](https://s3.msi.umn.edu/zhoup-stress/71_share/05.cpm.tsv.gz)
+  - [FPKM matrix](https://s3.msi.umn.edu/zhoup-stress/71_share/05.fpkm.tsv.gz)
+  - [TPM matrix](https://s3.msi.umn.edu/zhoup-stress/71_share/05.tpm.tsv.gz)
+- [List of DEGs at 1/25 hours after cold/heat treatment identified in the inbred/hybrid experiment](https://s3.msi.umn.edu/zhoup-stress/71_share/15.deg.tsv)
+- [List of DEGs showing variable response to stress among genotypes and their inferred cis/trans regulatory pattern](https://s3.msi.umn.edu/zhoup-stress/71_share/17.dDEG.reg.tsv)
+- [Gene lists for each co-expression module identified from the time-course experiment](https://s3.msi.umn.edu/zhoup-stress/71_share/19.coex.cluster.tsv)
+- [Known and novel motifs discovered by motif mining for each set of DEGs under cold/heat stress as well as co-expression modules](https://s3.msi.umn.edu/zhoup-stress/71_share/)
+- [DEGs showing variable response to stress that are correctly predicted by the machine learning model (either the "B" or the "BMW_model")](https://s3.msi.umn.edu/zhoup-stress/71_share/28.variable.genes.tsv)
 
 ### Links to R / Python scripts:
 - [cis_trans.R](https://github.com/orionzhou/demo/blob/master/cis_trans/README.md): Classify cis/trans inheritance pattern using inbred/hybrid expression, in `basic` mode or `differential` mode

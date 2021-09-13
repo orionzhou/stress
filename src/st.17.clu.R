@@ -115,6 +115,29 @@ ti = deg %>% filter(drc=='up') %>%
     distinct(cond,time,gid) %>% arrange(cond,gid, time) %>%
     group_by(cond,gid) %>% summarise(time=str_c(time,collapse=',')) %>%
     ungroup()
+plot_profile <- function(tp, opt='heat', xprop=1, ytitle=T, leg.pos='bottom.right') {
+    #{{{
+    col1 = ifelse(opt=='heat', 'red', 'blue')
+    nc = ifelse(opt=='heat', 4, 5)
+    sc = ifelse(opt=='heat', F, T)
+    tpx = tp %>% distinct(time,x) %>% arrange(x)
+    p = ggplot(tp) +
+    geom_point(aes(x=time, y=value, color=cond), size=1) +
+    geom_line(aes(x=time, y=value, group=cond, color=cond)) +
+    scale_x_discrete(name='Hours After Stress',breaks=tpx$time, labels=tpx$x,
+                     expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name='Counts Per Million (CPM)', expand=expansion(mult=c(.02,.05))) +
+    scale_color_manual(values=c("black",col1)) +
+    facet_wrap(~pnl, ncol=nc, scale='free') +
+    otheme(xtext=T, xtitle=T, ytext=T, ytick=T, ytitle=!!ytitle, strip.compact=sc, 
+           legend.pos=leg.pos, margin=c(.05,.1,.05,.1))
+    if (xprop < 1) {
+        ggarrange(p, NULL, nrow=1, ncol=2, widths=c(xprop, 1-xprop))
+    } else {
+        p
+    }
+    #}}}
+}
 
 #{{{ heat
 cond = 'heat'
@@ -126,12 +149,24 @@ ti2 = tt1 %>% left_join(ti, by=c('cond','gid')) %>% replace_na(list(time='unk'))
 
 tgrp = tibble(grp=c('1','25','1,25','unk'),
               grp0=LETTERS[1:4], grp1=c("1h_only",'25h_only','1h_and_25h', 'non-DE'))
-tp0 = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
+tx = tibble(time=colnames(tc$raw)[-c(1:3)]) %>% mutate(x=str_sub(time,2)) %>%
+    mutate(x = as.numeric(x)/10)
+tp = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
     inner_join(tc$raw %>% filter(gt=='B73'), by=c('gid')) %>% select(-gt) %>%
     filter(cond %in% c("control", !!cond)) %>% rename(grp=time) %>%
     gather(time, value, -grp, -gid, -name, -cond) %>%
-    inner_join(tgrp, by='grp') %>%
-    mutate(pnl = glue("{grp0}. {grp1} | {name}")) 
+    inner_join(tx, by='time') %>%
+    inner_join(tgrp, by='grp') %>% mutate(pnl = name)
+
+a = plot_profile(tp %>% filter(grp0=='A'))
+b = plot_profile(tp %>% filter(grp0=='B'), xprop=.75, leg.pos='none', ytitle=F)
+c = plot_profile(tp %>% filter(grp0=='C'), xprop=.5, leg.pos='none', ytitle=F)
+d = plot_profile(tp %>% filter(grp0=='D'), xprop=1, leg.pos='none', ytitle=F)
+fo = glue("{dirf}/sf02.pdf")
+fo = glue("{dirw}/15.tf.{cond}.pdf")
+ggarrange(a, b, c, d, nrow=4, ncol=1, labels=LETTERS[1:4],
+          widths=c(2,2), heights=c(2,1,1,1)) %>%
+ggexport(filename=fo, width=8, height=8)
 #}}}
 
 #{{{ cold
@@ -143,30 +178,25 @@ ti2 = tt1 %>% inner_join(ti, by=c('cond','gid')) %>% replace_na(list(time='unk')
 
 tgrp = tibble(grp=c('1','25','1,25','unk'),
               grp0=LETTERS[1:4], grp1=c("1h_only",'25h_only','1h_and_25h', 'non-DE'))
-tp0 = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
+tx = tibble(time=colnames(tc$raw)[-c(1:3)]) %>% mutate(x=str_sub(time,2)) %>%
+    mutate(x = as.numeric(x)/10)
+tp = ti2 %>% filter(cond==!!cond) %>% select(-cond) %>%
     inner_join(tc$raw %>% filter(gt=='B73'), by=c('gid')) %>% select(-gt) %>%
     filter(cond %in% c("control", !!cond)) %>% rename(grp=time) %>%
     mutate(cond=factor(cond, levels=c("control", !!cond))) %>%
     gather(time, value, -grp, -gid, -name, -cond) %>%
     inner_join(tgrp, by='grp') %>%
-    mutate(pnl = glue("{grp0}. {grp1} | {name}")) 
-#}}}
+    inner_join(tx, by='time') %>%
+    mutate(pnl = name)
 
-col1=ifelse(cond=='heat', 'red', 'blue')
-leg.pos = ifelse(cond=='cold', 'bottom.right', 'bottom.right')
-wd = ifelse(cond=='heat', 8, 10)
-ht = ifelse(cond=='heat', 6, 11)
-p = ggplot(tp0) +
-    geom_point(aes(x=time, y=value, color=cond), size=1) +
-    geom_line(aes(x=time, y=value, group=cond, color=cond)) +
-    scale_x_discrete(name='Hours After Stress', expand=expansion(mult=c(.02,.02))) +
-    scale_y_continuous(name='Counts Per Million (CPM)', expand=expansion(mult=c(.02,.05))) +
-    scale_color_manual(values=c("black",col1)) +
-    facet_wrap(~pnl, ncol=5, scale='free') +
-    otheme(xtext=F, xtitle=T, ytext=T, ytitle=T, strip.compact=F, 
-           legend.pos=leg.pos)
+a = plot_profile(tp %>% filter(grp0=='A'),opt='cold',xprop=.2,leg.pos='none',ytitle=F)
+b = plot_profile(tp %>% filter(grp0=='B'),opt='cold',leg.pos='top.left')
+c = plot_profile(tp %>% filter(grp0=='C'),opt='cold',xprop=.6,leg.pos='none',ytitle=F)
 fo = glue("{dirw}/15.tf.{cond}.pdf")
-ggsave(p, file=fo, width=wd, height=ht)
+ggarrange(a, b, c, nrow=3, ncol=1, labels=LETTERS[1:4],
+          widths=c(2,2), heights=c(1,7,1)) %>%
+ggexport(filename=fo, width=10, height=11)
+#}}}
 #}}}
 
 ######## create pos-neg gene lists ########
@@ -625,6 +655,12 @@ fo = glue("{dirw}/22.all.expr.rds")
 saveRDS(p, fo)
 #}}}
 
+
+#{{{ share cluster gene IDs
+to = md1 %>% mutate(gids = map_chr(gids, str_c, collapse = ','))
+fo = glue("{dird}/71_share/19.coex.cluster.tsv")
+write_tsv(to, fo)
+#}}}
 
 ######## obsolete ########
 #{{{ [obsolete] WGCNA-based modules (all genes)
