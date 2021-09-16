@@ -376,6 +376,7 @@ tm = readRDS(fm)
 tag='b3'; train='var'
 tag='b2'; train='BMW'
 tag='b1'; train='B'
+tag='b4'; train='BMW_nr'
 #{{{ prepare tc1
 bins = c(
          "TSS:-500","TSS:+500","TSS:-/+500",
@@ -417,6 +418,26 @@ tm1 = tm %>% filter(tag == !!tag) %>% select(tag,metric) %>% unnest(metric) %>%
     mutate(epi = factor(epi, levels=epis)) %>%
     mutate(mod = factor(mod, levels=mods)) %>%
     inner_join(tc1, by=c('bid','bin','epi','nfea','mod'))
+
+#{{{ sd1a, sd1b
+to = tm1 %>% select(bin,epi,nfea,mod,cond_note,
+    accuracy,precision,sens,spec,auroc,auprc,f1) %>%
+    gather(metric, v, -bin,-epi,-nfea, -mod, -cond_note) %>%
+    group_by(bin,epi,nfea,mod,cond_note,metric) %>%
+    summarise(mean=mean(v), std=sd(v)) %>% ungroup() %>%
+    mutate(txt = glue("{number(mean,accuracy=.001)} ({number(std,accuracy=.001)})")) %>%
+    select(-mean,-std) %>% spread(metric,txt) %>%
+    arrange(bin, epi, nfea, mod, cond_note) %>%
+    select(TSS_Bin=bin, Epi_Filter=epi, NumFeatures=nfea, MotifEncoding=mod,
+        GeneSet=cond_note,
+        Accuracy=accuracy,Precision=precision,
+        Sensitivity=sens, Specificity=spec,
+        AUROC=auroc, AUPRC=auprc, F1=f1)
+
+fo = glue("{dirf}/sd1a.tsv")
+fo = glue("{dirf}/sd1b.tsv")
+write_tsv(to, fo)
+#}}}
 
 #{{{ functions
 plot_barplot_sig <- function(ti, tis, metric='auroc', x='bin', grp='epi',
@@ -792,7 +813,9 @@ tm = readRDS(fm)
 
 tp1 = tk %>% select(bid,mtfs) %>% unnest(mtfs) %>%
     mutate(fc = (pos/ng)/(neg/ng_c)) %>%
-    select(bid,i,mid,pval,fc,fid,fname)
+    select(bid,i,mid,pval,fc,fid,fname) %>%
+    arrange(bid, desc(pval), mid) %>%
+    group_by(bid) %>% mutate(i = 1:n()) %>% ungroup()
 tp2 = tm %>% select(vis) %>% unnest(vis) %>%
     rename(mid=Variable,score=Importance) %>%
     group_by(did,bid,bin,epi,nfea,mod,mid) %>%
@@ -822,8 +845,8 @@ tpl = tp0 %>%
 p = ggplot(tp0) +
     geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
     geom_text_repel(data=tpt, aes(x=i,y=q50,label=fname), size=2) +
-    geom_text(data=tpl, aes(x=imax, y=ymax, label=txt), size=2.5, hjust=1, vjust=1) +
-    scale_x_continuous(name="Motif Enrichment Ranking", expand=expansion(mult=c(.03,.03))) +
+    geom_text(data=tpl, aes(x=0, y=ymax, label=txt), size=2.5, hjust=0, vjust=1) +
+    scale_x_continuous(name="Level of Motif Enrichment (least enriched -> most enriched)", expand=expansion(mult=c(.03,.03))) +
     scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
     facet_wrap(~cond_note, nrow=2, scale='free') +
     otheme(xtext=T,xtick=T,xtitle=T,ytitle=T,ytext=T,ytick=T, strip.compact=F)
@@ -1048,6 +1071,20 @@ x = pd %>% filter(tag %in% c("b1",'b4')) %>%
     group_by(train,cid,cond,note,gt,metric) %>%
     summarise(mean=mean(estimate), sd=sd(estimate)) %>% ungroup()
 
+#{{{ sd1c
+to = x %>% mutate(txt=glue("{number(mean,accuracy=.001)} ({number(sd,accuracy=.001)})")) %>%
+    mutate(cond_note = glue("{cond}: {note}")) %>%
+    select(train, cond_note, gt, metric, txt) %>%
+    spread(metric, txt) %>%
+    select(Model=train, GeneSet=cond_note, Genotype=gt,
+           Accuracy=accuracy, Precision=precision,
+           Sensitivy=sens, Specificity=spec,
+           AUROC=roc_auc, AUPRC=pr_auc, F1=f_meas) %>% print(n=24)
+
+fo = glue("{dirf}/sd1c.tsv")
+write_tsv(to, fo)
+#}}}
+
 #{{{ bar plot - f6a
 tp = x %>% filter(metric=='roc_auc') %>% rename(score=mean) %>%
     #mutate(gt = factor(gt, levels=rev(gts3))) %>%
@@ -1127,7 +1164,7 @@ tv = tv1 %>% bind_rows(tv2) %>%
     mutate(st = str_sub(as.character(st), 2, 5)) %>% filter(st==pred) %>%
     select(train, cond,time,qry,tgt,gid,st,reg) %>%
     arrange(train, cond, time, tgt, qry, gid)
-tv %>% filter(cond=='heat') %>% distinct(gid)
+tv %>% filter(train=='BMW_nr') %>% distinct(cond,gid) %>% count(cond)
 
 fo = glue("{dird}/71_share/28.variable.genes.tsv")
 write_tsv(tv, fo)
