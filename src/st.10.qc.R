@@ -8,6 +8,7 @@ th = res$th %>%
     mutate(Genotype = ifelse(Genotype=='MS71', 'Ms71', Genotype))
 tm = res$tm %>% filter(SampleID %in% th$SampleID) %>%
     mutate(value=asinh(CPM))
+stresses = c("Control",'Cold','Heat')
 
 #{{{ TC - sf07
 ex = 'TC'
@@ -74,7 +75,11 @@ th1 = th %>% filter(Experiment==ex) %>%
     mutate(Genotype = ifelse(Genotype %in% names(gt_map2), gt_map2[Genotype], Genotype)) %>%
     mutate(Genotype = factor(Genotype, levels=gts6)) %>%
     mutate(grp = sprintf("%s_%dh_%s", Treatment, Timepoint, Genotype)) %>%
-    mutate(cond = sprintf("%s_%dh", Treatment, Timepoint)) %>%
+    mutate(cond = sprintf("%s %d h", Treatment, Timepoint)) %>%
+    mutate(Treatment = factor(Treatment, levels=stresses))
+conds = th1 %>% distinct(Treatment, Timepoint, cond) %>%
+    arrange(Treatment, Timepoint) %>% pull(cond)
+th1 = th1 %>% mutate(cond = factor(cond, levels = conds)) %>%
     arrange(Genotype,Treatment,Timepoint) %>%
     group_by(Genotype, Treatment, Timepoint) %>%
     mutate(Replicate = 1:n()) %>% ungroup() %>%
@@ -82,8 +87,6 @@ th1 = th %>% filter(Experiment==ex) %>%
     mutate(clab = ifelse(Replicate==1, cond, ''))
 tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
     mutate(value=asinh(CPM))
-conds = c("Control_0h",'Control_1h','Control_25h','Cold_1h','Cold_25h',
-    'Heat_1h','Heat_25h')
 cols7 = c('gray', brewer.pal(n = 6, name = "Paired")[c(3,4,1,2,5,6)])
 cols7 = pal_simpsons()(16)[c(3,4,14,10,7,1,5)]
 #}}}
@@ -146,33 +149,30 @@ ggexport(filename=fo, width=6, height=6)
 
 #{{{ pca - f1c, sf01
 #{{{ filter th and tm
-th1 = th %>% filter(Experiment==ex) %>%
-    mutate(Genotype = ifelse(Genotype %in% names(gt_map2), gt_map2[Genotype], Genotype)) %>%
-    mutate(cond = sprintf("%s_%dh", Treatment, Timepoint)) %>%
-    mutate(cond = factor(cond, levels=conds)) %>%
-    mutate(grp = Genotype) %>%
+th1b = th1 %>% mutate(grp = Genotype) %>%
     arrange(Genotype,Treatment,Timepoint) %>%
     group_by(grp) %>% mutate(i = 1:n()) %>% ungroup() %>%
-    mutate(clab = ifelse(i==1, Genotype, ''))
+    mutate(clab = ifelse(i==1, as.character(Genotype), ''))
 tm1 = tm %>% filter(SampleID %in% th1$SampleID) %>%
     mutate(value=asinh(CPM))
 #}}}
 
 #{{{ 6 genotypes
-p2 = plot_pca(tm1,th1, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
+p2 = plot_pca(tm1,th1b, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='clab',var.ellipse='grp',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,15,15,17,17), cols=cols7)
 fo = glue("{dirw}/22.pca.{ex}.pdf")
 ggsave(fo, p2, width=6, height=6)
 #}}}
 
 #{{{ 3 genotypes - sf01a
-th2 = th1 %>% filter(Genotype %in% gts3)
+th2 = th1b %>% filter(Genotype %in% gts3)
 p2 = plot_pca(tm1,th2, min.value=1, pct.exp=.6, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='clab',var.ellipse='grp',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
+    theme(legend.position=c(0,.4))
 fo = glue("{dirw}/22.pca.{ex}.inbreds.pdf")
 ggsave(fo, p2, width=5, height=5)
 #}}}
@@ -185,7 +185,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7)
+    shapes=c(1,1,1,15,15,17,17), cols=cols7)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
 #}}}
@@ -198,7 +198,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
     facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
@@ -212,7 +212,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
     facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
@@ -226,7 +226,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.left', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
     facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
@@ -240,7 +240,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
     facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
@@ -254,7 +254,7 @@ th2 = th1 %>% filter(Genotype == gt)
 p3 = plot_pca(tm1,th2, min.value=1, pct.exp=.5, pca.center=T, pca.scale=T,
     var.col='cond',var.shape='cond',var.lab='',var.ellipse='',
     legend.pos='bottom.right', legend.dir='v', legend.box='v',legend.title=F,
-    shapes=c(1,1,1,0,0,2,2), cols=cols7) +
+    shapes=c(1,1,1,15,15,17,17), cols=cols7) +
     facet_wrap(~Genotype)
 fo = glue("{dirw}/22.pca.{ex}.{gt}.pdf")
 ggsave(fo, p3, width=4, height=4)
@@ -297,7 +297,7 @@ fo = glue("{dirw}/22.tsne.{ex}.pdf")
 ggsave(fo, p2, width=6, height=6)
 #}}}
 
-#{{{ st1
+#{{{ sd1
 exps = c('TC'="2 (time course)",'HY'='1 (inbreds + hybrids)','NM'='3 (genotype panel)')
 conds = c("Control",'Cold','Heat')
 gts = unique(c(gts6,gts25))
@@ -322,18 +322,21 @@ tp = res$bamstat %>%
         `Uniquely Mapped`=rate) %>%
     print(width=Inf)
 
+fo = glue("{dird}/71_share/sd1.tsv")
+write_tsv(tp, fo)
+
 x = tp %>%
     kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
         format.args = list(big.mark = ",")) %>%
     #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
     kable_styling(latex_options = c("striped", "hold_position"),
         full_width=F, font_size = 9, position='left')
-fo = file.path(dirf, 'st1.rds')
-saveRDS(x, file=fo)
+#fo = file.path(dirf, 'st1.rds')
+#saveRDS(x, file=fo)
 #}}}
 
-#{{{ zach's st5
-fi = glue("{dirw}/st5.xlsx")
+#{{{ zach's st6
+fi = glue("{dirw}/st6.xlsx")
 ti = read_xlsx(fi)
 
 x = ti %>% select(-cid) %>%
@@ -343,7 +346,7 @@ x = ti %>% select(-cid) %>%
     #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
     kable_styling(latex_options = c("striped", "hold_position"),
         full_width=F, font_size = 9, position='left')
-fo = file.path(dirf, 'st5.rds')
+fo = file.path(dirf, 'st6.rds')
 saveRDS(x, file=fo)
 #}}}
 

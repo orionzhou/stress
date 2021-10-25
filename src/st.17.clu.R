@@ -115,6 +115,7 @@ ti = deg %>% filter(drc=='up') %>%
     distinct(cond,time,gid) %>% arrange(cond,gid, time) %>%
     group_by(cond,gid) %>% summarise(time=str_c(time,collapse=',')) %>%
     ungroup()
+xlab = 'Hours since stress onset'
 plot_profile <- function(tp, opt='heat', xprop=1, ytitle=T, leg.pos='bottom.right') {
     #{{{
     col1 = ifelse(opt=='heat', 'red', 'blue')
@@ -124,13 +125,14 @@ plot_profile <- function(tp, opt='heat', xprop=1, ytitle=T, leg.pos='bottom.righ
     p = ggplot(tp) +
     geom_point(aes(x=time, y=value, color=cond), size=1) +
     geom_line(aes(x=time, y=value, group=cond, color=cond)) +
-    scale_x_discrete(name='Hours After Stress',breaks=tpx$time, labels=tpx$x,
+    scale_x_discrete(name=xlab,breaks=tpx$time, labels=tpx$x,
                      expand=expansion(mult=c(.02,.02))) +
     scale_y_continuous(name='Counts Per Million (CPM)', expand=expansion(mult=c(.02,.05))) +
     scale_color_manual(values=c("black",col1)) +
     facet_wrap(~pnl, ncol=nc, scale='free') +
-    otheme(xtext=T, xtitle=T, ytext=T, ytick=T, ytitle=!!ytitle, strip.compact=sc, 
-           legend.pos=leg.pos, margin=c(.05,.1,.05,.1))
+    otheme(xtext=T, xtitle=T, ytext=T, ytick=T, ytitle=!!ytitle, strip.compact=sc,
+           panel.border=F, axis=T,
+           legend.pos=leg.pos, margin=c(.1,.2,.1,.2))
     if (xprop < 1) {
         ggarrange(p, NULL, nrow=1, ncol=2, widths=c(xprop, 1-xprop))
     } else {

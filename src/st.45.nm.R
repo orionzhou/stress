@@ -1,6 +1,6 @@
 source('functions.R')
 dirw = glue('{dird}/45_nam')
-setwd(dirw)
+#setwd(dirw)
 loci = read_loci()
 tgl = gcfg$gene %>% select(gid,chrom,start,end,srd)
 tga = read_loci() %>% select(gid,symbol,note)
@@ -44,10 +44,10 @@ td = td4 %>% inner_join(td4s, by=c('cond','time','drc','gid')) %>%
     select(cond,time,drc,gid,st) %>% filter(cond=='cold')
 #}}}
 
-#{{{ read in NM matrix and run mclust - sf10a
+#{{{ read in NM matrix and run mclust - sf08a
 #{{{ read in
-yid = 'zm.rn20a'
-res = rnaseq_cpm(yid)
+fi = "~/projects/s3/zhoup-nfo/archive/zm.rn20a/01.rds"
+res = readRDS(fi) 
 th = res$th; tm = res$tm
 #
 th1 = th %>% filter(Experiment=='NM') %>%
@@ -65,7 +65,7 @@ rd = rr %>% gather(time, rc, -gid, -gt, -cond) %>%
     arrange(gid, gt)
 #}}}
 
-#{{{ HY & NM consistency - sf10a
+#{{{ HY & NM consistency - sf08a
 fi = glue('{dird}/15_de/01.de.rds')
 ti = readRDS(fi)
 
@@ -90,22 +90,23 @@ tp = tp %>%
     mutate(x = pmax(pmin(x,fcm), -fcm)) %>%
     mutate(y = pmax(pmin(y,fcm), -fcm))
 #{{{ plot
+
 p = ggplot(tp, aes(x=x,y=y)) +
     geom_hex(bins=80) +
     geom_richtext(data=tpl, aes(x=-5,y=5,label=lab,hjust=0,vjust=1), size=2.5) +
-    scale_x_continuous(name='mean log2fc in experiment 1', limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
-    scale_y_continuous(name='log2fc in experiment 3', limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
+    scale_x_continuous(name=expression(Log[2](`Fold-change in Experiment 1`)), limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
+    scale_y_continuous(name=expression(Log[2](`Fold-change in Experiment 3`)), limits=c(-fcm,fcm), expand=expansion(mult=c(.02,.02))) +
     scale_fill_viridis(name='density', direction=-1) +
     #scale_fill_manual(name='', values=pal_npg()(3)[c(3,2,1)]) +
     facet_wrap(gt~., nrow=3) +
-    otheme(legend.pos='none', legend.title=T, legend.dir='v',
+    otheme(legend.pos='top.center.out', legend.title=T, legend.dir='h',
            legend.box='h', legend.vjust=-.5, panel.spacing=.3,
            xtext=T, xtick=T, xtitle=T, ytitle=T, ytext=T, ytick=T,
-           xgrid=T, ygrid=T) + o_margin(.3,.3,.3,.3)
+           xgrid=T, ygrid=T) + o_margin(1.3,.3,.3,.3)
 #}}}
 fo = glue("{dirw}/08.fc.pdf")
 ggsave(p, file=fo, width=3, height=7)
-fo = glue("{dirf}/sf10a.rds")
+fo = glue("{dirf}/sf08a.rds")
 saveRDS(p, fo)
 #}}}
 
@@ -217,8 +218,8 @@ fi = glue('{dirw}/01.mclust.rds')
 r = readRDS(fi)
 rd3 = r$rd3; rd5 = r$rd5
 
-#{{{ uni- to bi- model composition - sf10b
-clus = c('uni-modal','bi-modal', 'multi-modal (>=3)')
+#{{{ uni- to bi- model composition - sf08b
+clus = c('unimodal','bimodal', 'multi-modal (>=3)')
 tp = rd3 %>% mutate(clu = ifelse(nc==1, clus[1],
                          ifelse(nc==2, clus[2], clus[3]))) %>%
     filter(time==25) %>%
@@ -228,16 +229,17 @@ tp = rd3 %>% mutate(clu = ifelse(nc==1, clus[1],
     mutate(clu = factor(clu, levels=clus)) %>%
     rename(tag1=drc,tag2=clu)
 #
-pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='') +
+pa = cmp_proportion1(tp, ytext=T, xangle=0, oneline=F, legend.title='',
+                     panel.border=F) +
     o_margin(.3,.3,.3,.3) +
     theme(legend.position='none')
 fo = glue("{dirw}/10.modal.dist.pdf")
 ggsave(pa, file=fo, width=3, height=5)
-fo = glue("{dirf}/sf10b.rds")
+fo = glue("{dirf}/sf08b.rds")
 saveRDS(pa, fo)
 #}}}
 
-#{{{ example of uni- and bi- model genes - sf10c
+#{{{ example of uni- and bi- model genes - sf08c
 plot_lfc_cluster <- function(ti, tit, drc, gts3) {
     #{{{
     tp = ti %>% mutate(clu=factor(clu)) %>%
@@ -250,6 +252,7 @@ plot_lfc_cluster <- function(ti, tit, drc, gts3) {
     ggplot(tp, aes(x=log2fc, fill=gt0)) +
         geom_dotplot(method='histodot', binwidth=bw, stackgroups=T, dotsize=1) +
         geom_vline(xintercept=off, size=.5, color='gray', linetype='dashed') +
+        xlab(expression(Log[2](`Fold-change`))) +
         scale_fill_manual(values=cols4) +
         scale_color_manual(values=cols4) +
         facet_wrap(tit ~., scale='free', nrow=1) +
@@ -294,7 +297,7 @@ ps = tp$p
 fo = glue("{dirw}/10.modal.pdf")
 pb = ggarrange(plotlist=ps, nrow=2, ncol=2)
 pb %>% ggexport(filename=fo, width=5, height=5)
-fo = glue("{dirf}/sf10c.rds")
+fo = glue("{dirf}/sf08c.rds")
 saveRDS(pb, fo)
 #}}}
 
@@ -786,7 +789,7 @@ saveRDS(tj2, fo)
 #}}}
 #}}}
 
-#{{{ final synteny plots - f7c-d & sf09
+#{{{ final synteny plots - f7c-d, sf09, sd4
 #{{{ read & functions
 require(Biostrings)
 get_fasta <- function(gid, gts, beg=0, end=4000, db=glue("{dird}/21_seq/02.fas")) {
@@ -1024,20 +1027,23 @@ to = ta4 %>% select(gid,gname,gnote,drc,mid,mname,vt,n00,n01,n10,n11,
 write_tsv(to, fo, na='')
 #}}}
 
-#{{{ st6
+#{{{ supp.dataset.4
 fi = glue("{dirw}/63.mtf.stat.tsv")
 ti = read_tsv(fi) %>% replace_na(list(gname='', gnote='')) %>%
     mutate(gnote=str_sub(gnote, 0, 30)) %>%
     select(GeneID=gid, Alias=gname, Description=gnote,
         Direction=drc, MotifID=mid, Motif=mname)
 
+fo = glue("{dird}/71_share/sd4.tsv")
+write_tsv(ti, fo)
+
 x = ti %>%
     kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
         format.args = list(big.mark = ",")) %>%
     kable_styling(latex_options = c("striped", "hold_position"),
         full_width=F, font_size = 9, position='left')
-fo = file.path(dirf, 'st6.rds')
-saveRDS(x, file=fo)
+#fo = file.path(dirf, 'st7.rds')
+#saveRDS(x, file=fo)
 #}}}
 
 #{{{ prepare for synteny plot - 65.rds
@@ -1128,7 +1134,7 @@ plot_syn <- function(ty, seqs) {
         geom_polygon(aes(x=pos,y=y,group=i), fill='royalblue', alpha=.2,
                      size=0,color=NA) +
         coord_cartesian(xlim = c(0,4000)) +
-        scale_x_continuous(breaks=c(0,2000,4000), labels=c('-2k','TSS','+2k'),
+        scale_x_continuous(breaks=c(0,2000,4000), labels=c('-2 kb','TSS','+2 kb'),
                            expand=expansion(mult=c(.01,.02)), position='top') +
         scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.01))) +
         otheme(xtext=T,xtick=T,ytext=T,ytick=T, panel.border=F,
@@ -1172,12 +1178,12 @@ mtf_title <- function(gid, gname,gnote, pwm,mname, acc,nr=1, font.size=3) {
         tit = glue("{mname}; {glab}\n model accuracy = {number(acc,accuracy=.01)}")
     }
     p01 = view_motifs(pwm, method="PCC",min.mean.ic=0,min.overlap=6) +
-        otheme(panel.border=F, margin=c(.2,.2,0,2))
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.2,0,2))
     p02 = ggplot() +
         annotate('text', x=0, y=0, label=tit, size=font.size, hjust=.5, vjust=.5) +
         #scale_x_continuous(limits=c(0,3),expand=expansion(mult=c(.01,.01))) +
         #scale_y_continuous(limits=c(0,1), expand=expansion(add=c(.2,0))) +
-        otheme(panel.border=F, margin=c(.2,.2,0,.2))
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.2,0,.2))
     p0 = ggarrange(p01, p02, nrow=1, ncol=2, widths=c(1,3))
     p0
     #}}}
@@ -1220,14 +1226,16 @@ plot_lfc <- function(gid, ty, lfc) {
     ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
     p.a = ggplot(lfc) +
         #geom_hline(yintercept=0, color='gray', alpha=.4) +
-        geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
+        #geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
         #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
-        geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
+        #geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
+        geom_text(aes(x=0, y=y, label=txt), hjust=.5,size=2) +
         scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.04))) +
-        scale_color_manual(values=c('white','black')) +
-        scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
-        otheme(legend.pos='none', panel.border=F, margin=c(0,0,0,0))
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.03))) +
+        #scale_color_manual(values=c('white','black')) +
+        #scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
+        otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
+        theme(axis.title.x=element_text(size=7, color='black'))
     p.b = ggplot(lfc) +
         geom_text(aes(x=0, y=y, label=tag_de), hjust=.5,size=2.5) +
         scale_x_continuous(name='DE', expand=expansion(mult=c(.02,.02)), position='top') +
@@ -1517,12 +1525,12 @@ plot_title <- function(glab, pwm,mname, acc=NA, nr=1, font.size=3) {
         tit = glue("{tit}{sep}model accuracy = {number(acc,accuracy=.01)}")
     }
     p01 = view_motifs(pwm, method="PCC",min.mean.ic=0,min.overlap=6) +
-        otheme(panel.border=F, margin=c(.2,.2,0,2))
+        otheme(panel.border=F, margin=c(.2,.2,0,2), legend.pos='none')
     p02 = ggplot() +
         annotate('text', x=0, y=0, label=tit, size=font.size, hjust=.5, vjust=.5) +
         #scale_x_continuous(limits=c(0,3),expand=expansion(mult=c(.01,.01))) +
         #scale_y_continuous(limits=c(0,1), expand=expansion(add=c(.2,0))) +
-        otheme(panel.border=F, margin=c(.2,.2,0,.2))
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.2,0,.2))
     p0 = ggarrange(p01, p02, nrow=1, ncol=2, widths=c(1,3))
     p0
     #}}}
@@ -1548,10 +1556,10 @@ plot_mtf_msa <- function(aln, ty) {
         geom_tile(aes(x=i, y=y, fill=high)) +
         geom_text(aes(x=i, y=y, label=nt), size=2) +
         scale_x_continuous(expand=expansion(mult=c(.01,.01))) +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(0,.02))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.02,.02))) +
         scale_fill_manual(values=cols2) +
-        otheme(legend.pos='none', panel.border=F, margin=c(.2,.05,.2,0)) +
-        theme(axis.title.x = element_text(size=7))
+        otheme(legend.pos='none', panel.border=F, margin=c(.2,.05,.2,0))
+        #theme(axis.title.x = element_text(size=7))
     #}}}
 }
 plot_lfc0 <- function(gid, ty, lfc) {
@@ -1610,12 +1618,13 @@ plot_lfc <- function(gid, ty, lfc) {
     ymax = ifelse(ymax < 0, ceiling(ymax), floor(ymax))
     p.a = ggplot(lfc) +
         #geom_hline(yintercept=0, color='gray', alpha=.4) +
-        geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
+        #geom_tile(aes(x=0, y=y, fill=log2fc), width=.4, height=.4) +
         #geom_text(aes(x=y, y=ymax0, label=B_umr), hjust=0, size=2) +
-        geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
-        scale_x_continuous(name='log2fc', expand=expansion(mult=c(.02,.02)), position='top') +
-        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.01,.02))) +
-        scale_color_manual(values=c('white','black')) +
+        #geom_text(aes(x=0, y=y, label=txt, col=txt.col>lfc.mean), hjust=.5,size=2) +
+        geom_text(aes(x=0, y=y, label=txt), hjust=.5,size=2) +
+        scale_x_continuous(name='log2fc', expand=expansion(mult=c(.04,.04)), position='top') +
+        scale_y_continuous(breaks=ty$y, labels=ty$gt, expand=expansion(mult=c(.05,.05))) +
+        #scale_color_manual(values=c('white','black')) +
         scale_fill_gradientn(colors=rev(cols100v), na.value="white") +
         otheme(xtitle=T, legend.pos='none', panel.border=F, margin=c(0,0,0,0)) +
         theme(axis.title.x = element_text(size=7))
@@ -1646,7 +1655,7 @@ lfc = read_xlsx(glue("{dirw}/70_cases/lfc.hsf.xlsx"), sheet='hsf1')
 p_lfc = plot_lfc(gid, ty, lfc) + o_margin(.2,.4,.2,0)
 a = ggarrange(p_title,
               ggarrange(p_tree, p_aln, p_mtf, p_lfc,
-                        nrow=1, ncol=4, widths=c(.5,5,.5,.3)),
+                        nrow=1, ncol=4, widths=c(.5,5,.5,.4)),
               nrow=2, heights=c(1,5))
 
 # f7b
@@ -1662,7 +1671,7 @@ lfc = read_xlsx(glue("{dirw}/70_cases/lfc.hsf.xlsx"), sheet='hsf2')
 p_lfc = plot_lfc(gid, ty, lfc) + o_margin(.2,.4,.2,0)
 b = ggarrange(p_title,
               ggarrange(p_tree, p_aln, p_mtf, p_lfc,
-                        nrow=1, ncol=4, widths=c(.5,5,.5,.3)),
+                        nrow=1, ncol=4, widths=c(.5,5,.5,.4)),
               nrow=2, heights=c(1,5))
 
 p3 = readRDS(glue("{dird}/45_nam/69.case.c.rds"))

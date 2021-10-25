@@ -28,6 +28,7 @@ write_tsv(to2, fo)
 exps = c("TC", 'HY','NM')
 tx = tibble(ExpID=exps, ExpTxt=sprintf("Experiment %d (%s)", 1:3, exps))
 trs = c("Control",'Cold','Heat')
+xlab = 'Hours since stress onset'
 
 #{{{ process temperature data
 load_fonts()
@@ -83,8 +84,8 @@ p_temp = ggplot(tp, aes(has, temp)) +
     #geom_text(data=tfa, aes(x=25+.2, y=temp-.1, label=fawt),size=4,family='fas',vjust=1,hjust=0) +
     geom_text(data=tpa, aes(x=25+.3, y=temp+1, label=stress), hjust=.5, vjust=0, size=2.5) +
     #facet_wrap(~ExpTxt, ncol=1) +
-    scale_x_continuous(name='Hours after Treatment', breaks=c(0,1,14,22,25), expand=expansion(mult=c(.02,.06))) +
-    scale_y_continuous(name='Temperature (C)', expand=expansion(mult=c(.02,.08))) +
+    scale_x_continuous(name=xlab, breaks=c(0,1,14,22,25), expand=expansion(mult=c(.02,.06))) +
+    scale_y_continuous(name=expression("Temperature " ( degree*C )), expand=expansion(mult=c(.02,.08))) +
     scale_color_manual(values=cols3) +
     otheme(legend.pos='none', margin=c(.1,.2,.1,.5),
            xtitle=T, ytitle=T, xtext=T, ytext=T, xtick=T, ytick=T, xgrid=T) +
@@ -132,7 +133,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_point(aes(color=Genotype), size=5) +
     #geom_text(data=tpb, aes(x,y, label='...'), size=3) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
-    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name=xlab, breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.35,.35))) +
     scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),
@@ -182,7 +183,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_point(aes(color=Genotype), size=5) +
     #geom_text(data=tpb, aes(x,y, label='...'), size=3) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
-    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name=xlab, breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
     scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),
@@ -208,9 +209,9 @@ p2 = p +
     theme(axis.text.y=element_text(color=NA)) +
     theme(axis.title.x=element_blank()) +
     theme(panel.background=element_rect(fill=alpha(col0,.8),color=NA))
-p0z = p0 + theme(axis.title.x=element_text(size=7, color=NA))
-p1z = p1 + theme(axis.title.x=element_text(size=7, color=NA))
-p2z = p2 + theme(axis.title.x=element_text(size=7))
+p0z = p0 + theme(axis.title.x=element_text(size=8, color=NA))
+p1z = p1 + theme(axis.title.x=element_text(size=8, color=NA))
+p2z = p2 + theme(axis.title.x=element_text(size=8))
 #
 p = ggdraw() +
     draw_plot(p0, 0,.1,.9,.9)+
@@ -240,7 +241,7 @@ p = ggplot(tpa, aes(x, y)) +
     geom_point(aes(color=Genotype), size=5) +
     geom_text(data=tpb, aes(x,y, label='...'), size=3) +
     geom_text(data=tpr, aes(x,y, label=txt),color='white',size=3,vjust=.5,hjust=.5) +
-    scale_x_continuous(name='Hours after Treatment', breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name=xlab, breaks=tpx$x, labels=tpx$Timepoint, expand=expansion(mult=c(.05,.05))) +
     scale_y_continuous(breaks=tpy$y, labels=tpy$Genotype, expand=expansion(mult=c(.15,.15))) +
     scale_color_aaas() +#values=cols11) +
     otheme(legend.pos='none', margin=c(0,.3,0,.3),

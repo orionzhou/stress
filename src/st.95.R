@@ -5,15 +5,15 @@ setwd(dirf)
 
 #{{{ Fig 1
 a = readRDS('f1a.rds') + o_margin(.5,0,0,0)
-b = readRDS('f1b.rds') + o_margin(.1,.2,0,.4) + theme(axis.title.x=element_text(size=7))
-c = readRDS('f1c.rds') + o_margin(.1,.2,.5,.5)
+b = readRDS('f1b.rds') + o_margin(1,.2,0,.4) + theme(axis.title.x=element_text(size=8))
+c = readRDS('f1c.rds') + o_margin(1,.2,.5,.5)
 d = readRDS('f1d.rds')
 pab = ggarrange(a, b, nrow=1, ncol=2, labels = LETTERS[1:2],
           widths=c(2,2), heights=c(2,2))
 pcd = ggarrange(c,d, nrow=1, ncol=2, labels = LETTERS[3:4],
           widths=c(2,2), heights=c(2,2))
 pabc = ggarrange(a, b, c, nrow=3, ncol=1, labels = LETTERS[1:3],
-          widths=c(2,2), heights=c(2.3,1.7,4))
+          widths=c(2,2), heights=c(2.3,1.7,2.8))
 ggarrange(pabc, d, nrow=1, ncol=2, labels=c('','D'),
           widths=c(2,2), heights=c(1,2.5)) %>%
     ggexport(filename="f1.pdf", width=9, height=8)
@@ -49,15 +49,15 @@ ggexport(filename="sf01.pdf", width=8, height=8)
 # Fig S2 and S3 are done
 
 #{{{ Fig S4
-a = readRDS('sf02a.rds') +
+a = readRDS('sf04a.rds') +
     theme(plot.margin = margin(1.2,0,.2,.2, "lines")) +
-    theme(legend.justification=c(.5,-.5))
-b = readRDS('sf02b.rds') +
+    theme(legend.justification=c(.5,-1))
+b = readRDS('sf04b.rds') +
     theme(plot.margin = margin(1.2,0,.2,0, "lines")) +
     theme(legend.justification=c(.5,-.5))
 ggarrange(a, b, nrow=1, ncol=2, labels=LETTERS[1:5],
           widths=c(1.1,2), heights=c(2,2)) %>%
-ggexport(filename="sf02.pdf", width=10.5, height=8)
+ggexport(filename="sf04.pdf", width=10.5, height=8)
 #}}}
 
 #{{{ Fig S5
@@ -95,8 +95,8 @@ c = readRDS(glue("{dird}/25_dreme/12.top.mtf.rds")) +
 ab = ggarrange(as.grob(a), b, nrow=2, ncol=1, heights=c(2,2), labels=LETTERS[1:2])
 ggarrange(ab, c, nrow=1, ncol=2,
           labels = c('', 'C'),
-          widths=c(2,2)) %>%
-ggexport(filename="f3.pdf", width=8, height=7)
+          widths=c(2.5,2)) %>%
+ggexport(filename="f3.pdf", width=9, height=7)
 #}}}
 
 #{{{ Fig 4
@@ -107,7 +107,7 @@ d = readRDS(glue("{dird}/41_ml/41.fea.imp.rds"))
 fo = glue("{dirf}/f4.pdf")
 ggarrange(as.grob(a),b,c,d, nrow=4, ncol=1,
           heights=c(1.5,1,1,2), labels=LETTERS[1:4]) %>%
-    ggexport(filename=fo, width=8, height=12)
+    ggexport(filename=fo, width=9, height=12)
 #}}}
 
 #{{{ Fig 5
@@ -142,7 +142,7 @@ c = readRDS('sf08c.rds') + o_margin(.0,.0,.3,.6)
 bc = ggarrange(b, c, nrow=2, ncol=1, labels=LETTERS[2:3], heights=c(1,1.7))
 ggarrange(a, bc, nrow=1, ncol=2, labels=LETTERS[1],
           widths=c(2,2.5), heights=c(2,2)) %>%
-ggexport(filename="sf08.pdf", width=7, height=7)
+ggexport(filename="sf08.pdf", width=8, height=8)
 #}}}
 
 # Fig S9 is done

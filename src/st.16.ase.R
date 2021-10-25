@@ -236,7 +236,7 @@ ggsave(p, file = fp, width = 4.5, height = 6)
 #}}}
 #}}}
 
-#{{{ cis/trans for dDEGs - f2d-e, sf06
+#{{{ cis/trans for dDEGs - f2d-e, sf06, st4
 #{{{ read
 fi = file.path(dird, '15_de/05.rds')
 r = readRDS(fi)
@@ -282,7 +282,7 @@ linecol = 'azure3'; lty = 'solid'
 cols9 = pal_simpsons()(10)
 #}}}
 
-#{{{ detailed stats
+#{{{ detailed stats - st2
 ts2 = tp %>% separate(cond, c('cond','gt'), sep='_') %>%
     mutate(cond = str_replace(cond, 'Cold', 'Cold_')) %>%
     mutate(cond = str_replace(cond, 'Heat', 'Heat_')) %>%
@@ -300,22 +300,37 @@ to = ts1 %>% inner_join(ts2, by='cond') %>%
     mutate(prop.ase=percent(prop.ase, accuracy=.1)) %>%
     mutate(n.cn = glue("{n.cn} ({prop.cn})")) %>%
     mutate(n.ase = glue("{n.ase} ({prop.ase})")) %>%
-    select(cond,n.tot, n.cn, n.ase, cis, trans, `cis+trans`, conserved, unexpected)
+    select(Contrast=cond, Total=n.tot, Cond_Neutral=n.cn, ASE=n.ase,
+           cis, trans, `cis+trans`, conserved, unexpected)
+
+x = to %>%
+    kbl(format='latex', escape=T, longtable=T, booktabs=T, linesep="",
+        format.args = list(big.mark = ","), align='r') %>%
+    #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
+    kable_styling(latex_options = c("striped", "hold_position"),
+        full_width=F, font_size = 9, position='left')
+fo = file.path(dirf, 'st2.rds')
+saveRDS(x, file=fo)
+
 fo = glue("{dird}/71_share/91.prop.cn.ase.tsv")
-write_tsv(to, fo)
+#write_tsv(to, fo)
 #}}}
 
 #{{{ scatter plot - sf06a
 p = ggplot(tp, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
-    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=limits,expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name='Proportion of Allele 1 Change in Parent',
+                       breaks=c(0,.5,1), labels=c('0','0.5','1'),
+                       limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name=expression("Proportion of Allele 1 Change in"~F[1]),
+                       breaks=c(0,.5,1), labels=c('0','0.5','1'),
+                       limits=limits,expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='Mode:', values=cols9) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=3) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
-           legend.vjust = -1.2, legend.box='h',
+           legend.vjust = -1.2, legend.box='h', strip.compact=F, 
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=1))
 fo = glue('{dirf}/sf06a.rds')
@@ -329,14 +344,14 @@ tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
 ymax = 100
 p = ggplot(tp1) +
-    geom_bar(aes(x=x, y=n, fill=reg), width=.7, stat='identity') +
+    geom_bar(aes(x=x, y=n, fill=reg),color='black',size=.3, width=.7, stat='identity') +
     geom_text(data=tp1s,aes(x=5.6,y=ymax,label=lab), size=2.5, vjust=.5,hjust=1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
     scale_x_continuous(breaks=tpx$x, labels=tpx$reg, expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
+    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(0,.1))) +
     scale_fill_manual(name='Mode:', values=cols9) +
     facet_wrap(~cond, ncol=3) +
-    otheme(legend.pos='none',
+    otheme(legend.pos='none', panel.border=T,
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=30, hjust=1, vjust=1))
 fo = glue('{dirf}/sf06b.rds')
@@ -350,13 +365,17 @@ tp1 = tp %>% filter(cond=='Cold25_B73xMo17')
 p = ggplot(tp1, aes(x=prop.p, y=prop.h)) +
     geom_point(aes(color=reg, shape=reg), size=1) +
     geom_abline(intercept=0, slope=1, linetype=lty, color=linecol) +
-    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent', limits=limits,expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Proportion of Allele 1 Change in F1', limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_x_continuous(name= 'Proportion of Allele 1 Change in Parent',
+                       breaks=c(0,.5,1), labels=c('0','0.5','1'),
+                       limits=limits,expand=expansion(mult=c(.05,.05))) +
+    scale_y_continuous(name=expression("Proportion of Allele 1 Change in"~F[1]),
+                       breaks=c(0,.5,1), labels=c('0','0.5','1'),
+                       limits=limits,expand=expansion(mult=c(.05,.05))) +
     scale_color_manual(name='Mode:', values=cols9) +
     scale_shape_manual(name='Mode:', values=c(1:5)) +
     facet_wrap(~cond, ncol=1) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=F,
-           legend.spacing.x=.05, legend.vjust = -.6, legend.box='h',
+           legend.spacing.x=.05, legend.vjust = -.6, legend.box='h', strip.compact=F,
            xtick=T, xtext=T, xtitle=T, ytitle=T, ytick=T, ytext=T) +
     guides(color=guide_legend(nrow=2))
 fo = glue('{dirf}/f2d.rds')
@@ -370,15 +389,15 @@ tp1 = tp %>% count(cond, x, reg) %>%
 tp1s = tp1 %>% group_by(cond) %>% summarise(n=sum(n)) %>% ungroup() %>%
     mutate(lab=sprintf("N=%d", n))
 p = ggplot(tp1) +
-    geom_bar(aes(x=x, y=n, fill=reg), width=.7, stat='identity') +
+    geom_bar(aes(x=x, y=n, fill=reg),color='black',size=.3, width=.7, stat='identity') +
     geom_text(data=tp1s,aes(x=5.6,y=120,label=lab), size=2.5, vjust=.5,hjust=1) +
     geom_text(aes(x=x, y=n+10, label=n), size=2.5, vjust=0) +
     scale_x_continuous(breaks=tpx$x, labels=tpx$reg, expand=expansion(mult=c(.05,.05))) +
-    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(.05,.1))) +
+    scale_y_continuous(name='Number Genes', expand=expansion(mult=c(0,.1))) +
     scale_fill_manual(name='Modes:', values=cols9) +
     facet_wrap(~cond, ncol=1, scale='free') +
     otheme(legend.pos='none', legend.dir='h', legend.title=T,
-           legend.vjust = -.6, legend.box='h',
+           legend.vjust = -.6, legend.box='h', panel.border=F, axis=T,
            xtick=T, xtext=T, xtitle=F, ytitle=T, ytick=T, ytext=T) +
     theme(axis.text.x = element_text(angle=20, size=7.5, vjust=1, hjust=1))
 fo = glue('{dirf}/f2e.rds')

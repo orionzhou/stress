@@ -369,7 +369,7 @@ tb %>% mutate(fo = glue("{dirw}/23_models/{tid}_{epi}.rds")) %>%
     mutate(map2(fit, fo, saveRDS))
 #}}}
 
-#{{{ eval model performance in B - f4a-c
+#{{{ eval model performance in B - f4b-c
 fm = glue('{dirw}/11.models.rds')
 tm = readRDS(fm)
 
@@ -387,6 +387,7 @@ bins = c(
          #"TSS:-/+2k,TTS:-500",
          #"TSS:-/+2k,TTS:-1k"
 )
+bins = bins %>% str_replace("TSS:", '') %>% str_replace('[\\-][\\/][[\\+]]', '+/-')
 epis = c('all','umr','acrL')
 nfeas = c('top30', 'top50', 'top100', 'top200')
 mods = c('binary', 'quantitative')
@@ -395,6 +396,7 @@ mod_map = c('zoops'='binary','anr'='quantitative')
 tc1 = tc %>% filter(train==!!train) %>%
     filter(str_detect(note, "all")) %>%
     mutate(note = str_replace(note, 'all ', '')) %>%
+    mutate(note = str_replace(note, '-', '')) %>%
     select(bid,cond,note) %>%
     crossing(bin = bins, epi = epis, nfea = nfeas, mod = mods) %>%
     mutate(nfea = factor(nfea, levels=nfeas)) %>%
@@ -417,6 +419,9 @@ tm1 = tm %>% filter(tag == !!tag) %>% select(tag,metric) %>% unnest(metric) %>%
     mutate(epi=epi_map[epi], mod=mod_map[mod]) %>%
     mutate(epi = factor(epi, levels=epis)) %>%
     mutate(mod = factor(mod, levels=mods)) %>%
+    mutate(bin = str_replace(bin, "TSS:", '')) %>%
+    mutate(bin = str_replace(bin, '[\\-][\\/][[\\+]]', '+/-')) %>%
+    mutate(bin = factor(bin, levels=bins)) %>%
     inner_join(tc1, by=c('bid','bin','epi','nfea','mod'))
 
 #{{{ sd1a, sd1b
@@ -511,7 +516,7 @@ plot_barplot <- function(ti,tis, x.rotate=F, ylab='AUROC', wd=.7, tit=F, cols=pa
     #{{{
     pd = position_dodge(width=.8)
     p = ggplot(tp) +
-      geom_col(aes(x=x,y=avg,color=grp),fill=NA, position=pd, width=wd) +
+      geom_col(aes(x=x,y=avg,fill=grp,color=grp),alpha=.2, position=pd, width=wd) +
       geom_errorbar(aes(x=x,y=avg,ymin=avg-std, ymax=avg+std, col=grp), width=.2, size=.3, position=pd) +
       geom_segment(data=tps, aes(x=xb,xend=xe,y=ysig,yend=ysig), size=.5) +
       geom_text(data=tps, aes(x=xm,y=ysig,label=sig), vjust=-.3, size=2.5) +
@@ -553,7 +558,7 @@ tp0 = tm1 %>%
     filter(!str_detect(bin, "1k")) %>%
     mutate(bin=str_replace(bin, "TSS:", "")) %>%
     mutate(bin1 = str_replace_all(bin, "[\\+\\-\\/]", '')) %>%
-    mutate(bin2=ifelse(str_detect(bin,"^\\-/\\+"),"-/+",
+    mutate(bin2=ifelse(str_detect(bin,"^\\+/\\-"),"+/-",
                        ifelse(str_detect(bin,"^\\+"), "+", "-"))) %>%
     mutate(bin1 = as_factor(bin1)) %>%
     mutate(bin2 = as_factor(bin2))
@@ -561,19 +566,19 @@ tp = get_bar_stats(tp0, x='bin1', grp='bin2', pnl='cond_note')
 #{{{ sig
 tps0 = tp %>% group_by(pnl,x) %>% summarise(ymax = max(avg+std)) %>% ungroup()
 tps1 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_dbl(`-`, `-/+`, ttest_signif)) %>%
+    mutate(sig = map2_dbl(`-`, `+/-`, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
     mutate(xm = x, xb = x - .3, xe = x +.3, ysig = ymax + .04) %>%
     select(pnl,xm,xb,xe,ysig,sig)
 tps2 = tp %>% select(-avg,-std) %>% spread(grp, scores) %>%
-    mutate(sig = map2_dbl(`+`, `-/+`, ttest_signif)) %>%
+    mutate(sig = map2_dbl(`+`, `+/-`, ttest_signif)) %>%
     inner_join(tps0, by=c('pnl','x')) %>%
     mutate(x = as.numeric(x)) %>%
     mutate(xm = x + .15, xb = x, xe = x +.3, ysig = ymax + .01) %>%
     select(pnl,xm,xb,xe,ysig,sig)
 tps0b = tp %>% group_by(pnl) %>% summarise(ymax = max(avg+std)) %>% ungroup()
-tps3 = tp %>% filter(grp=='-/+') %>% select(-avg,-std) %>%
+tps3 = tp %>% filter(grp=='+/-') %>% select(-avg,-std) %>%
     spread(x, scores) %>%
     mutate(sig = map2_dbl(`500`, `2k`, ttest_signif)) %>%
     inner_join(tps0b, by=c('pnl')) %>%
@@ -625,7 +630,7 @@ pb = plot_barplot(tp, tps, x.rotate=T, ylab=metric, cols=rep('black',20)) +
 #}}}
 
 #{{{ f4c
-tp0 = tm1 %>% filter(bin=='TSS:-/+2k', nfea=='top100', mod=='binary',
+tp0 = tm1 %>% filter(bin=='+/-2k', nfea=='top100', mod=='binary',
                      epi %in% c("all","umr",'acrL'))
 tp = get_bar_stats(tp0, x='cond_note', grp='epi', pnl='bin_nfea_mod')
 #{{{ sig
@@ -825,11 +830,15 @@ tp2 = tm %>% select(vis) %>% unnest(vis) %>%
 tp = tp1 %>% inner_join(tp2,by=c('bid','mid')) %>%
     inner_join(tc0, by='bid') %>% filter(bid <= 'b11') %>%
     filter(str_detect(cond_note, " all ")) %>%
-    mutate(cond_note = str_replace(cond_note, ": all", ''))
+    mutate(cond_note = str_replace(cond_note, ": all", '')) %>%
+    mutate(cond_note = str_replace(cond_note, "-", ''))
 
 get_cor <- function(xs, ys) cor(xs, ys, method='kendall')
 tp0 = tp %>%
-    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops')
+    filter(bin=='TSS:-/+2k', epi=='umr', nfea=='top200', mod=='zoops') %>%
+    arrange(bid, desc(q50)) %>%
+    group_by(bid) %>% mutate(j=1:n()) %>% ungroup() %>%
+    mutate(top5 = j<=5)
 tpt = tp0 %>% arrange(bid, desc(q50)) %>%
     group_by(bid) %>% dplyr::slice(1:5) %>% ungroup()
 tpl = tp0 %>%
@@ -840,16 +849,19 @@ tpl = tp0 %>%
     ungroup() %>%
     mutate(txt = map_chr(p.raw, map_signif)) %>%
     mutate(txt = glue("{n} motifs\nrho = {number(spc,accuracy=.01)} ({txt})")) %>%
+    mutate(ymax = max(tp0$q75) * .95) %>%
     print(n=20)
 
 p = ggplot(tp0) +
-    geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75), size=.2) +
+    geom_pointrange(aes(x=i,y=q50,ymin=q25,ymax=q75,col=top5), size=.2) +
     geom_text_repel(data=tpt, aes(x=i,y=q50,label=fname), size=2) +
     geom_text(data=tpl, aes(x=0, y=ymax, label=txt), size=2.5, hjust=0, vjust=1) +
     scale_x_continuous(name="Level of Motif Enrichment (least enriched -> most enriched)", expand=expansion(mult=c(.03,.03))) +
-    scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01))) +
-    facet_wrap(~cond_note, nrow=2, scale='free') +
-    otheme(xtext=T,xtick=T,xtitle=T,ytitle=T,ytext=T,ytick=T, strip.compact=F)
+    scale_y_continuous(name='Feature Importance', expand=expansion(mult=c(.01,.01)),
+        breaks=c(0,.003,.006), labels=c('0','.003','.006')) +
+    scale_color_manual(values=c('black','red')) +
+    facet_wrap(~cond_note, nrow=2, scale='free_x') +
+    otheme(legend.pos='none', xtext=T,xtick=T,xtitle=T,ytitle=T,ytext=T,ytick=T, strip.compact=F)
 fo = glue("{dirw}/41.fea.imp.pdf")
 ggsave(p, file=fo, width=6, height=6)
 fo = glue("{dirw}/41.fea.imp.rds")
@@ -881,7 +893,7 @@ fo = glue('{dirw}/25.model.pred.rds')
 saveRDS(to, fo)
 #}}}
 
-#{{{ evaluate model performance for different gene categories - f5b & f6
+#{{{ evaluate model performance for different gene categories - f5b, f6, st5
 fp = glue('{dirw}/25.model.pred.rds')
 pd = readRDS(fp) %>%
     inner_join(tc %>% select(tid,train,bid,cid,cond,note), by=c('tid','bid')) %>%
@@ -903,7 +915,7 @@ ddeg2 = ddeg %>% filter(condB != 'Control0') %>%
     select(cond,time,qry,tgt,gid,st,reg)
 #}}}
 
-#{{{ compare auroc in different subsets - f5b
+#{{{ compare auroc in different subsets - f5b, st5
 #{{{ prepare 
 fi = glue("{dird}/17_cluster/50_modules/degB.rds")
 x0 = readRDS(fi) %>% mutate(drc = rep(c('up','down'),2)) %>%
@@ -968,7 +980,7 @@ cfg2 = tibble(pnl='all', cond=rep(c('cold','heat'),each=2),
     mutate(drc = factor(drc, levels=drcs))
 
 tp = acc %>% inner_join(cfg %>% bind_rows(cfg2), by=c('cond','drc','cid')) %>%
-    rename(x=pnl) %>% mutate(pnl=glue("{cond} {drc}-regulated")) %>%
+    rename(x=pnl) %>% mutate(pnl=glue("{cond} {drc}regulated")) %>%
     mutate(cond = factor(cond, levels=conds)) %>%
     mutate(drc = factor(drc, levels=drcs)) %>%
     arrange(cond,drc,pnl, x) %>% mutate(pnl = as_factor(pnl)) %>%
@@ -977,7 +989,8 @@ tp = acc %>% inner_join(cfg %>% bind_rows(cfg2), by=c('cond','drc','cid')) %>%
 tps0 = tp %>% filter(x=='all') %>% select(pnl, vs0=vs)
 tps = tp %>% filter(x!='all') %>% select(pnl, x, mean, sd, vs) %>%
     inner_join(tps0, by='pnl') %>%
-    mutate(sig = map2_chr(vs0, vs, eval_signif)) %>%
+    mutate(sig = map2_chr(vs0, vs, ttest_signif)) %>%
+    mutate(sig = map_chr(sig, map_signif)) %>%
     mutate(y = mean + sd)
 #}}}
 
@@ -986,7 +999,7 @@ tp1 = tp %>% filter(x=='all')
 ymax = .95
 p = ggplot(tp, aes(x=x, y=mean)) +
   geom_hline(data=tp1, aes(yintercept=mean), color=pal_npg()(2)[2], size=.5, linetype='dashed') +
-  geom_col(aes(fill=x=='all'), width=.5, alpha=.6) +
+  geom_col(aes(fill=x=='all'), col='black', size=.3, width=.5, alpha=.6) +
   geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.2, size=.3) +
   geom_text(data=tps, aes(x=x,y=y+.005,label=sig), size=2,hjust=.5,vjust=0) +
   scale_x_discrete(expand=expansion(mult=c(.05,.05))) +
@@ -1010,7 +1023,7 @@ fo = glue("{dirw}/28.coexp.acc.rds")
 saveRDS(p, fo)
 #}}}
 
-#{{{ st4
+#{{{ st5
 require(gridExtra)
 f_cfg = glue('{dirw}/../17_cluster/config.xlsx')
 cfg = read_xlsx(f_cfg) %>% filter(!is.na(idx)) %>%
@@ -1040,7 +1053,7 @@ x = tt %>%
     #collapse_rows(1, latex_hline='major', valign='middle', longtable_clean_cut=F) %>%
     kable_styling(latex_options = c("striped", "hold_position"),
         full_width=F, font_size = 9, position='left')
-fo = glue("{dirf}/st4.rds")
+fo = glue("{dirf}/st5.rds")
 saveRDS(x, file=fo)
 
 tt2 = tableGrob(tt, rows=NULL,
@@ -1090,6 +1103,7 @@ tp = x %>% filter(metric=='roc_auc') %>% rename(score=mean) %>%
     #mutate(gt = factor(gt, levels=rev(gts3))) %>%
     #filter(str_detect(note, 'all')) %>%
     mutate(note = str_replace(note, "all ", "")) %>%
+    mutate(note = str_replace(note, "-", "")) %>%
     mutate(cond_note = str_c(cond,note,sep=": ")) %>%
     #mutate(train = factor(train, levels=c('BMW_nr','BMW','B'))) %>%
     mutate(train = factor(train, levels=c('BMW_nr','B'))) %>%
@@ -1098,22 +1112,22 @@ tps = tp %>% distinct(cid,cond_note)
 pdg = position_dodge(width=.8)
 ymax = 1
 p = ggplot(tp, aes(x=train, y=score)) +
-  geom_col(aes(fill=gt), position=pdg, width=.5, alpha=.6) +
+  geom_col(aes(fill=gt), col='black', size=.3, position=pdg, width=.5, alpha=.6) +
   geom_errorbar(aes(ymin=score-sd, ymax=score+sd, color=gt), width=.2, size=.3, position=pdg) +
   scale_x_discrete(expand=expansion(mult=c(.05,.1))) +
   scale_y_continuous(name='AUROC', expand=expansion(mult=c(0,.02))) +
   #coord_cartesian(ylim=c(.5,ymax)) +
-  coord_flip(ylim= c(.5, ymax)) +
+  coord_flip(ylim= c(.5, .93)) +
   scale_fill_manual(name='', values=pal_npg()(5)) +
   scale_color_manual(name='', values=pal_npg()(5)) +
   facet_wrap(cond_note ~ ., scale='free_y', ncol=1, strip.position='top') +
   otheme(legend.pos='top.center.out',legend.dir='h',legend.box='h',
          legend.title=F, legend.vjust=-1.5,
-         margin = c(.2,.0,.2,.2), xgrid=T, panel.border=F,
+         margin = c(.2,.0,.2,.2), xgrid=T, panel.border=F, axis=T,
          strip.style='white', strip.compact=F, panel.spacing=.1,
          xtick=T, ytick=T, xtitle=T, xtext=T, ytext=T) +
   theme(legend.justification=c(.5,-.8)) +
-  #theme(axis.text.x = element_text(angle=0,size=8, hjust=1,vjust=1)) +
+  theme(axis.line.y = element_line(size=.5)) +
   theme(strip.text.y = element_text(angle=0,size=8))
 #}}}
 fo = glue("{dirw}/32.auroc.pdf")
@@ -1222,18 +1236,18 @@ tph = tp %>% filter(tag1==tag2)
 tp = tp %>% mutate(tag1 = fct_rev(tag1))
 p = ggplot(tp) +
     geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=.8) +
-    geom_tile(data=tph, aes(x=tag1,y=y,height=prop),width=.8,color='red',size=1,fill=NA) +
+    geom_tile(data=tph, aes(x=tag1,y=y,height=prop),width=.8,color='red',size=.5,fill=NA) +
     geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
     geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
     scale_x_discrete(name='Observation', expand=expansion(mult=c(.25,.25))) +
-    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
+    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.0,.05))) +
     scale_fill_manual(name="Prediction", values=fillcols) +
     facet_wrap(~pnl, nrow=2) +
     otheme(legend.pos='top.center.out',legend.dir='v',
            legend.title=T, legend.vjust=-.5, panel.spacing=.2,
            legend.spacing.x=.05, legend.spacing.y=.05,
            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
-           margin = c(1.5, .3, .3, .3)) +
+           margin = c(2, .3, .3, .3)) +
     guides(fill=guide_legend(nrow=2,title.hjust=.5))
 #}}}
 }
@@ -1295,14 +1309,14 @@ p = ggplot(tp) +
     geom_text(aes(x=tag1,y=y,label=lab),size=2.5,lineheight=.8) +
     geom_text(data=tpx, aes(tag1,1.01,label=n), color='black',size=3, vjust=0) +
     scale_x_discrete(name='Prediction of Variable Response Genes', expand=expansion(mult=c(.2,.2))) +
-    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(.02,.05))) +
+    scale_y_continuous(name='Number/Proportion of Genes', expand=expansion(mult=c(0,.05))) +
     scale_fill_manual(name="Mode", values=fillcols) +
     facet_wrap(~pnl, nrow=2) +
     otheme(legend.pos='top.center.out',legend.dir='h',
            legend.title=T, legend.vjust=-.7, panel.spacing=.2,
            legend.spacing.x=.05, legend.spacing.y=.05,
            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
-           margin = c(1, .3, .3, .3)) +
+           margin = c(1.5, .3, .3, .3)) +
     guides(fill=guide_legend(nrow=2))
 #}}}
 }

@@ -324,7 +324,8 @@ r3$tk %>% inner_join(tc0, by='bid') %>% distinct(scope,fid,known) %>% count(scop
 #{{{ num. motifs found in each module - f3b
 #{{{ f3b
 tc = r3$tc %>% filter(scope == 'B', str_detect(note, '^all')) %>%
-    mutate(note = str_replace(note, 'all ', ''))
+    mutate(note = str_replace(note, 'all ', '')) %>%
+    mutate(note = str_replace(note, '-', ''))
 tc1 = tc %>% select(bid,cid,scope)
 tl = r3$tl %>% filter(!str_detect(bin,'1k')) %>% inner_join(tc1,by='bid')
 tk = r3$tk %>% filter(lid %in% tl$lid) %>% inner_join(tc1,by='bid')
@@ -353,6 +354,7 @@ tpy_l = tibble(o=0:4) %>% crossing(tpp) %>% mutate(o=o+ymin)
 #
 tpx = tl %>% distinct(bin,epi) %>% arrange(bin,epi) %>%
     separate(bin, c('opt','bin2'), sep=':', remove=F) %>%
+    mutate(bin2 = str_replace(bin2, '[\\-][\\/][[\\+]]', '+/-')) %>%
     mutate(x = 1:n()) %>% crossing(tpp)
 xmax = max(tpx$x)
 tpx1 = tpx %>% group_by(scope,ymax,opt, bin2) %>% summarise(xmin=min(x), xmax=max(x), x=(xmin+xmax)/2) %>% ungroup()
@@ -368,24 +370,24 @@ tp = tp %>% mutate(lab.col=score>swit)
 #{{{ select plot - ps
 ps = ggplot(tp, aes(x=x,y=i)) +
     geom_tile(aes(fill=score), na.rm = F) +
-    geom_text(aes(label=lab, color=lab.col), hjust=.5, size=2.5) +
+    geom_text(aes(label=lab, color=lab.col), hjust=.5, size=3) +
     geom_segment(data=tpx_l,aes(x=o,xend=o,y=ymin-.5,yend=ymax+.5),size=.5)+
     geom_segment(data=tpy_l,aes(x=.5,xend=eval(xmax+.5),y=o-.5,yend=o-.5),size=.5)+
-    geom_text(data=tpx,aes(x=x,y=ymin-.6,label=bin2),size=2.5,vjust=1,angle=30,hjust=.8) +
-    geom_text(data=tpy,aes(x=.3,y=i,label=ylab),size=3,hjust=1) +
-    geom_text(data=tpy,aes(x=eval(xmax+.7),y=i,label=ylab2),size=3,hjust=0) +
-    scale_x_continuous(expand=expansion(add=c(6.3,1))) +
+    geom_text(data=tpx,aes(x=x,y=ymin-.6,label=bin2),size=3,vjust=1,angle=0,hjust=.5) +
+    geom_text(data=tpy,aes(x=.3,y=i,label=ylab),size=4,hjust=1) +
+    geom_text(data=tpy,aes(x=eval(xmax+.7),y=i,label=ylab2),size=4,hjust=0) +
+    scale_x_continuous(expand=expansion(add=c(5.3,1))) +
     scale_y_continuous(expand=expansion(add=c(.5,.05))) +
     scale_fill_gradientn(name='# motifs',colors=cols100v) +
     scale_color_manual(values=c('black','white')) +
     otheme(legend.pos='top.center.out', legend.dir='h', legend.title=T,
            margin = c(1.3,.3,.3,.3), panel.border=F,
            xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F) +
-    theme(strip.text.x=element_text(hjust=.3,size=10,face='bold')) +
+    theme(legend.title=element_text(size=9), legend.text=element_text(size=8)) +
     guides(color='none')
 #}}}
 fo = glue("{dirw}/11.n.mtf.pdf")
-ggexport(ps, filename=fo, width=4, height=3)
+ggexport(ps, filename=fo, width=5, height=4)
 fo = glue("{dirw}/11.n.mtf.rds")
 saveRDS(ps, fo)
 #}}}
@@ -701,7 +703,7 @@ ps2 = ggplot(tp, aes(x=x,y=i)) +
 #}}}
 #}}}
 
-#{{{ top 40 motifs found in each module - prepare data 
+#{{{ top 40 motifs found in each module - prepare 
 tc=r3$tc; tl=r3$tl; tk=r3$tk
 r1 = tk %>% select(mid,fid,fname,known, bid,lid,pval) %>%
     inner_join(tl %>% select(lid,bid,bin,epi,ng), by=c('bid','lid')) %>%
@@ -709,6 +711,7 @@ r1 = tk %>% select(mid,fid,fname,known, bid,lid,pval) %>%
 tp = r1 %>%
     filter(str_detect(note, '^all')) %>%
     mutate(note = str_replace(note, "all ", '')) %>%
+    mutate(note = str_replace(note, "-", '')) %>%
     separate(bin,c('opt','bin'),sep=":") %>%
     arrange(bid,cid, opt, fid, pval) %>%
     group_by(bid,scope,cid, cond, note, ng, opt, fid, fname, known) %>%
@@ -741,7 +744,7 @@ p4 = ggplot(tp, aes(x=cid,y=i)) +
     geom_vline(xintercept=tp1$o, color='blue') +
     scale_x_discrete(breaks=tpx$cid, labels=tpx$xlab, expand=expansion(add=c(2,0))) +
     scale_y_discrete(expand=expansion(mult=c(0,0))) +
-    scale_fill_gradientn(name='-log10(Pval)',colors=cols100v) +
+    scale_fill_gradientn(name=expression(-Log[10](italic(p)*`-val`)),colors=cols100v) +
     scale_color_manual(values=c('black','white')) +
     annotate('text', x=0, y=20, label='Enrichment Rank', size=3, angle=90) +
     annotate('segment', x=0, xend=0, y=17, yend=15, arrow=arrow(length=unit(.1,'inches'), type='closed')) +
